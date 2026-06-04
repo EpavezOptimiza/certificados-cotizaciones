@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Reporte — {{ emp.nombre }}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#0f172a;padding:24px}
+h1{font-size:20px;font-weight:700;color:#0f172a}
+.meta{font-size:12px;color:#64748b;margin-top:4px}
+.cards{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;text-align:center;min-width:90px}
+.card .v{font-size:22px;font-weight:700}.card .l{font-size:10px;color:#64748b}
+.green{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
+.yellow{background:#fffbeb;border-color:#fde68a;color:#92400e}
+.blue{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+.red{background:#fef2f2;border-color:#fca5a5;color:#991b1b}
+.legend{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 16px;margin:12px 0;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px}
+.legend strong{color:#1d4ed8;margin-right:8px}
+.legend span{margin-right:12px}
+.cat-header{background:#1e293b;color:#fff;padding:8px 14px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-top:14px}
+.cat-header.ok{background:#166534}
+.cat-header.warn{background:#92400e}
+table{width:100%;border-collapse:collapse;background:#fff;margin-bottom:2px}
+th{background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600;padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0}
+td{padding:9px 12px;font-size:12px;border-bottom:1px solid #f1f5f9}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:#fafafa}
+.est-Obtenido{color:#166534;font-weight:500}
+.est-Pendiente{color:#92400e}
+.est-En-proceso{color:#1d4ed8}
+.est-Vencido{color:#991b1b}
+.sd-yes{color:#166534}.sd-no{color:#cbd5e1}
+.no-print{margin-bottom:16px}
+@media print{.no-print{display:none}body{padding:12px}}
+</style>
+</head>
+<body>
+<div class="no-print">
+  <button onclick="window.print()" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir / PDF</button>
+  <button onclick="window.close()" style="padding:8px 16px;background:#f1f5f9;color:#475569;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px">Cerrar</button>
+</div>
+
+<h1>{{ emp.nombre }}</h1>
+<div class="meta">
+  {% if emp.rut %}RUT: {{ emp.rut }}   ·   {% endif %}
+  {% if emp.razon_social %}Razón social: {{ emp.razon_social }}   ·   {% endif %}
+  Grupo: {{ grupo.nombre }}   ·   Generado: {{ now }}
+</div>
+
+{% set total = certs|length %}
+{% set obt   = certs|selectattr("estado","eq","Obtenido")|list|length %}
+{% set pend  = certs|selectattr("estado","eq","Pendiente")|list|length %}
+{% set proc  = certs|selectattr("estado","eq","En proceso")|list|length %}
+{% set venc  = certs|selectattr("estado","eq","Vencido")|list|length %}
+{% set sd    = certs|selectattr("sin_deuda")|list|length %}
+{% set pct   = ((obt/total)*100)|round|int if total else 0 %}
+
+<div class="cards">
+  <div class="card"><div class="v">{{ total }}</div><div class="l">Total</div></div>
+  <div class="card green"><div class="v">{{ obt }} ({{ pct }}%)</div><div class="l">Obtenidos</div></div>
+  <div class="card yellow"><div class="v">{{ pend }}</div><div class="l">Pendientes</div></div>
+  <div class="card blue"><div class="v">{{ proc }}</div><div class="l">En proceso</div></div>
+  <div class="card green"><div class="v">{{ sd }}</div><div class="l">Sin deuda</div></div>
+  {% if venc %}<div class="card red"><div class="v">{{ venc }}</div><div class="l">Vencidos</div></div>{% endif %}
+</div>
+
+<div class="legend">
+  <strong>Índice:</strong>
+  <span>✅ Obtenido y sin deuda</span>
+  <span>✓ Obtenido</span>
+  <span>◑ En proceso</span>
+  <span>● Pendiente</span>
+  <span>✕ Vencido</span>
+  <span>SA Sin afiliados</span>
+</div>
+
+{% set orden = ["AFP","Salud","Seguro Desempleo"] %}
+{% for cat in orden %}
+  {% if cat in cats %}
+    {% set gc = cats[cat] %}
+    {% set gc_obt = gc|selectattr("estado","eq","Obtenido")|list|length %}
+    {% set todo_ok = gc_obt == gc|length %}
+    {% set algun_prob = gc|selectattr("estado","in",["Pendiente","Vencido"])|list|length > 0 %}
+    <div class="cat-header {% if todo_ok %}ok{% elif algun_prob %}warn{% endif %}">
+      <span>{% if todo_ok %}✓{% elif algun_prob %}⚠{% else %}◑{% endif %}  {{ cat }}</span>
+      <span>{{ gc_obt }}/{{ gc|length }} obtenidos</span>
+    </div>
+    <table>
+      <thead><tr><th>Institución</th><th>Período</th><th>Estado</th><th>Sin deuda</th><th>Sin afiliados</th><th>Notas</th></tr></thead>
+      <tbody>
+        {% for c in gc %}
+        {% set periodo = [c.mes, c.anio]|select|join(" ") %}
+        <tr>
+          <td>{{ c.institucion }}</td>
+          <td style="color:#64748b">{{ periodo or "—" }}</td>
+          <td class="est-{{ c.estado.replace(' ','-') }}">{{ icon.get(c.estado,"") }} {{ c.estado }}</td>
+          <td class="{% if c.sin_deuda %}sd-yes{% else %}sd-no{% endif %}">
+            {% if c.sin_deuda %}✅ Sin deuda{% else %}☐{% endif %}
+          </td>
+          <td class="{% if c.sin_afiliados %}sd-yes{% else %}sd-no{% endif %}">
+            {% if c.sin_afiliados %}✅ Sin afiliados{% else %}☐{% endif %}
+          </td>
+          <td style="color:#64748b;font-size:11px">{{ c.notas }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endfor %}
+</body>
+</html>

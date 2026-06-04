@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Reporte grupo — {{ grupo.nombre }}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#0f172a;padding:24px}
+h1{font-size:20px;font-weight:700}
+h2{font-size:15px;font-weight:600;margin:20px 0 10px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:6px}
+.meta{font-size:12px;color:#64748b;margin-top:4px}
+.cards{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;text-align:center;min-width:85px}
+.card .v{font-size:20px;font-weight:700}.card .l{font-size:10px;color:#64748b}
+.green{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
+.yellow{background:#fffbeb;border-color:#fde68a;color:#92400e}
+.blue{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+.legend{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 14px;margin:10px 0;display:flex;gap:12px;flex-wrap:wrap;font-size:11px;align-items:center}
+.legend strong{color:#1d4ed8}
+/* Tabla comparativa */
+.comp-wrap{overflow-x:auto;margin-bottom:20px}
+table{border-collapse:collapse;background:#fff;width:100%}
+th{background:#1e293b;color:#fff;font-size:10px;font-weight:600;padding:7px 8px;text-align:center;white-space:nowrap}
+th.emp-col{text-align:left;min-width:180px}
+td{padding:7px 8px;font-size:11px;border-bottom:1px solid #f1f5f9;text-align:center}
+td.emp-col{text-align:left;font-weight:500;white-space:nowrap}
+tr:nth-child(even) td{background:#fafafa}
+tr:hover td{background:#eff6ff}
+.ok{color:#166634;font-weight:700}
+.pend{color:#92400e}
+.proc{color:#1d4ed8}
+.venc{color:#991b1b;font-weight:700}
+.hint{color:#cbd5e1}
+/* Detalle */
+.emp-section{margin-bottom:16px}
+.emp-header{background:#f1f5f9;border-left:4px solid #2563eb;padding:8px 14px;font-size:13px;font-weight:600;display:flex;justify-content:space-between}
+.emp-header.ok{border-color:#166534;background:#f0fdf4}
+.emp-header.warn{border-color:#92400e;background:#fffbeb}
+table.det th{background:#334155;font-size:10px}
+table.det td{font-size:11px;text-align:left}
+table.det td:not(:first-child){text-align:center}
+.no-print{margin-bottom:16px}
+@media print{.no-print{display:none}body{padding:12px}}
+</style>
+</head>
+<body>
+<div class="no-print">
+  <button onclick="window.print()" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir / PDF</button>
+  <button onclick="window.close()" style="padding:8px 16px;background:#f1f5f9;color:#475569;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px">Cerrar</button>
+</div>
+
+<h1>Reporte de grupo — {{ grupo.nombre }}</h1>
+<div class="meta">{{ empresas|length }} empresas   ·   Generado: {{ now }}</div>
+
+{% set all_certs = [] %}
+{% for e in empresas %}{% for c in e.certificados %}{% set _ = all_certs.append(c) %}{% endfor %}{% endfor %}
+{% set total = all_certs|length %}
+{% set obt   = all_certs|selectattr("estado","eq","Obtenido")|list|length %}
+{% set pend  = all_certs|selectattr("estado","eq","Pendiente")|list|length %}
+{% set sd    = all_certs|selectattr("sin_deuda")|list|length %}
+{% set sa    = all_certs|selectattr("sin_afiliados")|list|length %}
+{% set pct   = ((obt/total)*100)|round|int if total else 0 %}
+
+<div class="cards">
+  <div class="card"><div class="v">{{ empresas|length }}</div><div class="l">Empresas</div></div>
+  <div class="card"><div class="v">{{ total }}</div><div class="l">Certificados</div></div>
+  <div class="card green"><div class="v">{{ obt }} ({{ pct }}%)</div><div class="l">Obtenidos</div></div>
+  <div class="card yellow"><div class="v">{{ pend }}</div><div class="l">Pendientes</div></div>
+  <div class="card green"><div class="v">{{ sd }}</div><div class="l">Sin deuda</div></div>
+  <div class="card blue"><div class="v">{{ sa }}</div><div class="l">Sin afiliados</div></div>
+</div>
+
+<div class="legend">
+  <strong>Índice:</strong>
+  <span>✅ Obtenido y sin deuda</span>
+  <span>✓ Obtenido</span>
+  <span>◑ En proceso</span>
+  <span>● Pendiente</span>
+  <span>✕ Vencido</span>
+  <span>SA Sin afiliados</span>
+  <span>— Sin registro</span>
+</div>
+
+<h2>Vista comparativa por empresa</h2>
+<div class="comp-wrap">
+<table>
+  <thead>
+    <tr>
+      <th class="emp-col">Empresa / RUT</th>
+      {% for inst in instituciones %}<th>{{ inst }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for emp in empresas %}
+    {% set cert_map = {} %}
+    {% for c in emp.certificados %}{% set _ = cert_map.update({c.institucion.lower(): c}) %}{% endfor %}
+    <tr>
+      <td class="emp-col">{% if emp.rut %}{{ emp.rut }}  ·  {% endif %}{{ emp.nombre }}</td>
+      {% for inst in instituciones %}
+        {% set c = cert_map.get(inst.lower()) %}
+        {% if c %}
+          {% if c.estado == "Obtenido" and c.sin_deuda %}
+            <td class="ok">✅</td>
+          {% elif c.sin_afiliados %}
+            <td class="proc">SA</td>
+          {% elif c.estado == "Obtenido" %}
+            <td class="ok">✓</td>
+          {% elif c.estado == "En proceso" %}
+            <td class="proc">◑</td>
+          {% elif c.estado == "Vencido" %}
+            <td class="venc">✕</td>
+          {% else %}
+            <td class="pend">●</td>
+          {% endif %}
+        {% else %}
+          <td class="hint">—</td>
+        {% endif %}
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Detalle por empresa</h2>
+{% for emp in empresas %}
+{% set ec = emp.certificados %}
+{% set eo = ec|selectattr("estado","eq","Obtenido")|list|length %}
+{% set ep = ec|selectattr("estado","in",["Pendiente","Vencido"])|list|length %}
+<div class="emp-section">
+  <div class="emp-header {% if eo==ec|length %}ok{% elif ep>0 %}warn{% endif %}">
+    <span>{% if eo==ec|length %}✓{% elif ep>0 %}⚠{% else %}◑{% endif %}  {% if emp.rut %}{{ emp.rut }}  ·  {% endif %}{{ emp.nombre }}</span>
+    <span>{{ eo }}/{{ ec|length }} obtenidos</span>
+  </div>
+  <table class="det">
+    <thead><tr><th style="text-align:left">Institución</th><th>Período</th><th>Estado</th><th>Sin deuda</th><th>Sin afiliados</th></tr></thead>
+    <tbody>
+      {% for c in ec %}
+      {% set periodo = [c.mes, c.anio]|select|join(" ") %}
+      <tr>
+        <td>{{ c.institucion }}</td>
+        <td>{{ periodo or "—" }}</td>
+        <td>{{ icon.get(c.estado,"") }} {{ c.estado }}</td>
+        <td>{% if c.sin_deuda %}✅{% else %}☐{% endif %}</td>
+        <td>{% if c.sin_afiliados %}✅{% else %}☐{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+</body>
+</html>

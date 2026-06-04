@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Certificados de Cotizaciones</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:flex;height:100vh;overflow:hidden}
+/* Sidebar */
+#sidebar{width:240px;min-width:240px;background:#0f172a;display:flex;flex-direction:column;height:100vh;transition:width .2s}
+#sidebar-header{padding:20px 16px 12px;border-bottom:1px solid #1e293b}
+#sidebar-header h1{color:#fff;font-size:17px;font-weight:700}
+#sidebar-header p{color:#64748b;font-size:11px;margin-top:2px}
+#sidebar-btns{padding:10px 8px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #1e293b}
+.sb-btn{background:#1e293b;color:#cbd5e1;border:none;border-radius:6px;padding:8px 12px;text-align:left;cursor:pointer;font-size:12px;width:100%;transition:background .15s}
+.sb-btn:hover{background:#334155}
+.sb-btn.accent{background:#2563eb;color:#fff}
+.sb-btn.accent:hover{background:#1d4ed8}
+#sidebar-label{padding:8px 14px 4px;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+#search-wrap{padding:0 8px 6px;position:relative}
+#search-wrap input{width:100%;background:#1e293b;border:none;border-radius:6px;padding:7px 10px 7px 28px;color:#cbd5e1;font-size:12px;outline:none}
+#search-wrap input::placeholder{color:#475569}
+#search-wrap .icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:#475569;font-size:12px}
+#tree{flex:1;overflow-y:auto;padding:4px 6px}
+.g-node{border-radius:6px;margin-bottom:2px;overflow:hidden}
+.g-header{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.g-header:hover{background:#1e293b}
+.g-header .arrow{font-size:10px;transition:transform .2s}
+.g-header.open .arrow{transform:rotate(90deg)}
+.e-node{padding:6px 10px 6px 22px;cursor:pointer;color:#94a3b8;font-size:12px;border-radius:6px;display:flex;align-items:center;gap:6px}
+.e-node:hover{background:#1e293b;color:#cbd5e1}
+.e-node.active{background:#2563eb;color:#fff}
+.e-rut{font-size:10px;opacity:.7}
+/* Main */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#header{background:#fff;padding:14px 20px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+#header-left h2{font-size:15px;font-weight:700;color:#0f172a}
+#header-left p{font-size:11px;color:#64748b;margin-top:2px}
+#header-right{display:flex;gap:6px;flex-wrap:wrap}
+.btn{padding:7px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
+.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8}
+.btn-ghost{background:#f1f5f9;color:#475569}.btn-ghost:hover{background:#e2e8f0}
+.btn-danger{background:#fef2f2;color:#991b1b}.btn-danger:hover{background:#fee2e2}
+.btn-success{background:#f0fdf4;color:#166534}.btn-success:hover{background:#dcfce7}
+/* Stats */
+#stats{display:flex;gap:8px;padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;align-items:center}
+.stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px}
+.stat-card .val{font-size:20px;font-weight:700}
+.stat-card .lbl{font-size:10px;color:#64748b;margin-top:1px}
+.stat-green .val{color:#166534}.stat-green{background:#f0fdf4;border-color:#bbf7d0}
+.stat-yellow .val{color:#92400e}.stat-yellow{background:#fffbeb;border-color:#fde68a}
+.stat-blue .val{color:#1d4ed8}.stat-blue{background:#eff6ff;border-color:#bfdbfe}
+.stat-red .val{color:#991b1b}.stat-red{background:#fef2f2;border-color:#fca5a5}
+.stat-purple .val{color:#7c3aed}.stat-purple{background:#f5f3ff;border-color:#ddd6fe}
+.progress-wrap{flex:1;min-width:120px}
+.progress-wrap p{font-size:10px;color:#64748b;margin-bottom:4px}
+.progress-bar{height:8px;background:#e2e8f0;border-radius:20px;overflow:hidden}
+.progress-fill{height:100%;background:#166534;border-radius:20px;transition:width .4s}
+/* Filtros */
+#filters{display:flex;gap:8px;padding:10px 16px;background:#fff;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;align-items:center}
+#filters label{font-size:12px;color:#64748b}
+#filters select,#filters input{font-size:12px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#0f172a;outline:none}
+#filters select:focus,#filters input:focus{border-color:#2563eb}
+/* Tabla */
+#table-wrap{flex:1;overflow:auto;padding:12px 16px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+th{background:#f8fafc;color:#64748b;font-size:11px;font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0;cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{background:#f1f5f9}
+td{padding:10px 12px;font-size:12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:#fafafa}
+tr:hover td{background:#eff6ff}
+.est-Obtenido{color:#166534;font-weight:500}
+.est-Pendiente{color:#92400e}
+.est-En-proceso{color:#1d4ed8}
+.est-Vencido{color:#991b1b;font-weight:500}
+.check-cell{text-align:center;cursor:pointer;font-size:16px;user-select:none}
+.adj-link{color:#2563eb;text-decoration:none;font-size:11px}
+.adj-link:hover{text-decoration:underline}
+/* Status bar */
+#statusbar{background:#f8fafc;border-top:1px solid #e2e8f0;padding:4px 16px;font-size:11px;color:#94a3b8}
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:24px;width:min(480px,92vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:16px;color:#0f172a}
+.modal label{font-size:11px;color:#64748b;display:block;margin-bottom:4px;margin-top:10px}
+.modal input,.modal select,.modal textarea{width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;color:#0f172a;outline:none;background:#fff}
+.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:#2563eb}
+.modal textarea{resize:vertical;min-height:60px;font-family:inherit}
+.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.modal-cb{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:#0f172a}
+.modal-cb input[type=checkbox]{width:auto}
+/* Toast */
+#toast{position:fixed;bottom:20px;right:20px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;display:none;z-index:9999;max-width:400px}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>Certificados</h1>
+    <p>de Cotizaciones</p>
+  </div>
+  <div id="sidebar-btns">
+    <button class="sb-btn" onclick="openModal('modalGrupo')">＋ Nuevo grupo</button>
+    <button class="sb-btn" onclick="openModal('modalEmpresa')">＋ Nueva empresa</button>
+    <button class="sb-btn accent" onclick="openModal('modalImportar')">⚡ Importar certificados</button>
+  </div>
+  <div id="sidebar-label">Empresas</div>
+  <div id="search-wrap">
+    <span class="icon">🔍</span>
+    <input type="text" id="search-input" placeholder="Buscar empresa o grupo…" oninput="renderTree()">
+  </div>
+  <div id="tree"></div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="header">
+    <div id="header-left">
+      <h2 id="header-title">Selecciona una empresa</h2>
+      <p id="header-meta"></p>
+    </div>
+    <div id="header-right">
+      <button class="btn btn-primary" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
+      <button class="btn btn-ghost" onclick="showMasMenu()" id="btn-mas" style="display:none">⋯ Más</button>
+    </div>
+  </div>
+  <div id="stats"></div>
+  <div id="filters">
+    <label>Estado</label>
+    <select id="f-estado" onchange="renderCerts()">
+      <option value="">Todos</option>
+      {% for e in estados %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+    </select>
+    <label>Mes</label>
+    <select id="f-mes" onchange="renderCerts()">
+      <option value="">Todos</option>
+      {% for m in meses %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+    </select>
+    <label>Buscar</label>
+    <input type="text" id="f-buscar" placeholder="Buscar…" oninput="renderCerts()" style="width:160px">
+    <button class="btn btn-primary" onclick="openModal('modalCert')" id="btn-agregar" style="display:none;margin-left:auto">＋ Agregar certificado</button>
+  </div>
+  <div id="table-wrap">
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th onclick="sortBy('institucion')">Institución ↕</th>
+          <th onclick="sortBy('categoria')">Categoría ↕</th>
+          <th onclick="sortBy('periodo')">Período ↕</th>
+          <th onclick="sortBy('estado')">Estado ↕</th>
+          <th>Sin deuda</th>
+          <th>Sin afiliados</th>
+          <th>Adjunto</th>
+          <th>Notas</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div id="statusbar">Selecciona una empresa del panel izquierdo</div>
+</div>
+
+<!-- MODALES -->
+<!-- Grupo -->
+<div class="modal-bg" id="modalGrupo">
+  <div class="modal">
+    <h3 id="modalGrupoTitle">Nuevo grupo</h3>
+    <label>Nombre *</label>
+    <input id="g-nombre" placeholder="Ej: BURSAN, SALCOBRAND…">
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalGrupo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarGrupo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Empresa -->
+<div class="modal-bg" id="modalEmpresa">
+  <div class="modal">
+    <h3 id="modalEmpresaTitle">Nueva empresa</h3>
+    <label>Nombre *</label>
+    <input id="e-nombre" placeholder="Ej: Bursan Alimentacion Limitada">
+    <label>RUT</label>
+    <input id="e-rut" placeholder="Ej: 76003477-0">
+    <label>Razón social</label>
+    <input id="e-razon" placeholder="Ej: Bursan Alimentacion Limitada">
+    <label>Grupo *</label>
+    <select id="e-grupo"></select>
+    <div class="modal-cb" id="e-default-wrap">
+      <input type="checkbox" id="e-default" checked>
+      <label for="e-default" style="margin:0;color:#0f172a">Cargar instituciones por defecto</label>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalEmpresa')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarEmpresa()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Certificado -->
+<div class="modal-bg" id="modalCert">
+  <div class="modal">
+    <h3 id="modalCertTitle">Nuevo certificado</h3>
+    <label>Institución *</label>
+    <select id="c-inst" onchange="autoTipo()">
+      <option value="">— Seleccionar —</option>
+      {% for inst, tipo, cat in instituciones %}
+      <option value="{{ inst }}" data-tipo="{{ tipo }}" data-cat="{{ cat }}">{{ inst }}</option>
+      {% endfor %}
+    </select>
+    <label>Tipo de certificado</label>
+    <input id="c-tipo" placeholder="Certificado de deuda">
+    <div class="modal-row">
+      <div>
+        <label>Mes</label>
+        <select id="c-mes">
+          <option value="">—</option>
+          {% for m in meses %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Año</label>
+        <select id="c-anio">
+          {% for y in range(2022,2032) %}<option value="{{ y }}" {% if y==2026 %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <label>Estado</label>
+    <select id="c-estado">
+      {% for e in estados %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+    </select>
+    <label>Notas</label>
+    <textarea id="c-notas" rows="2" placeholder="Observaciones…"></textarea>
+    <div class="modal-cb">
+      <input type="checkbox" id="c-sindeuda">
+      <label for="c-sindeuda" style="margin:0;color:#166534">✅ Sin deuda</label>
+    </div>
+    <div class="modal-cb">
+      <input type="checkbox" id="c-sinafil">
+      <label for="c-sinafil" style="margin:0;color:#1d4ed8">✅ Sin afiliados</label>
+    </div>
+    <label>Adjunto (PDF / imagen)</label>
+    <input type="file" id="c-adjunto" accept=".pdf,.png,.jpg,.jpeg">
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalCert')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCert()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Importar -->
+<div class="modal-bg" id="modalImportar">
+  <div class="modal">
+    <h3>⚡ Importar certificados</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Carga el Excel de razones sociales y los PDFs de certificados. El sistema creará automáticamente las empresas y marcará los certificados como Obtenidos.</p>
+    <label>Excel de razones sociales (RUT, GRUPO, RAZON SOCIAL) *</label>
+    <input type="file" id="i-excel" accept=".xlsx,.xls">
+    <label>PDFs de certificados (puedes seleccionar varios) *</label>
+    <input type="file" id="i-pdfs" accept=".pdf" multiple>
+    <div id="import-result" style="margin-top:10px;font-size:12px;display:none"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalImportar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="importar()">⚡ Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Migrar JSON -->
+<div class="modal-bg" id="modalMigrar">
+  <div class="modal">
+    <h3>📦 Migrar datos existentes</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Sube tu archivo <strong>certificados_data.json</strong> para importar todos tus datos al nuevo sistema.</p>
+    <label>Archivo certificados_data.json *</label>
+    <input type="file" id="m-json" accept=".json">
+    <div id="migrar-result" style="margin-top:10px;font-size:12px;display:none"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalMigrar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="migrar()">📦 Migrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reporte selector -->
+<div class="modal-bg" id="modalReporte">
+  <div class="modal">
+    <h3>📊 Generar reporte</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:16px">¿De qué quieres el reporte?</p>
+    <button class="btn btn-primary" style="width:100%;padding:14px;font-size:14px;margin-bottom:8px" onclick="verReporte('empresa')">📄 Esta empresa</button>
+    <button class="btn btn-ghost"   style="width:100%;padding:14px;font-size:14px" onclick="verReporte('grupo')">🏢 Grupo completo</button>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalReporte')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Menú más -->
+<div class="modal-bg" id="modalMas">
+  <div class="modal" style="width:280px">
+    <h3>Opciones</h3>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px">
+      <button class="btn btn-ghost" style="text-align:left" onclick="editarEmpresa()">✏ Editar empresa</button>
+      <button class="btn btn-ghost" style="text-align:left" onclick="exportarCSV()">⬇ Exportar CSV</button>
+      <button class="btn btn-ghost" style="text-align:left" onclick="restablecerTipos()">↺ Restablecer tipos</button>
+      <button class="btn btn-ghost" style="text-align:left" onclick="openModal('modalMigrar');closeModal('modalMas')">📦 Migrar JSON</button>
+      <hr style="border-color:#e2e8f0">
+      <button class="btn btn-danger" style="text-align:left" onclick="eliminarEmpresa()">🗑 Eliminar empresa</button>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalMas')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Estado ────────────────────────────────────────────────────────────────────
+let grupos     = [];
+let empresaId  = null;
+let grupoId    = null;
+let certData   = [];
+let editCertId = null;
+let editEmpId  = null;
+let editGrpId  = null;
+let sortCol    = null;
+let sortAsc    = true;
+
+const INST_MAP = {};
+{% for inst, tipo, cat in instituciones %}
+INST_MAP["{{ inst }}"] = {tipo:"{{ tipo }}", cat:"{{ cat }}"};
+{% endfor %}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init(){ await loadGrupos(); }
+
+async function loadGrupos(){
+  const r = await fetch("/api/grupos");
+  grupos  = await r.json();
+  renderTree();
+}
+
+// ── Árbol sidebar ─────────────────────────────────────────────────────────────
+function renderTree(){
+  const busq = document.getElementById("search-input").value.toLowerCase();
+  const tree = document.getElementById("tree");
+  tree.innerHTML = "";
+  for(const g of grupos){
+    // Necesitamos las empresas — las cargamos de la API o usamos caché
+    const div = document.createElement("div");
+    div.className = "g-node";
+    div.innerHTML = `
+      <div class="g-header open" onclick="toggleGrupo(this)" oncontextmenu="ctxGrupo(event,${g.id},'${escHtml(g.nombre)}')">
+        <span class="arrow">▶</span>
+        <span>🏢 ${escHtml(g.nombre)}</span>
+        <span style="margin-left:auto;font-size:10px;color:#475569">${g.n_empresas}</span>
+      </div>
+      <div class="g-children" id="gc-${g.id}"></div>`;
+    tree.appendChild(div);
+    loadGrupoEmpresas(g.id, busq);
+  }
+}
+
+async function loadGrupoEmpresas(gid, busq){
+  // Simple: fetch empresas del grupo
+  const r = await fetch(`/api/grupos/${gid}/empresas_list`);
+  if(!r.ok) return;
+  const emps = await r.json();
+  const cont  = document.getElementById(`gc-${gid}`);
+  if(!cont) return;
+  cont.innerHTML = "";
+  for(const e of emps){
+    const txt = `${e.rut ? e.rut+" · " : ""}${e.nombre}`;
+    if(busq && !txt.toLowerCase().includes(busq)) continue;
+    const div = document.createElement("div");
+    div.className = "e-node" + (e.id===empresaId?" active":"");
+    div.id = `en-${e.id}`;
+    div.innerHTML = `<span>·</span><span>${escHtml(txt)}</span>`;
+    div.onclick = ()=> selEmpresa(e.id, gid);
+    div.oncontextmenu = (ev)=> ctxEmpresa(ev, e.id, e.nombre);
+    cont.appendChild(div);
+  }
+}
+
+function toggleGrupo(el){
+  el.classList.toggle("open");
+  const ch = el.nextElementSibling;
+  ch.style.display = ch.style.display==="none" ? "" : "none";
+}
+
+// ── Seleccionar empresa ───────────────────────────────────────────────────────
+async function selEmpresa(eid, gid){
+  empresaId = eid;
+  grupoId   = gid;
+  document.querySelectorAll(".e-node").forEach(n=>n.classList.remove("active"));
+  const node = document.getElementById(`en-${eid}`);
+  if(node) node.classList.add("active");
+  document.getElementById("btn-reporte").style.display = "";
+  document.getElementById("btn-mas").style.display     = "";
+  document.getElementById("btn-agregar").style.display = "";
+  const r   = await fetch(`/api/empresas/${eid}`);
+  const emp = await r.json();
+  certData  = emp.certificados || [];
+  // Buscar grupo nombre
+  const g = grupos.find(x=>x.id===gid);
+  document.getElementById("header-title").textContent =
+    (g ? g.nombre+" — " : "") + emp.nombre;
+  const meta = [];
+  if(emp.rut)          meta.push("RUT: "+emp.rut);
+  if(emp.razon_social) meta.push("Razón social: "+emp.razon_social);
+  document.getElementById("header-meta").textContent = meta.join("   ·   ");
+  renderStats();
+  renderCerts();
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function renderStats(){
+  const t  = certData.length;
+  const ob = certData.filter(c=>c.estado==="Obtenido").length;
+  const pe = certData.filter(c=>c.estado==="Pendiente").length;
+  const pr = certData.filter(c=>c.estado==="En proceso").length;
+  const ve = certData.filter(c=>c.estado==="Vencido").length;
+  const sd = certData.filter(c=>c.sin_deuda).length;
+  const pct= t ? Math.round(ob/t*100) : 0;
+  document.getElementById("stats").innerHTML = `
+    <div class="stat-card"><div class="val">${t}</div><div class="lbl">Total</div></div>
+    <div class="stat-card stat-green"><div class="val">${ob}</div><div class="lbl">Obtenidos</div></div>
+    <div class="stat-card stat-yellow"><div class="val">${pe}</div><div class="lbl">Pendientes</div></div>
+    <div class="stat-card stat-blue"><div class="val">${pr}</div><div class="lbl">En proceso</div></div>
+    <div class="stat-card stat-green"><div class="val">${sd}</div><div class="lbl">Sin deuda</div></div>
+    ${ve?`<div class="stat-card stat-red"><div class="val">${ve}</div><div class="lbl">Vencidos</div></div>`:""}
+    <div class="progress-wrap">
+      <p>Avance ${pct}%</p>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+}
+
+// ── Tabla certificados ────────────────────────────────────────────────────────
+function renderCerts(){
+  if(!empresaId) return;
+  const fe  = document.getElementById("f-estado").value;
+  const fm  = document.getElementById("f-mes").value;
+  const fb  = document.getElementById("f-buscar").value.toLowerCase();
+  let data  = certData.filter(c=>{
+    if(fe && c.estado!==fe) return false;
+    if(fm && c.mes!==fm)    return false;
+    if(fb && !(c.institucion+c.tipo+c.notas).toLowerCase().includes(fb)) return false;
+    return true;
+  });
+  if(sortCol){
+    data.sort((a,b)=>{
+      let va=a[sortCol]||"", vb=b[sortCol]||"";
+      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+  }
+  const ICONS = {Obtenido:"✓",Pendiente:"●","En proceso":"◑",Vencido:"✕"};
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = data.map(c=>{
+    const periodo = [c.mes,c.anio].filter(Boolean).join(" ");
+    const icon    = ICONS[c.estado]||"";
+    const adjHtml = c.adjunto
+      ? `<a href="/adjuntos/${c.adjunto}" target="_blank" class="adj-link">📎 Ver</a>`
+      : `<label style="cursor:pointer;color:#2563eb;font-size:11px">📎 <input type="file" style="display:none" accept=".pdf,.png,.jpg" onchange="uploadAdj(${c.id},this)">Adjuntar</label>`;
+    return `<tr>
+      <td>${escHtml(c.institucion)}</td>
+      <td style="color:#64748b">${escHtml(c.categoria)}</td>
+      <td style="color:#64748b">${escHtml(periodo||"—")}</td>
+      <td class="est-${c.estado.replace(" ","-")}">${icon} ${c.estado}</td>
+      <td class="check-cell" onclick="toggleField(${c.id},'sin_deuda')" title="Clic para marcar/desmarcar">
+        ${c.sin_deuda?"✅":"☐"}
+      </td>
+      <td class="check-cell" onclick="toggleField(${c.id},'sin_afiliados')" title="Clic para marcar/desmarcar">
+        ${c.sin_afiliados?"✅":"☐"}
+      </td>
+      <td>${adjHtml}</td>
+      <td style="color:#64748b;font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.notas)}</td>
+      <td>
+        <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editCert(${c.id})">✏</button>
+        <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="deleteCert(${c.id})">🗑</button>
+      </td>
+    </tr>`;
+  }).join("");
+  document.getElementById("statusbar").textContent =
+    `${data.length} certificado${data.length!==1?"s":""} mostrado${data.length!==1?"s":""}`;
+}
+
+function sortBy(col){
+  if(sortCol===col) sortAsc=!sortAsc; else {sortCol=col; sortAsc=true;}
+  renderCerts();
+}
+
+// ── Toggle sin_deuda / sin_afiliados ─────────────────────────────────────────
+async function toggleField(cid, field){
+  const cert = certData.find(c=>c.id===cid);
+  if(!cert) return;
+  cert[field] = !cert[field];
+  await fetch(`/api/certificados/${cid}`, {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({[field]: cert[field]})
+  });
+  renderStats();
+  renderCerts();
+}
+
+// ── Upload adjunto ────────────────────────────────────────────────────────────
+async function uploadAdj(cid, input){
+  const file = input.files[0];
+  if(!file) return;
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(`/api/certificados/${cid}/adjunto`, {method:"POST", body:fd});
+  const d = await r.json();
+  const cert = certData.find(c=>c.id===cid);
+  if(cert && d.adjunto) cert.adjunto = d.adjunto;
+  renderCerts();
+  toast("Archivo adjuntado ✓");
+}
+
+// ── Modales ───────────────────────────────────────────────────────────────────
+function openModal(id){ document.getElementById(id).classList.add("open"); }
+function closeModal(id){ document.getElementById(id).classList.remove("open"); }
+function showMasMenu(){ openModal("modalMas"); }
+
+// ── Grupo ─────────────────────────────────────────────────────────────────────
+function ctxGrupo(ev, gid, nombre){
+  ev.preventDefault();
+  if(confirm(`¿Eliminar el grupo "${nombre}" y todas sus empresas?`)){
+    fetch(`/api/grupos/${gid}`,{method:"DELETE"})
+      .then(()=>{loadGrupos(); toast("Grupo eliminado");});
+  }
+}
+
+async function guardarGrupo(){
+  const nombre = document.getElementById("g-nombre").value.trim();
+  if(!nombre) return alert("Ingresa el nombre del grupo.");
+  if(editGrpId){
+    await fetch(`/api/grupos/${editGrpId}`,{method:"PUT",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({nombre})});
+    editGrpId = null;
+  } else {
+    await fetch("/api/grupos",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({nombre})});
+  }
+  document.getElementById("g-nombre").value = "";
+  closeModal("modalGrupo");
+  await loadGrupos();
+  toast("Grupo guardado ✓");
+}
+
+// ── Empresa ───────────────────────────────────────────────────────────────────
+function openModal_empresa(){
+  const sel = document.getElementById("e-grupo");
+  sel.innerHTML = grupos.map(g=>`<option value="${g.id}">${escHtml(g.nombre)}</option>`).join("");
+  if(grupoId) sel.value = grupoId;
+  openModal("modalEmpresa");
+}
+
+async function guardarEmpresa(){
+  const nombre = document.getElementById("e-nombre").value.trim();
+  const rut    = document.getElementById("e-rut").value.trim();
+  const razon  = document.getElementById("e-razon").value.trim();
+  const gid    = parseInt(document.getElementById("e-grupo").value);
+  const def    = document.getElementById("e-default")?.checked ?? true;
+  if(!nombre) return alert("Ingresa el nombre de la empresa.");
+  if(!gid)    return alert("Selecciona un grupo.");
+  if(editEmpId){
+    await fetch(`/api/empresas/${editEmpId}`,{method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({nombre,rut,razon_social:razon})});
+    editEmpId = null;
+  } else {
+    const r = await fetch(`/api/grupos/${gid}/empresas`,{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({nombre,rut,razon_social:razon,cargar_default:def})});
+    const e = await r.json();
+    await selEmpresa(e.id, gid);
+  }
+  ["e-nombre","e-rut","e-razon"].forEach(id=>document.getElementById(id).value="");
+  closeModal("modalEmpresa");
+  await loadGrupos();
+  toast("Empresa guardada ✓");
+}
+
+function editarEmpresa(){
+  closeModal("modalMas");
+  if(!empresaId) return;
+  fetch(`/api/empresas/${empresaId}`).then(r=>r.json()).then(emp=>{
+    document.getElementById("e-nombre").value = emp.nombre;
+    document.getElementById("e-rut").value    = emp.rut;
+    document.getElementById("e-razon").value  = emp.razon_social;
+    const sel = document.getElementById("e-grupo");
+    sel.innerHTML = grupos.map(g=>`<option value="${g.id}">${escHtml(g.nombre)}</option>`).join("");
+    sel.value = emp.grupo_id;
+    const dw = document.getElementById("e-default-wrap");
+    if(dw) dw.style.display = "none";
+    document.getElementById("modalEmpresaTitle").textContent = "Editar empresa";
+    editEmpId = empresaId;
+    openModal("modalEmpresa");
+  });
+}
+
+async function eliminarEmpresa(){
+  closeModal("modalMas");
+  if(!empresaId) return;
+  const emp = await (await fetch(`/api/empresas/${empresaId}`)).json();
+  if(!confirm(`¿Eliminar "${emp.nombre}" y todos sus certificados?`)) return;
+  await fetch(`/api/empresas/${empresaId}`,{method:"DELETE"});
+  empresaId = null;
+  document.getElementById("header-title").textContent = "Selecciona una empresa";
+  document.getElementById("header-meta").textContent  = "";
+  document.getElementById("stats").innerHTML  = "";
+  document.getElementById("tbody").innerHTML  = "";
+  document.getElementById("btn-reporte").style.display = "none";
+  document.getElementById("btn-mas").style.display     = "none";
+  document.getElementById("btn-agregar").style.display = "none";
+  await loadGrupos();
+  toast("Empresa eliminada");
+}
+
+function ctxEmpresa(ev, eid, nombre){
+  ev.preventDefault();
+  if(confirm(`¿Eliminar la empresa "${nombre}" y todos sus certificados?`)){
+    fetch(`/api/empresas/${eid}`,{method:"DELETE"}).then(()=>{
+      loadGrupos();
+      if(empresaId===eid){
+        empresaId=null;
+        document.getElementById("header-title").textContent="Selecciona una empresa";
+        document.getElementById("stats").innerHTML="";
+        document.getElementById("tbody").innerHTML="";
+      }
+      toast("Empresa eliminada");
+    });
+  }
+}
+
+// ── Certificados ──────────────────────────────────────────────────────────────
+function autoTipo(){
+  const inst = document.getElementById("c-inst").value;
+  if(INST_MAP[inst]){
+    document.getElementById("c-tipo").value = INST_MAP[inst].tipo;
+  }
+}
+
+function openModal_cert(){
+  editCertId = null;
+  document.getElementById("modalCertTitle").textContent = "Nuevo certificado";
+  ["c-tipo","c-notas"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("c-inst").value    = "";
+  document.getElementById("c-mes").value     = "";
+  document.getElementById("c-anio").value    = "2026";
+  document.getElementById("c-estado").value  = "Pendiente";
+  document.getElementById("c-sindeuda").checked = false;
+  document.getElementById("c-sinafil").checked  = false;
+  openModal("modalCert");
+}
+
+function editCert(cid){
+  const c = certData.find(x=>x.id===cid);
+  if(!c) return;
+  editCertId = cid;
+  document.getElementById("modalCertTitle").textContent = "Editar certificado";
+  document.getElementById("c-inst").value    = c.institucion;
+  document.getElementById("c-tipo").value    = c.tipo;
+  document.getElementById("c-mes").value     = c.mes;
+  document.getElementById("c-anio").value    = c.anio;
+  document.getElementById("c-estado").value  = c.estado;
+  document.getElementById("c-notas").value   = c.notas;
+  document.getElementById("c-sindeuda").checked = c.sin_deuda;
+  document.getElementById("c-sinafil").checked  = c.sin_afiliados;
+  openModal("modalCert");
+}
+
+async function guardarCert(){
+  const inst = document.getElementById("c-inst").value;
+  if(!inst) return alert("Selecciona la institución.");
+  const body = {
+    institucion:   inst,
+    tipo:          document.getElementById("c-tipo").value,
+    categoria:     INST_MAP[inst]?.cat||"",
+    mes:           document.getElementById("c-mes").value,
+    anio:          document.getElementById("c-anio").value,
+    estado:        document.getElementById("c-estado").value,
+    notas:         document.getElementById("c-notas").value,
+    sin_deuda:     document.getElementById("c-sindeuda").checked,
+    sin_afiliados: document.getElementById("c-sinafil").checked,
+  };
+  let cid = editCertId;
+  if(editCertId){
+    await fetch(`/api/certificados/${editCertId}`,{method:"PUT",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  } else {
+    const r = await fetch(`/api/empresas/${empresaId}/certificados`,{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const nc = await r.json();
+    cid = nc.id;
+  }
+  // Upload adjunto si hay
+  const adjFile = document.getElementById("c-adjunto").files[0];
+  if(adjFile && cid){
+    const fd = new FormData();
+    fd.append("file", adjFile);
+    await fetch(`/api/certificados/${cid}/adjunto`,{method:"POST",body:fd});
+  }
+  closeModal("modalCert");
+  const r = await fetch(`/api/empresas/${empresaId}`);
+  const emp = await r.json();
+  certData = emp.certificados||[];
+  renderStats(); renderCerts();
+  toast("Certificado guardado ✓");
+}
+
+async function deleteCert(cid){
+  if(!confirm("¿Eliminar este certificado?")) return;
+  await fetch(`/api/certificados/${cid}`,{method:"DELETE"});
+  certData = certData.filter(c=>c.id!==cid);
+  renderStats(); renderCerts();
+  toast("Certificado eliminado");
+}
+
+async function restablecerTipos(){
+  closeModal("modalMas");
+  if(!empresaId) return;
+  if(!confirm("¿Cambiar el tipo de todos los certificados a 'Certificado de deuda'?")) return;
+  for(const c of certData){
+    await fetch(`/api/certificados/${c.id}`,{method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({tipo:"Certificado de deuda"})});
+    c.tipo = "Certificado de deuda";
+  }
+  renderCerts();
+  toast("Tipos restablecidos ✓");
+}
+
+// ── Importar ──────────────────────────────────────────────────────────────────
+async function importar(){
+  const excel = document.getElementById("i-excel").files[0];
+  const pdfs  = document.getElementById("i-pdfs").files;
+  if(!excel)       return alert("Selecciona el Excel.");
+  if(!pdfs.length) return alert("Selecciona al menos un PDF.");
+  const fd = new FormData();
+  fd.append("excel", excel);
+  for(const p of pdfs) fd.append("pdfs", p);
+  const div = document.getElementById("import-result");
+  div.style.display = "";
+  div.innerHTML = "⏳ Importando…";
+  const r = await fetch("/api/importar",{method:"POST",body:fd});
+  const d = await r.json();
+  if(d.error){ div.innerHTML=`❌ Error: ${d.error}`; return; }
+  let html = `✅ <strong>Importación completada</strong><br>
+    • Empresas creadas: ${d.creadas}<br>
+    • Certificados obtenidos: ${d.actualizadas}`;
+  if(d.no_procesados?.length){
+    html += `<br><br>⚠ No procesados (${d.no_procesados.length}):<br>`;
+    html += d.no_procesados.slice(0,10).map(x=>`• ${x}`).join("<br>");
+    if(d.no_procesados.length>10) html += `<br>… y ${d.no_procesados.length-10} más`;
+  }
+  div.innerHTML = html;
+  await loadGrupos();
+  toast("Importación completada ✓");
+}
+
+// ── Migrar JSON ───────────────────────────────────────────────────────────────
+async function migrar(){
+  const f = document.getElementById("m-json").files[0];
+  if(!f) return alert("Selecciona el archivo JSON.");
+  const fd = new FormData();
+  fd.append("json", f);
+  const div = document.getElementById("migrar-result");
+  div.style.display=""; div.innerHTML="⏳ Migrando…";
+  const r = await fetch("/api/migrar",{method:"POST",body:fd});
+  const d = await r.json();
+  div.innerHTML = `✅ Migración completa<br>• Empresas: ${d.empresas}<br>• Certificados: ${d.certificados}`;
+  await loadGrupos();
+  toast("Migración completada ✓");
+}
+
+// ── Exportar CSV ──────────────────────────────────────────────────────────────
+async function exportarCSV(){
+  closeModal("modalMas");
+  if(!empresaId) return;
+  const emp = await (await fetch(`/api/empresas/${empresaId}`)).json();
+  const g   = grupos.find(x=>x.id===grupoId);
+  const rows = [["Grupo","Empresa","RUT","Razón Social",
+                  "Institución","Categoría","Período","Estado","Sin deuda","Sin afiliados","Notas"]];
+  for(const c of emp.certificados){
+    rows.push([g?.nombre||"", emp.nombre, emp.rut, emp.razon_social,
+               c.institucion, c.categoria,
+               [c.mes,c.anio].filter(Boolean).join(" "),
+               c.estado, c.sin_deuda?"Si":"No",
+               c.sin_afiliados?"Si":"No", c.notas]);
+  }
+  const csv  = rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a    = document.createElement("a");
+  a.href     = URL.createObjectURL(blob);
+  a.download = `certificados_${emp.nombre.replace(/\s/g,"_")}.csv`;
+  a.click();
+  toast("CSV exportado ✓");
+}
+
+// ── Reporte ───────────────────────────────────────────────────────────────────
+function verReporte(tipo){
+  closeModal("modalReporte");
+  if(tipo==="empresa") window.open(`/reporte/empresa/${empresaId}`,"_blank");
+  else                 window.open(`/reporte/grupo/${grupoId}`,"_blank");
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function escHtml(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.style.display="block";
+  setTimeout(()=>t.style.display="none",3000);
+}
+
+// Cerrar modal al hacer click fuera
+document.querySelectorAll(".modal-bg").forEach(bg=>{
+  bg.addEventListener("click",e=>{ if(e.target===bg) bg.classList.remove("open"); });
+});
+
+// Botones que necesitan abrir modal con carga previa
+document.getElementById("btn-agregar").onclick = openModal_cert;
+
+init();
+</script>
+</body>
+</html>

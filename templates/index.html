@@ -855,7 +855,9 @@ async function importar(){
   btn.textContent="✅ Completado";
   btn.style.background="#166534";
   btn.disabled=true;
-  await loadGrupos(); toast("Importación completada ✓");
+  await loadGrupos();
+  toast("Importación completada ✓");
+  setTimeout(()=>{ closeModal("modalImportar"); btn.textContent="⚡ Importar"; btn.style.background=""; btn.disabled=false; }, 2000);
 }
 async function migrar(){
   const f=document.getElementById("m-json").files[0];

@@ -11,7 +11,8 @@ from database import get_conn, init_db, hash_password
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ADJUNTOS = os.path.join(BASE_DIR, "adjuntos")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "adjuntos"))
+ADJUNTOS = DATA_DIR
 os.makedirs(ADJUNTOS, exist_ok=True)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 

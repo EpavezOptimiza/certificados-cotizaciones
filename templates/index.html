@@ -69,8 +69,8 @@ tr:hover td{background:#eff6ff}
 .est-Pendiente{color:#92400e}
 .est-En-proceso{color:#1d4ed8}
 .est-Vencido{color:#991b1b;font-weight:500}
-.check-cell{text-align:center;font-size:16px;user-select:none}
-.check-cell.clickable{cursor:pointer}
+.check-cell{text-align:center;font-size:18px;user-select:none;padding:12px!important}
+.check-cell.clickable{cursor:pointer;min-width:50px}
 .adj-link{color:#2563eb;text-decoration:none;font-size:11px}
 #statusbar{background:#f8fafc;border-top:1px solid #e2e8f0;padding:4px 16px;font-size:11px;color:#94a3b8}
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
@@ -137,7 +137,7 @@ tr:hover td{background:#eff6ff}
       <p id="header-meta"></p>
     </div>
     <div id="header-right" id="header-right">
-      <button class="btn btn-primary" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
+      <button class="btn btn-primary admin-consultor-only" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
       <button class="btn btn-ghost" onclick="showMasMenu()" id="btn-mas" style="display:none">⋯ Más</button>
     </div>
   </div>
@@ -392,6 +392,9 @@ function applyRoleUI(){
   document.querySelectorAll(".terreno-only").forEach(el=>{
     el.style.display = (rol==="terreno") ? "" : "none";
   });
+  document.querySelectorAll(".admin-consultor-only").forEach(el=>{
+    el.style.display = (rol==="terreno") ? "none" : "";
+  });
   // Menú más
   const canEdit = rol === "admin";
   if(document.getElementById("mas-editar")) document.getElementById("mas-editar").style.display = canEdit?"":"none";
@@ -515,13 +518,23 @@ function renderCerts(){
       <td class="est-${c.estado.replace(" ","-")}">${icon} ${c.estado}</td>
       <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_deuda')">${c.sin_deuda?"✅":"☐"}</td>
       <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_afiliados')">${c.sin_afiliados?"✅":"☐"}</td>
-      <td style="color:#64748b;font-size:11px">${c.formato||"—"}</td>
+      <td class="check-cell clickable" onclick="toggleFormato(${c.id})" title="Clic para cambiar formato">${c.formato==="Digital"?"💻 Digital":c.formato==="Escaneado"?"🖨 Escaneado":"— Sin especificar"}</td>
       <td>${adjHtml}</td>
       <td style="color:#64748b;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.notas)}</td>
       <td>${editBtns}</td>
     </tr>`;
   }).join("");
   document.getElementById("statusbar").textContent=`  ${data.length} certificado${data.length!==1?"s":""} mostrado${data.length!==1?"s":""}`;
+}
+
+function toggleFormato(cid){
+  const cert=certData.find(c=>c.id===cid); if(!cert) return;
+  const opciones=["","Digital","Escaneado"];
+  const actual=cert.formato||"";
+  const siguiente=opciones[(opciones.indexOf(actual)+1)%opciones.length];
+  cert.formato=siguiente;
+  renderCerts();
+  fetch(`/api/certificados/${cid}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({formato:siguiente})});
 }
 
 async function toggleField(cid,field){

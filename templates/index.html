@@ -454,7 +454,7 @@ async function selEmpresa(eid,gid){
   document.querySelectorAll(".e-node").forEach(n=>n.classList.remove("active"));
   const nd=document.getElementById(`en-${eid}`);
   if(nd) nd.classList.add("active");
-  document.getElementById("btn-reporte").style.display="";
+  if(currentUser.rol!=="terreno") document.getElementById("btn-reporte").style.display="";
   document.getElementById("btn-mas").style.display="";
   if(currentUser.rol==="admin") document.getElementById("btn-agregar").style.display="";
   document.getElementById("sol-view").style.display="none";

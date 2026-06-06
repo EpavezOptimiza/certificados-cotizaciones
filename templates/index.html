@@ -98,9 +98,9 @@ tr:hover td{background:#eff6ff}
 .sol-ok{border-left:3px solid #22c55e;opacity:.7}
 
 /* Opti Bot */
-#opti-bubble{position:fixed;bottom:16px;right:16px;z-index:9000;cursor:pointer;transition:transform .2s;width:90px;height:90px}
+#opti-bubble{position:fixed;bottom:16px;right:16px;z-index:9000;cursor:pointer;transition:transform .2s;width:120px;height:120px}
 #opti-bubble:hover{transform:scale(1.08)}
-#opti-bubble img{width:90px;height:90px;object-fit:contain;filter:drop-shadow(0 4px 16px rgba(37,99,235,.4))}
+#opti-bubble img{width:120px;height:120px;object-fit:contain;filter:drop-shadow(0 4px 16px rgba(37,99,235,.4))}
 #opti-badge{position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border-radius:50%;width:20px;height:20px;font-size:10px;display:none;align-items:center;justify-content:center;font-weight:700;border:2px solid #fff}
 #opti-panel{position:fixed;bottom:120px;right:16px;width:360px;background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.18);z-index:9000;display:none;flex-direction:column;overflow:hidden;max-height:560px}
 #opti-panel.open{display:flex}
@@ -121,6 +121,11 @@ tr:hover td{background:#eff6ff}
 #opti-input{flex:1;border:1px solid #e2e8f0;border-radius:20px;padding:8px 14px;font-size:12px;outline:none;font-family:inherit}
 #opti-input:focus{border-color:#2563eb}
 #opti-send{background:#2563eb;color:#fff;border:none;border-radius:50%;width:36px;height:36px;min-width:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.opti-typing{display:flex;gap:4px;align-items:center;padding:12px 14px}
+.opti-typing span{width:7px;height:7px;background:#94a3b8;border-radius:50%;animation:opti-dot 1.2s ease-in-out infinite}
+.opti-typing span:nth-child(2){animation-delay:.2s}
+.opti-typing span:nth-child(3){animation-delay:.4s}
+@keyframes opti-dot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 @keyframes opti-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 #opti-bubble{animation:opti-float 3s ease-in-out infinite}
 #opti-bubble:hover{animation:none;transform:scale(1.1)}
@@ -1048,6 +1053,19 @@ function toggleOpti(){
   }
 }
 
+function optiShowTyping(){
+  const div = document.createElement('div');
+  div.className = 'opti-msg bot opti-typing-wrap';
+  div.id = 'opti-typing';
+  div.innerHTML = '<div class="opti-typing"><span></span><span></span><span></span></div>';
+  document.getElementById('opti-msgs').appendChild(div);
+  document.getElementById('opti-msgs').scrollTop = 9999;
+}
+function optiHideTyping(){
+  const el = document.getElementById('opti-typing');
+  if(el) el.remove();
+}
+
 function optiAddMsg(type, text){
   const div = document.createElement('div');
   div.className = `opti-msg ${type}`;
@@ -1067,22 +1085,30 @@ function optiAnswer(q){
   document.getElementById('opti-options').innerHTML = '';
   setOptiImg('think');
   if(OPTI_FAQ[q] === 'REPORT'){
+    optiShowTyping();
     setTimeout(()=>{
+      optiHideTyping();
       setOptiImg('listen');
       optiAddMsg('bot', 'Cuéntame qué problema tienes. Lo enviaré directamente al administrador.');
       document.getElementById('opti-input').placeholder = 'Describe el problema...';
       document.getElementById('opti-input').dataset.mode = 'report';
-    }, 600);
+    }, 1200);
   } else {
+    optiShowTyping();
     setTimeout(()=>{
+      optiHideTyping();
       setOptiImg('talk');
       optiAddMsg('bot', OPTI_FAQ[q]);
       setTimeout(()=>{
-        optiAddMsg('bot', '¿Hay algo más en que pueda ayudarte?');
-        optiShowOptions();
-        setOptiImg('wave');
-      }, 800);
-    }, 700);
+        optiShowTyping();
+        setTimeout(()=>{
+          optiHideTyping();
+          optiAddMsg('bot', '¿Hay algo más en que pueda ayudarte?');
+          optiShowOptions();
+          setOptiImg('wave');
+        }, 1000);
+      }, 600);
+    }, 1400);
   }
 }
 
@@ -1098,8 +1124,10 @@ async function optiSend(){
   if(input.dataset.mode === 'report'){
     input.dataset.mode = '';
     input.placeholder = 'Escribe tu mensaje...';
+    optiShowTyping();
     setOptiImg('think');
     setTimeout(async()=>{
+      optiHideTyping();
       try {
         await fetch('/api/certi_report',{method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -1109,11 +1137,13 @@ async function optiSend(){
       } catch(e){
         optiAddMsg('bot','❌ No se pudo enviar. Contacta directamente al administrador.');
       }
-      setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 500);
-    }, 800);
+      setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
+    }, 1500);
   } else {
+    optiShowTyping();
     setOptiImg('think');
     setTimeout(()=>{
+      optiHideTyping();
       const lower = text.toLowerCase();
       let resp = 'No estoy seguro de esa pregunta. Puedo ayudarte con:';
       if(lower.includes('import')||lower.includes('carg')) resp = OPTI_FAQ['¿Cómo importo certificados?'];
@@ -1123,8 +1153,15 @@ async function optiSend(){
       else if(lower.includes('format')) resp = OPTI_FAQ['¿Cómo cambio el formato?'];
       setOptiImg('talk');
       optiAddMsg('bot', resp);
-      setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 600);
-    }, 800);
+      setTimeout(()=>{
+        optiShowTyping();
+        setTimeout(()=>{
+          optiHideTyping();
+          optiShowOptions();
+          setOptiImg('wave');
+        }, 1000);
+      }, 600);
+    }, 1400);
   }
 }
 

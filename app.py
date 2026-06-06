@@ -140,6 +140,15 @@ def do_login():
     resp.set_cookie("session_token", token, max_age=86400*30, httponly=True)
     return resp
 
+@app.route("/logout_beacon", methods=["POST"])
+def logout_beacon():
+    """Cierra sesión via sendBeacon al cerrar el navegador"""
+    token = request.cookies.get("session_token")
+    if token:
+        with get_conn() as conn:
+            conn.execute("DELETE FROM sesiones WHERE token=?", (token,))
+    return "", 204
+
 @app.route("/logout")
 def logout():
     token = request.cookies.get("session_token")

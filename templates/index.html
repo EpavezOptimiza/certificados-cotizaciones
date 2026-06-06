@@ -979,6 +979,11 @@ document.getElementById("btn-agregar").onclick=openModal_cert;
 document.querySelector("[onclick=\"openModal('modalUsuarios')\"]")&&(document.querySelector("[onclick=\"openModal('modalUsuarios')\"]").onclick=openModal_usuarios);
 
 init();
+
+// Cerrar sesión al salir
+window.addEventListener("beforeunload", function(){
+  navigator.sendBeacon("/logout_beacon");
+});
 </script>
 </body>
 </html>

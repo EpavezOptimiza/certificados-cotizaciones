@@ -16,22 +16,22 @@ ADJUNTOS = DATA_DIR
 os.makedirs(ADJUNTOS, exist_ok=True)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
-EXCEL_URL = "https://docs.google.com/spreadsheets/d/1j9M7LfbKX5siSYsDlQgl5PCnECwioAKO/export?format=xlsx"
+EXCEL_URL = "https://docs.google.com/spreadsheets/d/1xNA3CS_WX4KeOc4vRizCUC5rpNoTmCGmswpOjWK9VjI/gviz/tq?tqx=out:csv"
 _empresa_cache = None
 
 def cargar_empresas_excel():
-    """Lee el Excel de Google Drive y retorna mapa RUT -> {razon_social, grupo}"""
+    """Lee el Google Sheets y retorna mapa RUT -> {razon_social, grupo}"""
     global _empresa_cache
     try:
-        import urllib.request, io
-        with urllib.request.urlopen(EXCEL_URL, timeout=10) as r:
-            data = r.read()
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-        ws = wb.active
-        rows = list(ws.iter_rows(values_only=True))
-        wb.close()
-        header = [str(c).strip().upper() if c else "" for c in rows[0]]
+        import urllib.request, csv, io
+        req = urllib.request.Request(EXCEL_URL, headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = r.read().decode("utf-8")
+        reader = csv.reader(io.StringIO(data))
+        rows   = list(reader)
+        if not rows:
+            return _empresa_cache or {}
+        header = [c.strip().upper() for c in rows[0]]
         def col_idx(names):
             for n in names:
                 for i, h in enumerate(header):
@@ -42,16 +42,18 @@ def cargar_empresas_excel():
         razon_col = col_idx(["RAZON","RAZÓN","SOCIAL"])
         result = {}
         for row in rows[1:]:
-            rut   = str(row[rut_col]).strip()  if rut_col is not None and row[rut_col] else ""
-            razon = str(row[razon_col]).strip() if razon_col is not None and row[razon_col] else ""
-            grupo = str(row[grp_col]).strip()   if grp_col is not None and row[grp_col] else "Sin grupo"
+            if len(row) <= max(filter(lambda x: x is not None, [rut_col, grp_col, razon_col]), default=0):
+                continue
+            rut   = row[rut_col].strip()   if rut_col is not None and len(row)>rut_col else ""
+            razon = row[razon_col].strip() if razon_col is not None and len(row)>razon_col else ""
+            grupo = row[grp_col].strip()   if grp_col is not None and len(row)>grp_col else "Sin grupo"
             if rut and razon:
                 result[rut] = {"razon_social": razon, "grupo": grupo}
         _empresa_cache = result
-        print(f"[EXCEL] Cargadas {len(result)} empresas desde Google Drive")
+        print(f"[SHEETS] Cargadas {len(result)} empresas desde Google Sheets")
         return result
     except Exception as e:
-        print(f"[EXCEL] Error cargando Excel: {e}")
+        print(f"[SHEETS] Error: {e}")
         return _empresa_cache or {}
 
 INSTITUCIONES = [

@@ -259,7 +259,7 @@ tr:hover td{background:#eff6ff}
     <div id="import-result" style="margin-top:10px;font-size:12px;display:none"></div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalImportar')">Cancelar</button>
-      <button class="btn btn-primary" onclick="importar()">⚡ Importar</button>
+      <button class="btn btn-primary" id="btn-importar" onclick="importar()">⚡ Importar</button>
     </div>
   </div>
 </div>
@@ -843,13 +843,19 @@ async function importar(){
   const fd=new FormData(); fd.append("excel",excel);
   for(const p of pdfs) fd.append("pdfs",p);
   const div=document.getElementById("import-result");
+  const btn=document.getElementById("btn-importar");
   div.style.display=""; div.innerHTML="⏳ Importando…";
+  btn.textContent="⏳ Importando…"; btn.disabled=true;
   const r=await fetch("/api/importar",{method:"POST",body:fd});
   const d=await r.json();
-  if(d.error){div.innerHTML=`❌ ${d.error}`;return;}
-  let html=`✅ Empresas creadas: ${d.creadas}   ·   Certificados: ${d.actualizadas}`;
-  if(d.no_procesados?.length) html+=`<br>⚠ No procesados: ${d.no_procesados.length}<br>`+d.no_procesados.slice(0,8).map(x=>`• ${x}`).join("<br>");
-  div.innerHTML=html; await loadGrupos(); toast("Importación completada ✓");
+  if(d.error){div.innerHTML=`❌ ${d.error}`;btn.textContent="⚡ Importar";btn.disabled=false;return;}
+  let html=`✅ <strong>Importación completada</strong><br>Empresas creadas: ${d.creadas}   ·   Certificados marcados: ${d.actualizadas}`;
+  if(d.no_procesados?.length) html+=`<br><br>⚠ No procesados: ${d.no_procesados.length}<br>`+d.no_procesados.slice(0,8).map(x=>`• ${x}`).join("<br>");
+  div.innerHTML=html;
+  btn.textContent="✅ Completado";
+  btn.style.background="#166534";
+  btn.disabled=true;
+  await loadGrupos(); toast("Importación completada ✓");
 }
 async function migrar(){
   const f=document.getElementById("m-json").files[0];

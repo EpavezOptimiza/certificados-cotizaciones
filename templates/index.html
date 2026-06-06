@@ -98,9 +98,9 @@ tr:hover td{background:#eff6ff}
 .sol-ok{border-left:3px solid #22c55e;opacity:.7}
 
 /* Opti Bot */
-#opti-bubble{position:fixed;bottom:16px;right:16px;z-index:9000;cursor:pointer;transition:transform .2s;width:120px;height:120px;background:none!important;border:none!important}
+#opti-bubble{position:fixed;bottom:16px;right:16px;z-index:9000;cursor:pointer;transition:transform .2s;width:160px;height:160px;background:none!important;border:none!important}
 #opti-bubble:hover{transform:scale(1.08)}
-#opti-bubble img{width:120px;height:120px;object-fit:contain;background:transparent!important;mix-blend-mode:normal;filter:drop-shadow(0 4px 20px rgba(37,99,235,.5))}
+#opti-bubble img{width:160px;height:160px;object-fit:contain;background:transparent!important;mix-blend-mode:normal;filter:drop-shadow(0 4px 20px rgba(37,99,235,.5))}
 #opti-badge{position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border-radius:50%;width:20px;height:20px;font-size:10px;display:none;align-items:center;justify-content:center;font-weight:700;border:2px solid #fff}
 #opti-panel{position:fixed;bottom:120px;right:16px;width:360px;background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.18);z-index:9000;display:none;flex-direction:column;overflow:hidden;max-height:560px}
 #opti-panel.open{display:flex}
@@ -127,6 +127,11 @@ tr:hover td{background:#eff6ff}
 .opti-typing span:nth-child(3){animation-delay:.4s}
 @keyframes opti-dot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 @keyframes opti-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes opti-welcome-in{0%{opacity:0;transform:translateY(10px) scale(.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
+#opti-welcome{position:fixed;bottom:188px;right:16px;background:#fff;border-radius:16px 16px 4px 16px;padding:12px 16px;font-size:13px;color:#0f172a;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:8999;max-width:220px;line-height:1.5;animation:opti-welcome-in .4s ease;border:1px solid #e2e8f0}
+#opti-welcome strong{color:#2563eb}
+#opti-welcome::after{content:'';position:absolute;bottom:-8px;right:20px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid #fff}
+#opti-welcome-close{position:absolute;top:6px;right:8px;background:none;border:none;color:#94a3b8;font-size:14px;cursor:pointer;line-height:1}
 #opti-bubble{animation:opti-float 3s ease-in-out infinite}
 #opti-bubble:hover{animation:none;transform:scale(1.1)}
 </style>
@@ -1041,6 +1046,7 @@ function toggleOpti(){
   optiOpen = !optiOpen;
   document.getElementById('opti-panel').classList.toggle('open', optiOpen);
   document.getElementById('opti-badge').style.display = 'none';
+  document.getElementById('opti-welcome').style.display = 'none';
   if(optiOpen && optiFirst){
     optiFirst = false;
     setOptiImg('wave');
@@ -1066,12 +1072,46 @@ function optiHideTyping(){
   if(el) el.remove();
 }
 
-function optiAddMsg(type, text){
+function optiAddMsg(type, text, onDone){
   const div = document.createElement('div');
   div.className = `opti-msg ${type}`;
-  div.innerHTML = text.replace(/\n/g,'<br>');
   document.getElementById('opti-msgs').appendChild(div);
   document.getElementById('opti-msgs').scrollTop = 9999;
+  if(type === 'user'){
+    div.innerHTML = text.replace(/\n/g,'<br>');
+    if(onDone) onDone();
+    return;
+  }
+  // Typewriter effect para bot
+  const clean = text.replace(/\n/g,'<br>');
+  const words = clean.split(/(<br>|<[^>]+>|[^<]+)/g).filter(Boolean);
+  let i = 0, current = '';
+  const speed = 18;
+  function typeNext(){
+    if(i >= words.length){ if(onDone) onDone(); return; }
+    const chunk = words[i++];
+    if(chunk.startsWith('<')){
+      current += chunk;
+    } else {
+      // Type char by char
+      let ci = 0;
+      function typeChar(){
+        if(ci >= chunk.length){
+          setTimeout(typeNext, speed);
+          return;
+        }
+        current += chunk[ci++];
+        div.innerHTML = current;
+        document.getElementById('opti-msgs').scrollTop = 9999;
+        setTimeout(typeChar, speed);
+      }
+      typeChar();
+      return;
+    }
+    div.innerHTML = current;
+    setTimeout(typeNext, speed);
+  }
+  typeNext();
 }
 
 function optiShowOptions(){
@@ -1176,10 +1216,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 });
 
-// Badge al entrar
+// Badge y bienvenida al entrar
 setTimeout(()=>{
-  if(optiFirst) document.getElementById('opti-badge').style.display = 'flex';
-}, 2000);
+  if(optiFirst){
+    document.getElementById('opti-badge').style.display = 'flex';
+    const wb = document.getElementById('opti-welcome');
+    const wt = document.getElementById('opti-welcome-text');
+    const nombre = currentUser?.nombre?.split(' ')[0] || '';
+    wt.innerHTML = `👋 ¡Bienvenido <strong>${nombre}</strong>!<br>¿Qué vamos a hacer hoy?`;
+    wb.style.display = 'block';
+    // Auto ocultar después de 6 segundos
+    setTimeout(()=>{ wb.style.display='none'; }, 6000);
+  }
+}, 1800);
 
 init();
 
@@ -1194,6 +1243,7 @@ window.addEventListener("beforeunload", function(){
   <img src="/static/opti_wave.png" alt="Opti">
   <div id="opti-badge">1</div>
 </div>
+<div id="opti-welcome" style="display:none"><button id="opti-welcome-close" onclick="document.getElementById('opti-welcome').style.display='none'">✕</button><span id="opti-welcome-text"></span></div>
 <div id="opti-panel">
   <div id="opti-header">
     <img id="opti-avatar" src="/static/opti_wave.png" alt="Opti">

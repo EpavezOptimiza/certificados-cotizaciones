@@ -336,9 +336,13 @@ tr:hover td{background:#eff6ff}
   <div class="modal">
     <h3>📋 Nueva solicitud de certificado</h3>
     <label>Empresa *</label>
-    <select id="sol-empresa" onchange="loadSolEmpresas()">
-      <option value="">— Seleccionar empresa —</option>
+    <input type="text" id="sol-buscar" placeholder="Buscar empresa por nombre o RUT…" 
+           oninput="filtrarEmpresas()" autocomplete="off"
+           style="margin-bottom:4px">
+    <select id="sol-empresa" size="5" style="height:120px;font-size:12px">
+      <option value="">— Escribe para buscar —</option>
     </select>
+    <input type="hidden" id="sol-empresa-val">
     <label>Institución *</label>
     <select id="sol-inst">
       <option value="">— Seleccionar institución —</option>
@@ -791,41 +795,56 @@ async function eliminarUsuario(uid){
 }
 
 // ── Solicitudes ───────────────────────────────────────────────────────────────
+let _todasEmpresas = [];
+
 async function abrirSolicitud(){
   openModal("modalSolicitud");
+  document.getElementById("sol-buscar").value="";
+  document.getElementById("sol-empresa-val").value="";
   await loadSolEmpresas();
 }
 
+function filtrarEmpresas(){
+  const busq = document.getElementById("sol-buscar").value.toLowerCase();
+  const sel  = document.getElementById("sol-empresa");
+  sel.innerHTML="";
+  const filtradas = _todasEmpresas.filter(e=>
+    e.nombre.toLowerCase().includes(busq) ||
+    e.rut.toLowerCase().includes(busq) ||
+    e.grupo.toLowerCase().includes(busq)
+  ).slice(0,50);
+  for(const e of filtradas){
+    const opt=document.createElement("option");
+    opt.value=JSON.stringify({rut:e.rut, nombre:e.nombre, grupo:e.grupo});
+    opt.textContent=`${e.rut} · ${e.nombre} (${e.grupo})`;
+    sel.appendChild(opt);
+  }
+  if(!filtradas.length){
+    const opt=document.createElement("option");
+    opt.value=""; opt.textContent="Sin resultados";
+    sel.appendChild(opt);
+  }
+}
+
 async function loadSolEmpresas(){
+  if(_todasEmpresas.length){ filtrarEmpresas(); return; }
   const sel=document.getElementById("sol-empresa");
-  sel.innerHTML='<option value="">— Seleccionar empresa —</option>';
-  sel.disabled=true;
+  sel.innerHTML='<option value="">⏳ Cargando…</option>';
   try {
     const r=await fetch("/api/empresas_excel");
-    const emps=await r.json();
-    for(const e of emps){
-      const opt=document.createElement("option");
-      opt.value=JSON.stringify({rut:e.rut, nombre:e.nombre, grupo:e.grupo});
-      opt.textContent=`${e.rut} · ${e.nombre} (${e.grupo})`;
-      sel.appendChild(opt);
-    }
+    _todasEmpresas=await r.json();
   } catch(err){
-    // Fallback a empresas en DB
     for(const g of grupos){
       const r=await fetch(`/api/grupos/${g.id}/empresas_list`);
       const emps=await r.json();
-      for(const e of emps){
-        const opt=document.createElement("option");
-        opt.value=e.id;
-        opt.textContent=`${e.rut?" "+e.rut+" · ":""}${e.nombre} (${g.nombre})`;
-        sel.appendChild(opt);
-      }
+      for(const e of emps) _todasEmpresas.push({rut:e.rut||"",nombre:e.nombre,grupo:g.nombre});
     }
   }
-  sel.disabled=false;
+  filtrarEmpresas();
 }
 async function enviarSolicitud(){
-  const selVal=document.getElementById("sol-empresa").value;
+  const sel=document.getElementById("sol-empresa");
+  const selVal=sel.options[sel.selectedIndex]?.value||"";
   const institucion=document.getElementById("sol-inst").value;
   const notas=document.getElementById("sol-notas").value;
   if(!selVal||!institucion) return alert("Selecciona empresa e institución.");

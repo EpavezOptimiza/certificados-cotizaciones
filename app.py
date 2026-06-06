@@ -140,6 +140,23 @@ def do_login():
     resp.set_cookie("session_token", token, max_age=86400*30, httponly=True)
     return resp
 
+@app.route("/api/certi_report", methods=["POST"])
+@api_login_required
+def certi_report():
+    user = get_current_user()
+    d    = request.json
+    send_email_solicitud("epavez@optimizaco.cl", "Esteban", {
+        "empresa": f"Reporte de problema — {user['nombre']}",
+        "rut": "",
+        "institucion": "Soporte Certi",
+        "solicitado_por": user["nombre"],
+        "notas": d.get("mensaje",""),
+        "sid": 0,
+        "poder": "",
+        "rol_doc": "",
+    })
+    return jsonify({"ok": True})
+
 @app.route("/logout_beacon", methods=["POST"])
 def logout_beacon():
     """Cierra sesión via sendBeacon al cerrar el navegador"""

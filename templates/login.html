@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Certificados — Iniciar sesión</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#ffffff;border-radius:12px;padding:40px;width:min(400px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.logo{text-align:center;margin-bottom:28px}
+.logo h1{font-size:22px;font-weight:700;color:#0f172a;margin-top:8px}
+.logo p{font-size:13px;color:#64748b;margin-top:4px}
+label{font-size:12px;color:#64748b;display:block;margin-bottom:4px;margin-top:14px}
+input{width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;color:#0f172a;outline:none;transition:border .15s}
+input:focus{border-color:#2563eb}
+.btn{width:100%;padding:11px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;margin-top:20px;transition:background .15s}
+.btn:hover{background:#1d4ed8}
+.error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;padding:10px 12px;font-size:13px;margin-top:12px;display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div style="font-size:36px">📋</div>
+    <h1>Certificados de Cotizaciones</h1>
+    <p>Inicia sesión para continuar</p>
+  </div>
+  <label>Usuario</label>
+  <input type="text" id="username" placeholder="Ingresa tu usuario" autocomplete="username">
+  <label>Contraseña</label>
+  <input type="password" id="password" placeholder="Ingresa tu contraseña" autocomplete="current-password">
+  <div class="error" id="error-msg"></div>
+  <button class="btn" onclick="login()">Entrar</button>
+</div>
+<script>
+document.addEventListener("keydown", e => { if(e.key==="Enter") login(); });
+async function login(){
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  const errEl    = document.getElementById("error-msg");
+  errEl.style.display = "none";
+  if(!username || !password){
+    errEl.textContent = "Ingresa usuario y contraseña.";
+    errEl.style.display = "block"; return;
+  }
+  const r = await fetch("/login", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username, password})
+  });
+  const d = await r.json();
+  if(r.ok){
+    window.location.href = "/";
+  } else {
+    errEl.textContent = d.error || "Error al iniciar sesión.";
+    errEl.style.display = "block";
+  }
+}
+</script>
+</body>
+</html>

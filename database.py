@@ -31,14 +31,16 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS grupos (
             id     INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL
+            nombre TEXT NOT NULL,
+            poder  TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS empresas (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             grupo_id     INTEGER NOT NULL REFERENCES grupos(id) ON DELETE CASCADE,
             nombre       TEXT NOT NULL,
             rut          TEXT DEFAULT '',
-            razon_social TEXT DEFAULT ''
+            razon_social TEXT DEFAULT '',
+            rol_doc      TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS certificados (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +69,14 @@ def init_db():
             atendida       TEXT DEFAULT ''
         );
         """)
+        # Migrar columnas nuevas si no existen
+        try:
+            conn.execute("ALTER TABLE grupos ADD COLUMN poder TEXT DEFAULT ''")
+        except: pass
+        try:
+            conn.execute("ALTER TABLE empresas ADD COLUMN rol_doc TEXT DEFAULT ''")
+        except: pass
+
         # Crear usuario admin por defecto si no existe
         admin = conn.execute("SELECT id FROM usuarios WHERE username='admin'").fetchone()
         if not admin:

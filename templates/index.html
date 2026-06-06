@@ -118,7 +118,7 @@ tr:hover td{background:#eff6ff}
     <button class="sb-btn accent admin-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
     <button class="sb-btn admin-only" onclick="openModal('modalMigrar')" style="display:none" style="background:#1e3a5f;color:#93c5fd">📦 Migrar JSON</button>
     <button class="sb-btn admin-only" onclick="openModal('modalUsuarios')" style="display:none">👥 Gestionar usuarios</button>
-    <button class="sb-btn orange consultor-only" onclick="openModal('modalSolicitud')" style="display:none">📋 Nueva solicitud</button>
+    <button class="sb-btn orange consultor-only" onclick="abrirSolicitud()" style="display:none">📋 Nueva solicitud</button>
     <button class="sb-btn accent terreno-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
     <button class="sb-btn terreno-only" onclick="verSolicitudes()" style="display:none">📋 Mis solicitudes</button>
   </div>
@@ -562,8 +562,20 @@ function showMasMenu(){ openModal("modalMas"); }
 function ctxGrupo(ev,gid,nombre){
   ev.preventDefault();
   if(currentUser.rol!=="admin") return;
-  if(confirm(`¿Eliminar el grupo "${nombre}" y todas sus empresas?`))
-    fetch(`/api/grupos/${gid}`,{method:"DELETE"}).then(()=>{loadGrupos();toast("Grupo eliminado");});
+  const accion = prompt(`Grupo: ${nombre}\n\n1 - Eliminar grupo\n2 - Subir Poder Notarial\n\nEscribe 1 o 2:`);
+  if(accion==="1"){
+    if(confirm(`¿Eliminar el grupo "${nombre}" y todas sus empresas?`))
+      fetch(`/api/grupos/${gid}`,{method:"DELETE"}).then(()=>{loadGrupos();toast("Grupo eliminado");});
+  } else if(accion==="2"){
+    const inp=document.createElement("input");
+    inp.type="file"; inp.accept=".pdf,.doc,.docx";
+    inp.onchange=async()=>{
+      const fd=new FormData(); fd.append("file",inp.files[0]);
+      await fetch(`/api/grupos/${gid}/poder`,{method:"POST",body:fd});
+      toast("✅ Poder notarial subido");
+    };
+    inp.click();
+  }
 }
 async function guardarGrupo(){
   const nombre=document.getElementById("g-nombre").value.trim();
@@ -631,8 +643,20 @@ async function eliminarEmpresa(){
 function ctxEmpresa(ev,eid,nombre){
   ev.preventDefault();
   if(currentUser.rol!=="admin") return;
-  if(confirm(`¿Eliminar "${nombre}"?`))
-    fetch(`/api/empresas/${eid}`,{method:"DELETE"}).then(()=>loadGrupos());
+  const accion = prompt(`Empresa: ${nombre}\n\n1 - Eliminar empresa\n2 - Subir ROL\n\nEscribe 1 o 2:`);
+  if(accion==="1"){
+    if(confirm(`¿Eliminar "${nombre}"?`))
+      fetch(`/api/empresas/${eid}`,{method:"DELETE"}).then(()=>loadGrupos());
+  } else if(accion==="2"){
+    const inp=document.createElement("input");
+    inp.type="file"; inp.accept=".pdf,.doc,.docx";
+    inp.onchange=async()=>{
+      const fd=new FormData(); fd.append("file",inp.files[0]);
+      await fetch(`/api/empresas/${eid}/rol`,{method:"POST",body:fd});
+      toast("✅ ROL subido");
+    };
+    inp.click();
+  }
 }
 
 // ── Certificados ──────────────────────────────────────────────────────────────
@@ -767,26 +791,58 @@ async function eliminarUsuario(uid){
 }
 
 // ── Solicitudes ───────────────────────────────────────────────────────────────
+async function abrirSolicitud(){
+  openModal("modalSolicitud");
+  await loadSolEmpresas();
+}
+
 async function loadSolEmpresas(){
   const sel=document.getElementById("sol-empresa");
-  if(sel.options.length>1) return;
-  for(const g of grupos){
-    const r=await fetch(`/api/grupos/${g.id}/empresas_list`);
+  sel.innerHTML='<option value="">— Seleccionar empresa —</option>';
+  sel.disabled=true;
+  try {
+    const r=await fetch("/api/empresas_excel");
     const emps=await r.json();
     for(const e of emps){
       const opt=document.createElement("option");
-      opt.value=e.id;
-      opt.textContent=`${e.rut?" "+e.rut+" · ":""}${e.nombre} (${g.nombre})`;
+      opt.value=JSON.stringify({rut:e.rut, nombre:e.nombre, grupo:e.grupo});
+      opt.textContent=`${e.rut} · ${e.nombre} (${e.grupo})`;
       sel.appendChild(opt);
     }
+  } catch(err){
+    // Fallback a empresas en DB
+    for(const g of grupos){
+      const r=await fetch(`/api/grupos/${g.id}/empresas_list`);
+      const emps=await r.json();
+      for(const e of emps){
+        const opt=document.createElement("option");
+        opt.value=e.id;
+        opt.textContent=`${e.rut?" "+e.rut+" · ":""}${e.nombre} (${g.nombre})`;
+        sel.appendChild(opt);
+      }
+    }
   }
+  sel.disabled=false;
 }
 async function enviarSolicitud(){
-  const empresa_id=parseInt(document.getElementById("sol-empresa").value);
+  const selVal=document.getElementById("sol-empresa").value;
   const institucion=document.getElementById("sol-inst").value;
   const notas=document.getElementById("sol-notas").value;
-  if(!empresa_id||!institucion) return alert("Selecciona empresa e institución.");
-  const r=await fetch("/api/solicitudes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa_id,institucion,notas})});
+  if(!selVal||!institucion) return alert("Selecciona empresa e institución.");
+
+  let empresa_id=null;
+  let empresa_data=null;
+  try {
+    empresa_data=JSON.parse(selVal);
+  } catch(e){
+    empresa_id=parseInt(selVal);
+  }
+
+  const body = empresa_data
+    ? {empresa_excel: empresa_data, institucion, notas}
+    : {empresa_id, institucion, notas};
+
+  const r=await fetch("/api/solicitudes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d=await r.json();
   if(d.error) return alert(d.error);
   closeModal("modalSolicitud");

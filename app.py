@@ -16,6 +16,44 @@ ADJUNTOS = DATA_DIR
 os.makedirs(ADJUNTOS, exist_ok=True)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
+EXCEL_URL = "https://docs.google.com/spreadsheets/d/1j9M7LfbKX5siSYsDlQgl5PCnECwioAKO/export?format=xlsx"
+_empresa_cache = None
+
+def cargar_empresas_excel():
+    """Lee el Excel de Google Drive y retorna mapa RUT -> {razon_social, grupo}"""
+    global _empresa_cache
+    try:
+        import urllib.request, io
+        with urllib.request.urlopen(EXCEL_URL, timeout=10) as r:
+            data = r.read()
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+        header = [str(c).strip().upper() if c else "" for c in rows[0]]
+        def col_idx(names):
+            for n in names:
+                for i, h in enumerate(header):
+                    if n in h: return i
+            return None
+        rut_col   = col_idx(["RUT"])
+        grp_col   = col_idx(["GRUPO"])
+        razon_col = col_idx(["RAZON","RAZÓN","SOCIAL"])
+        result = {}
+        for row in rows[1:]:
+            rut   = str(row[rut_col]).strip()  if rut_col is not None and row[rut_col] else ""
+            razon = str(row[razon_col]).strip() if razon_col is not None and row[razon_col] else ""
+            grupo = str(row[grp_col]).strip()   if grp_col is not None and row[grp_col] else "Sin grupo"
+            if rut and razon:
+                result[rut] = {"razon_social": razon, "grupo": grupo}
+        _empresa_cache = result
+        print(f"[EXCEL] Cargadas {len(result)} empresas desde Google Drive")
+        return result
+    except Exception as e:
+        print(f"[EXCEL] Error cargando Excel: {e}")
+        return _empresa_cache or {}
+
 INSTITUCIONES = [
     ("AFC",            "Certificado de deuda", "Seguro Desempleo"),
     ("AFP Capital",    "Certificado de deuda", "AFP"),
@@ -170,13 +208,29 @@ def eliminar_usuario(uid):
         conn.execute("DELETE FROM usuarios WHERE id=?", (uid,))
         return jsonify({"ok": True})
 
+# ── API empresas desde Excel ──────────────────────────────────────────────────
+@app.route("/api/empresas_excel")
+@api_login_required
+def get_empresas_excel():
+    """Retorna lista de empresas desde el Excel de Google Drive"""
+    empresas = cargar_empresas_excel()
+    result = []
+    for rut, data in empresas.items():
+        result.append({
+            "rut": rut,
+            "nombre": data["razon_social"],
+            "grupo": data["grupo"]
+        })
+    result.sort(key=lambda x: x["nombre"])
+    return jsonify(result)
+
 # ── API Grupos ────────────────────────────────────────────────────────────────
 @app.route("/api/grupos")
 @api_login_required
 def get_grupos():
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT g.id, g.nombre, COUNT(e.id) as n_empresas
+            SELECT g.id, g.nombre, g.poder, COUNT(e.id) as n_empresas
             FROM grupos g LEFT JOIN empresas e ON e.grupo_id = g.id
             GROUP BY g.id ORDER BY g.nombre""").fetchall()
         return jsonify([dict(r) for r in rows])
@@ -221,6 +275,34 @@ def get_empresas_grupo(gid):
             "SELECT id,nombre,rut FROM empresas WHERE grupo_id=? ORDER BY nombre", (gid,)).fetchall()
         return jsonify([dict(r) for r in rows])
 
+@app.route("/api/grupos/<int:gid>/poder", methods=["POST"])
+@api_login_required
+def upload_poder(gid):
+    user = get_current_user()
+    if user["rol"] != "admin":
+        return jsonify({"error":"Sin permisos"}), 403
+    f = request.files.get("file")
+    if not f: return jsonify({"error":"No file"}), 400
+    fname = f"poder_grupo_{gid}_{f.filename}"
+    f.save(os.path.join(ADJUNTOS, fname))
+    with get_conn() as conn:
+        conn.execute("UPDATE grupos SET poder=? WHERE id=?", (fname, gid))
+    return jsonify({"poder": fname})
+
+@app.route("/api/empresas/<int:eid>/rol", methods=["POST"])
+@api_login_required
+def upload_rol(eid):
+    user = get_current_user()
+    if user["rol"] != "admin":
+        return jsonify({"error":"Sin permisos"}), 403
+    f = request.files.get("file")
+    if not f: return jsonify({"error":"No file"}), 400
+    fname = f"rol_empresa_{eid}_{f.filename}"
+    f.save(os.path.join(ADJUNTOS, fname))
+    with get_conn() as conn:
+        conn.execute("UPDATE empresas SET rol_doc=? WHERE id=?", (fname, eid))
+    return jsonify({"rol_doc": fname})
+
 # ── API Empresas ──────────────────────────────────────────────────────────────
 @app.route("/api/grupos/<int:gid>/empresas", methods=["POST"])
 @api_login_required
@@ -242,7 +324,10 @@ def crear_empresa(gid):
 @api_login_required
 def get_empresa(eid):
     with get_conn() as conn:
-        emp = dict(conn.execute("SELECT * FROM empresas WHERE id=?", (eid,)).fetchone())
+        emp = dict(conn.execute("""
+            SELECT e.*, g.poder as grupo_poder
+            FROM empresas e JOIN grupos g ON g.id = e.grupo_id
+            WHERE e.id=?""", (eid,)).fetchone())
         certs = [dict(r) for r in conn.execute(
             "SELECT * FROM certificados WHERE empresa_id=? ORDER BY id", (eid,)).fetchall()]
         for c in certs:
@@ -372,11 +457,35 @@ def crear_solicitud():
     if user["rol"] not in ("admin","consultor"):
         return jsonify({"error": "Sin permisos"}), 403
     d = request.json
+
+    # Si viene empresa_excel, buscar o crear la empresa en DB
+    empresa_id = d.get("empresa_id")
+    if not empresa_id and d.get("empresa_excel"):
+        ex = d["empresa_excel"]
+        with get_conn() as conn:
+            # Buscar por RUT
+            emp_row = conn.execute(
+                "SELECT e.id FROM empresas e WHERE REPLACE(e.rut,'-','')=?",
+                (ex["rut"].replace("-",""),)).fetchone()
+            if emp_row:
+                empresa_id = emp_row["id"]
+            else:
+                # Buscar/crear grupo
+                grp = conn.execute("SELECT id FROM grupos WHERE UPPER(nombre)=UPPER(?)",
+                                    (ex["grupo"],)).fetchone()
+                gid = grp["id"] if grp else conn.execute(
+                    "INSERT INTO grupos(nombre) VALUES(?)", (ex["grupo"],)).lastrowid
+                cur = conn.execute(
+                    "INSERT INTO empresas(grupo_id,nombre,rut,razon_social) VALUES(?,?,?,?)",
+                    (gid, ex["nombre"], ex["rut"], ex["nombre"]))
+                empresa_id = cur.lastrowid
+                certs_default(conn, empresa_id)
+
     with get_conn() as conn:
         cur = conn.execute("""INSERT INTO solicitudes
             (empresa_id,institucion,solicitado_por,estado,notas,creada)
             VALUES(?,?,?,?,?,?)""",
-            (d["empresa_id"], d["institucion"], user["id"],
+            (empresa_id, d["institucion"], user["id"],
              "Pendiente", d.get("notas",""),
              datetime.now().strftime("%d/%m/%Y %H:%M")))
         sid = cur.lastrowid
@@ -384,7 +493,10 @@ def crear_solicitud():
         # Enviar email a usuarios de terreno
         terrenos = conn.execute(
             "SELECT email,nombre FROM usuarios WHERE rol='terreno' AND email != ''").fetchall()
-        emp = conn.execute("SELECT nombre,rut FROM empresas WHERE id=?", (d["empresa_id"],)).fetchone()
+        emp = conn.execute("""
+            SELECT e.*, g.poder as grupo_poder
+            FROM empresas e JOIN grupos g ON g.id = e.grupo_id
+            WHERE e.id=?""", (empresa_id,)).fetchone()
 
     # Enviar emails
     for t in terrenos:
@@ -394,7 +506,9 @@ def crear_solicitud():
             "institucion": d["institucion"],
             "solicitado_por": user["nombre"],
             "notas": d.get("notas",""),
-            "sid": sid
+            "sid": sid,
+            "poder": emp["grupo_poder"] if emp else "",
+            "rol_doc": emp["rol_doc"] if emp else "",
         })
 
     return jsonify({"id": sid}), 201
@@ -450,6 +564,23 @@ def send_email_solicitud(to_email, to_nombre, data):
         </div>"""
 
         msg.attach(MIMEText(html, "html"))
+
+        # Adjuntar poder y ROL si existen
+        from email.mime.base import MIMEBase
+        from email import encoders
+        for key, label in [("poder","Poder_Notarial"), ("rol_doc","ROL")]:
+            fname = data.get(key,"")
+            if fname:
+                fpath = os.path.join(ADJUNTOS, fname)
+                if os.path.exists(fpath):
+                    with open(fpath, "rb") as f:
+                        part = MIMEBase("application","octet-stream")
+                        part.set_payload(f.read())
+                    encoders.encode_base64(part)
+                    ext = os.path.splitext(fname)[1]
+                    part.add_header("Content-Disposition", f"attachment; filename={label}{ext}")
+                    msg.attach(part)
+
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
             s.login(smtp_user, smtp_pass)
             s.sendmail(smtp_user, to_email, msg.as_string())

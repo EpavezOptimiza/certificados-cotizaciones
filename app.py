@@ -480,9 +480,6 @@ def row_to_dict(row):
 @app.route("/api/importar", methods=["POST"])
 @api_login_required
 def importar():
-    user = get_current_user()
-    if user["rol"] == "terreno":
-        return jsonify({"error":"Sin permisos"}), 403
     try:
         import openpyxl
     except ImportError:

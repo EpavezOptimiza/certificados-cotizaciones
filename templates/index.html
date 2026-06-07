@@ -102,15 +102,15 @@ tr:hover td{background:#eff6ff}
 #opti-bubble:hover{transform:scale(1.08)}
 #opti-bubble img{width:160px;height:160px;object-fit:contain;background:transparent!important;mix-blend-mode:normal;filter:drop-shadow(0 4px 20px rgba(37,99,235,.5))}
 #opti-badge{position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border-radius:50%;width:20px;height:20px;font-size:10px;display:none;align-items:center;justify-content:center;font-weight:700;border:2px solid #fff}
-#opti-trigger{position:fixed;bottom:20px;right:20px;z-index:9000;cursor:pointer;width:90px;height:90px;background:none;border:none;padding:0}
-#opti-trigger img{width:90px;height:90px;object-fit:contain;filter:drop-shadow(0 4px 16px rgba(37,99,235,.5))}
+#opti-trigger{position:fixed;bottom:20px;right:20px;z-index:9000;cursor:pointer;width:180px;height:180px;background:none;border:none;padding:0}
+#opti-trigger img{width:180px;height:180px;object-fit:contain;filter:drop-shadow(0 4px 16px rgba(37,99,235,.5))}
 @keyframes opti-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 #opti-trigger{animation:opti-float 3s ease-in-out infinite}
 #opti-trigger:hover{animation:none;transform:scale(1.08)}
-#opti-panel{position:fixed;bottom:130px;right:20px;width:460px;background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.2);z-index:9000;display:none;flex-direction:row;overflow:hidden;max-height:500px}
+#opti-panel{position:fixed;bottom:210px;right:20px;width:520px;background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.2);z-index:9000;display:none;flex-direction:row;overflow:hidden;height:580px}
 #opti-panel.open{display:flex}
-#opti-left{width:130px;min-width:130px;background:linear-gradient(180deg,#0f172a,#1e3a8a);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 8px;gap:8px}
-#opti-avatar{width:110px;height:110px;object-fit:contain;filter:drop-shadow(0 0 16px rgba(59,130,246,.7));transition:all .4s}
+#opti-left{width:180px;min-width:180px;background:linear-gradient(180deg,#0f172a,#1e3a8a);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 12px;gap:10px}
+#opti-avatar{width:160px;height:160px;object-fit:contain;filter:drop-shadow(0 0 16px rgba(59,130,246,.7));transition:all .4s}
 #opti-name{color:#fff;font-size:13px;font-weight:700}
 #opti-state-label{color:#60a5fa;font-size:9px;text-transform:uppercase;letter-spacing:.5px}
 #opti-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
@@ -140,7 +140,7 @@ tr:hover td{background:#eff6ff}
 @keyframes opti-dot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 @keyframes opti-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes opti-welcome-in{0%{opacity:0;transform:translateY(10px) scale(.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
-#opti-welcome{position:fixed;bottom:120px;right:110px;background:#fff;border-radius:16px 16px 4px 16px;padding:12px 16px;font-size:13px;color:#0f172a;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:8999;max-width:220px;line-height:1.5;animation:opti-welcome-in .4s ease;border:1px solid #e2e8f0}
+#opti-welcome{position:fixed;bottom:210px;right:210px;background:#fff;border-radius:16px 16px 4px 16px;padding:12px 16px;font-size:13px;color:#0f172a;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:8999;max-width:220px;line-height:1.5;animation:opti-welcome-in .4s ease;border:1px solid #e2e8f0}
 #opti-welcome strong{color:#2563eb}
 #opti-welcome::after{content:'';position:absolute;bottom:-8px;right:20px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid #fff}
 #opti-welcome-close{position:absolute;top:6px;right:8px;background:none;border:none;color:#94a3b8;font-size:14px;cursor:pointer;line-height:1}
@@ -1057,8 +1057,8 @@ function setOptiImg(state){
 function toggleOpti(){
   optiOpen = !optiOpen;
   document.getElementById('opti-panel').classList.toggle('open', optiOpen);
-  document.getElementById('opti-badge').style.display = 'none';
-  document.getElementById('opti-welcome').style.display = 'none';
+  const badge = document.getElementById('opti-badge'); if(badge) badge.style.display = 'none';
+  const welcome = document.getElementById('opti-welcome'); if(welcome) welcome.style.display = 'none';
   if(optiOpen && optiFirst){
     optiFirst = false;
     setOptiImg('wave');
@@ -1264,7 +1264,7 @@ window.addEventListener("beforeunload", function(){
   <div id="opti-left">
     <img id="opti-avatar" src="/static/opti_wave.png" alt="Opti">
     <div id="opti-name">Opti</div>
-    <div id="opti-status">● En línea</div>
+    <div id="opti-status" style="color:#60a5fa;font-size:11px">● En línea</div>
     <div id="opti-state-label">Esperando</div>
   </div>
   <!-- Chat lado derecho -->
@@ -1276,8 +1276,8 @@ window.addEventListener("beforeunload", function(){
     <div id="opti-msgs"></div>
     <div id="opti-options"></div>
     <div id="opti-input-wrap">
-      <input id="opti-input" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter')optiSend()">
-      <button id="opti-send" onclick="optiSend()">➤</button>
+      <input id="opti-input" type="text" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter'){event.preventDefault();optiSend()}">
+      <button id="opti-send" type="button" onclick="optiSend()">➤</button>
     </div>
   </div>
 </div>

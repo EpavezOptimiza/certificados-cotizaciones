@@ -1049,9 +1049,16 @@ const OPTI_FAQ = {
 let optiOpen = false, optiFirst = true;
 
 function setOptiImg(state){
-  const src = OPTI_IMGS[state] || OPTI_IMGS.wave;
-  document.getElementById('opti-bubble').querySelector('img').src = src;
-  document.getElementById('opti-avatar').src = src;
+  try {
+    const src = OPTI_IMGS[state] || OPTI_IMGS.wave;
+    const trig = document.getElementById('opti-trigger');
+    if(trig){ const img = trig.querySelector('img'); if(img) img.src = src; }
+    const av = document.getElementById('opti-avatar');
+    if(av) av.src = src;
+    const lbl = document.getElementById('opti-state-label');
+    const LABELS = {wave:'Esperando',listen:'Escuchando',think:'Pensando...',talk:'Respondiendo'};
+    if(lbl) lbl.textContent = LABELS[state] || 'Esperando';
+  } catch(e){}
 }
 
 function toggleOpti(){

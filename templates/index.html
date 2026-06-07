@@ -1046,7 +1046,7 @@ const OPTI_FAQ = {
   "Tengo un problema": "REPORT",
 };
 
-let optiOpen = false, optiFirst = true;
+let optiOpen = false, optiFirst = true, optiHistorial = [];
 
 function setOptiImg(state){
   try {
@@ -1205,26 +1205,27 @@ async function optiSend(){
   } else {
     optiShowTyping();
     setOptiImg('think');
-    setTimeout(()=>{
+    // Usar IA
+    try {
+      const r = await fetch('/api/opti_chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mensaje: text, historial: optiHistorial})
+      });
+      const d = await r.json();
       optiHideTyping();
-      const lower = text.toLowerCase();
-      let resp = 'No estoy seguro de esa pregunta. Puedo ayudarte con:';
-      if(lower.includes('import')||lower.includes('carg')) resp = OPTI_FAQ['¿Cómo importo certificados?'];
-      else if(lower.includes('deuda')) resp = OPTI_FAQ['¿Cómo marco sin deuda?'];
-      else if(lower.includes('solicit')) resp = OPTI_FAQ['¿Cómo creo una solicitud?'];
-      else if(lower.includes('report')) resp = OPTI_FAQ['¿Cómo genero un reporte?'];
-      else if(lower.includes('format')) resp = OPTI_FAQ['¿Cómo cambio el formato?'];
       setOptiImg('talk');
-      optiAddMsg('bot', resp);
-      setTimeout(()=>{
-        optiShowTyping();
-        setTimeout(()=>{
-          optiHideTyping();
-          optiShowOptions();
-          setOptiImg('wave');
-        }, 1000);
-      }, 600);
-    }, 1400);
+      optiAddMsg('bot', d.respuesta);
+      // Guardar en historial
+      optiHistorial.push({role:'user', content:text});
+      optiHistorial.push({role:'assistant', content:d.respuesta});
+      if(optiHistorial.length > 12) optiHistorial = optiHistorial.slice(-12);
+      setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
+    } catch(e) {
+      optiHideTyping();
+      optiAddMsg('bot', 'Tuve un problema. ¿Puedes intentarlo de nuevo?');
+      setOptiImg('wave');
+    }
   }
 }
 

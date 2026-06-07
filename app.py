@@ -140,6 +140,62 @@ def do_login():
     resp.set_cookie("session_token", token, max_age=86400*30, httponly=True)
     return resp
 
+@app.route("/api/opti_chat", methods=["POST"])
+@api_login_required
+def opti_chat():
+    """Chat con Opti usando OpenAI"""
+    d = request.json
+    mensaje = d.get("mensaje","")
+    historial = d.get("historial", [])
+    
+    api_key = os.environ.get("OPENAI_API_KEY","")
+    if not api_key:
+        return jsonify({"respuesta": "Lo siento, no tengo conexión con mi cerebro ahora mismo. Por favor contacta al administrador."})
+    
+    try:
+        import urllib.request, json as jsonlib
+        
+        sistema = """Eres Opti, el asistente virtual amigable de la aplicación "Certificados de Cotizaciones" de Optimiza.
+Tu rol es ayudar a los usuarios con:
+- Cómo usar la aplicación (importar certificados, crear solicitudes, marcar sin deuda, etc.)
+- Responder preguntas generales de forma amigable
+- Reportar problemas al administrador
+
+La app gestiona certificados de cotizaciones previsionales chilenas (AFP, Isapre, AFC).
+Los roles son: Admin (acceso total), Consultor (solicitudes y reportes), Terreno (importar certificados).
+
+Sé breve, amigable y en español. Máximo 3 oraciones por respuesta."""
+
+        messages = [{"role": "system", "content": sistema}]
+        for h in historial[-6:]:  # últimos 6 mensajes
+            messages.append(h)
+        messages.append({"role": "user", "content": mensaje})
+
+        data = jsonlib.dumps({
+            "model": "gpt-3.5-turbo",
+            "messages": messages,
+            "max_tokens": 200,
+            "temperature": 0.7
+        }).encode('utf-8')
+
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            resp = jsonlib.loads(r.read())
+        
+        respuesta = resp["choices"][0]["message"]["content"].strip()
+        return jsonify({"respuesta": respuesta})
+    
+    except Exception as e:
+        print(f"[OPTI] Error: {e}")
+        return jsonify({"respuesta": "Tuve un problema procesando tu mensaje. ¿Puedes intentarlo de nuevo?"})
+
 @app.route("/api/certi_report", methods=["POST"])
 @api_login_required
 def certi_report():

@@ -1239,25 +1239,34 @@ window.addEventListener("beforeunload", function(){
 </script>
 
 <!-- Opti Bot -->
-<div id="opti-bubble" onclick="toggleOpti()">
+<div id="opti-trigger" onclick="toggleOpti()">
   <img src="/static/opti_wave.png" alt="Opti">
   <div id="opti-badge">1</div>
 </div>
-<div id="opti-welcome" style="display:none"><button id="opti-welcome-close" onclick="document.getElementById('opti-welcome').style.display='none'">✕</button><span id="opti-welcome-text"></span></div>
+<div id="opti-welcome" style="display:none">
+  <button id="opti-welcome-close" onclick="document.getElementById('opti-welcome').style.display='none'">✕</button>
+  <span id="opti-welcome-text"></span>
+</div>
 <div id="opti-panel">
-  <div id="opti-header">
+  <!-- Avatar lado izquierdo -->
+  <div id="opti-left">
     <img id="opti-avatar" src="/static/opti_wave.png" alt="Opti">
-    <div id="opti-header-info">
-      <h4>Opti</h4>
-      <p>Asistente virtual ● En línea</p>
-    </div>
-    <button id="opti-close" onclick="toggleOpti()">✕</button>
+    <div id="opti-name">Opti</div>
+    <div id="opti-status">● En línea</div>
+    <div id="opti-state-label">Esperando</div>
   </div>
-  <div id="opti-msgs"></div>
-  <div id="opti-options"></div>
-  <div id="opti-input-wrap">
-    <input id="opti-input" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter')optiSend()">
-    <button id="opti-send" onclick="optiSend()">➤</button>
+  <!-- Chat lado derecho -->
+  <div id="opti-right">
+    <div id="opti-chat-header">
+      <span>💬 Chat con Opti</span>
+      <button id="opti-close" onclick="toggleOpti()">✕</button>
+    </div>
+    <div id="opti-msgs"></div>
+    <div id="opti-options"></div>
+    <div id="opti-input-wrap">
+      <input id="opti-input" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter')optiSend()">
+      <button id="opti-send" onclick="optiSend()">➤</button>
+    </div>
   </div>
 </div>
 

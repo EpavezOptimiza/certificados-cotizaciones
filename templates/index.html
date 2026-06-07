@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Certificados de Cotizaciones</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:flex;height:100vh;overflow:hidden}
+#sidebar{width:240px;min-width:240px;background:#0f172a;display:flex;flex-direction:column;height:100vh}
+#sidebar-header{padding:16px;border-bottom:1px solid #1e293b}
+#sidebar-header h1{color:#fff;font-size:16px;font-weight:700}
+#sidebar-header p{color:#64748b;font-size:11px;margin-top:2px}
+#user-info{padding:10px 14px;background:#1e293b;display:flex;align-items:center;justify-content:space-between;font-size:11px}
+#user-info .name{color:#cbd5e1;font-weight:600}
+#user-info .role{color:#64748b}
+#user-info a{color:#64748b;text-decoration:none;font-size:11px}
+#user-info a:hover{color:#94a3b8}
+#sidebar-btns{padding:8px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #1e293b}
+.sb-btn{background:#1e293b;color:#cbd5e1;border:none;border-radius:6px;padding:8px 12px;text-align:left;cursor:pointer;font-size:12px;width:100%;transition:background .15s}
+.sb-btn:hover{background:#334155}
+.sb-btn.accent{background:#2563eb;color:#fff}
+.sb-btn.accent:hover{background:#1d4ed8}
+.sb-btn.orange{background:#92400e;color:#fef3c7}
+.sb-btn.orange:hover{background:#78350f}
+#sidebar-label{padding:6px 14px 2px;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+#search-wrap{padding:0 8px 6px;position:relative}
+#search-wrap input{width:100%;background:#1e293b;border:none;border-radius:6px;padding:7px 10px 7px 28px;color:#cbd5e1;font-size:12px;outline:none}
+#search-wrap input::placeholder{color:#475569}
+#search-wrap .icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:#475569;font-size:12px}
+#tree{flex:1;overflow-y:auto;padding:4px 6px}
+.g-header{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border-radius:6px}
+.g-header:hover{background:#1e293b}
+.e-node{padding:5px 10px 5px 22px;cursor:pointer;color:#94a3b8;font-size:12px;border-radius:6px;display:flex;align-items:center;gap:6px}
+.e-node:hover{background:#1e293b;color:#cbd5e1}
+.e-node.active{background:#2563eb;color:#fff}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#header{background:#fff;padding:12px 20px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+#header-left h2{font-size:15px;font-weight:700}
+#header-left p{font-size:11px;color:#64748b;margin-top:2px}
+#header-right{display:flex;gap:6px;flex-wrap:wrap}
+.btn{padding:7px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
+.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8}
+.btn-ghost{background:#f1f5f9;color:#475569}.btn-ghost:hover{background:#e2e8f0}
+.btn-danger{background:#fef2f2;color:#991b1b}.btn-danger:hover{background:#fee2e2}
+.btn-orange{background:#fff7ed;color:#92400e}.btn-orange:hover{background:#fed7aa}
+#stats{display:flex;gap:8px;padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;align-items:center}
+.stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px}
+.stat-card .val{font-size:20px;font-weight:700}.stat-card .lbl{font-size:10px;color:#64748b}
+.green{background:#f0fdf4;border-color:#bbf7d0}.green .val{color:#166534}
+.yellow{background:#fffbeb;border-color:#fde68a}.yellow .val{color:#92400e}
+.blue{background:#eff6ff;border-color:#bfdbfe}.blue .val{color:#1d4ed8}
+.purple{background:#f5f3ff;border-color:#ddd6fe}.purple .val{color:#7c3aed}
+.progress-wrap{flex:1;min-width:120px}
+.progress-wrap p{font-size:10px;color:#64748b;margin-bottom:4px}
+.progress-bar{height:8px;background:#e2e8f0;border-radius:20px;overflow:hidden}
+.progress-fill{height:100%;background:#166534;border-radius:20px;transition:width .4s}
+#filters{display:flex;gap:8px;padding:8px 16px;background:#fff;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;align-items:center}
+#filters label{font-size:12px;color:#64748b}
+#filters select,#filters input{font-size:12px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#0f172a;outline:none}
+#table-wrap{flex:1;overflow:auto;padding:12px 16px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+th{background:#f8fafc;color:#64748b;font-size:11px;font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+td{padding:10px 12px;font-size:12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:#fafafa}
+tr:hover td{background:#eff6ff}
+.est-Obtenido{color:#166534;font-weight:500}
+.est-Pendiente{color:#92400e}
+.est-En-proceso{color:#1d4ed8}
+.est-Vencido{color:#991b1b;font-weight:500}
+.check-cell{text-align:center;font-size:18px;user-select:none;padding:12px!important}
+.check-cell.clickable{cursor:pointer;min-width:50px}
+.adj-link{color:#2563eb;text-decoration:none;font-size:11px}
+#statusbar{background:#f8fafc;border-top:1px solid #e2e8f0;padding:4px 16px;font-size:11px;color:#94a3b8}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:24px;width:min(500px,92vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:16px}
+.modal label{font-size:11px;color:#64748b;display:block;margin-bottom:4px;margin-top:10px}
+.modal input,.modal select,.modal textarea{width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;color:#0f172a;outline:none;background:#fff}
+.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:#2563eb}
+.modal textarea{resize:vertical;min-height:60px;font-family:inherit}
+.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.modal-cb{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px}
+.modal-cb input[type=checkbox]{width:auto}
+#toast{position:fixed;bottom:20px;right:20px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;display:none;z-index:9999}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.badge-admin{background:#fef2f2;color:#991b1b}
+.badge-consultor{background:#eff6ff;color:#1d4ed8}
+.badge-terreno{background:#f0fdf4;color:#166534}
+.sol-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:8px}
+.sol-card .sol-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.sol-card .sol-title{font-weight:600;font-size:13px}
+.sol-card .sol-meta{font-size:11px;color:#64748b}
+.sol-pend{border-left:3px solid #f59e0b}
+.sol-ok{border-left:3px solid #22c55e;opacity:.7}
+
+/* Opti Bot */
+#opti-bubble{position:fixed;bottom:16px;right:16px;z-index:9000;cursor:pointer;transition:transform .2s;width:160px;height:160px;background:none!important;border:none!important}
+#opti-bubble:hover{transform:scale(1.08)}
+#opti-bubble img{width:160px;height:160px;object-fit:contain;background:transparent!important;mix-blend-mode:normal;filter:drop-shadow(0 4px 20px rgba(37,99,235,.5))}
+#opti-badge{position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border-radius:50%;width:20px;height:20px;font-size:10px;display:none;align-items:center;justify-content:center;font-weight:700;border:2px solid #fff}
+#opti-panel{position:fixed;bottom:120px;right:16px;width:360px;background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.18);z-index:9000;display:none;flex-direction:column;overflow:hidden;max-height:560px}
+#opti-panel.open{display:flex}
+#opti-header{background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2563eb}
+#opti-avatar{width:72px;height:72px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(59,130,246,.8));background:transparent;mix-blend-mode:normal}
+#opti-header-info h4{color:#fff;font-size:13px;font-weight:700;margin:0}
+#opti-header-info p{color:#94a3b8;font-size:10px;margin:0}
+#opti-close{margin-left:auto;background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:0 4px;line-height:1}
+#opti-close:hover{color:#fff}
+#opti-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f8fafc}
+.opti-msg{max-width:82%;padding:10px 13px;border-radius:12px;font-size:12px;line-height:1.5}
+.opti-msg.bot{background:#fff;border:1px solid #e2e8f0;color:#0f172a;align-self:flex-start;border-radius:4px 12px 12px 12px}
+.opti-msg.user{background:#2563eb;color:#fff;align-self:flex-end;border-radius:12px 4px 12px 12px}
+#opti-options{padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid #e2e8f0;background:#fff}
+.opti-opt{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.opti-opt:hover{background:#2563eb;color:#fff}
+#opti-input-wrap{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff}
+#opti-input{flex:1;border:1px solid #e2e8f0;border-radius:20px;padding:8px 14px;font-size:12px;outline:none;font-family:inherit}
+#opti-input:focus{border-color:#2563eb}
+#opti-send{background:#2563eb;color:#fff;border:none;border-radius:50%;width:36px;height:36px;min-width:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.opti-typing{display:flex;gap:4px;align-items:center;padding:12px 14px}
+.opti-typing span{width:7px;height:7px;background:#94a3b8;border-radius:50%;animation:opti-dot 1.2s ease-in-out infinite}
+.opti-typing span:nth-child(2){animation-delay:.2s}
+.opti-typing span:nth-child(3){animation-delay:.4s}
+@keyframes opti-dot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
+@keyframes opti-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes opti-welcome-in{0%{opacity:0;transform:translateY(10px) scale(.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
+#opti-welcome{position:fixed;bottom:188px;right:16px;background:#fff;border-radius:16px 16px 4px 16px;padding:12px 16px;font-size:13px;color:#0f172a;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:8999;max-width:220px;line-height:1.5;animation:opti-welcome-in .4s ease;border:1px solid #e2e8f0}
+#opti-welcome strong{color:#2563eb}
+#opti-welcome::after{content:'';position:absolute;bottom:-8px;right:20px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid #fff}
+#opti-welcome-close{position:absolute;top:6px;right:8px;background:none;border:none;color:#94a3b8;font-size:14px;cursor:pointer;line-height:1}
+#opti-bubble{animation:opti-float 3s ease-in-out infinite}
+#opti-bubble:hover{animation:none;transform:scale(1.1)}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>Certificados</h1>
+    <p>de Cotizaciones</p>
+  </div>
+  <div id="user-info">
+    <div>
+      <div class="name" id="user-name">...</div>
+      <div class="role" id="user-role"></div>
+    </div>
+    <a href="/logout">Salir</a>
+  </div>
+  <div id="sidebar-btns">
+    <button class="sb-btn admin-only" onclick="openModal('modalGrupo')" style="display:none">＋ Nuevo grupo</button>
+    <button class="sb-btn admin-only" onclick="openModal_empresa()" style="display:none">＋ Nueva empresa</button>
+    <button class="sb-btn accent admin-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
+    <button class="sb-btn admin-only" onclick="openModal('modalMigrar')" style="display:none" style="background:#1e3a5f;color:#93c5fd">📦 Migrar JSON</button>
+    <button class="sb-btn admin-only" onclick="openModal('modalUsuarios')" style="display:none">👥 Gestionar usuarios</button>
+    <button class="sb-btn orange consultor-only" onclick="abrirSolicitud()" style="display:none">📋 Nueva solicitud</button>
+    <button class="sb-btn accent terreno-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
+    <button class="sb-btn terreno-only" onclick="verSolicitudes()" style="display:none">📋 Mis solicitudes</button>
+  </div>
+  <div id="sidebar-label">Empresas</div>
+  <div id="search-wrap">
+    <span class="icon">🔍</span>
+    <input type="text" id="search-input" placeholder="Buscar…" oninput="renderTree()">
+  </div>
+  <div id="tree"></div>
+</div>
+
+<div id="main">
+  <div id="header">
+    <div id="header-left">
+      <h2 id="header-title">Selecciona una empresa</h2>
+      <p id="header-meta"></p>
+    </div>
+    <div id="header-right" id="header-right">
+      <button class="btn btn-primary admin-consultor-only" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
+      <button class="btn btn-ghost" onclick="showMasMenu()" id="btn-mas" style="display:none">⋯ Más</button>
+    </div>
+  </div>
+  <div id="stats"></div>
+  <div id="filters">
+    <label>Estado</label>
+    <select id="f-estado" onchange="renderCerts()">
+      <option value="">Todos</option>
+      {% for e in estados %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+    </select>
+    <label>Mes</label>
+    <select id="f-mes" onchange="renderCerts()">
+      <option value="">Todos</option>
+      {% for m in meses %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+    </select>
+    <label>Buscar</label>
+    <input type="text" id="f-buscar" placeholder="Buscar…" oninput="renderCerts()" style="width:160px">
+    <button class="btn btn-primary admin-only" onclick="openModal_cert()" id="btn-agregar" style="display:none;margin-left:auto">＋ Agregar certificado</button>
+  </div>
+  <div id="table-wrap">
+    <div id="sol-view" style="display:none;padding:4px">
+      <h3 style="margin-bottom:12px;font-size:14px;color:#0f172a">📋 Solicitudes pendientes</h3>
+      <div id="sol-list"></div>
+    </div>
+    <table id="tabla" style="display:none">
+      <thead>
+        <tr>
+          <th>Institución</th>
+          <th>Categoría</th>
+          <th>Período</th>
+          <th>Estado</th>
+          <th>Sin deuda</th>
+          <th>Sin afiliados</th>
+          <th>Formato</th>
+          <th>Adjunto</th>
+          <th>Notas</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div id="statusbar">Selecciona una empresa del panel izquierdo</div>
+</div>
+
+<!-- MODALES -->
+<div class="modal-bg" id="modalGrupo">
+  <div class="modal">
+    <h3 id="modalGrupoTitle">Nuevo grupo</h3>
+    <label>Nombre *</label>
+    <input id="g-nombre" placeholder="Ej: BURSAN…">
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalGrupo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarGrupo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalEmpresa">
+  <div class="modal">
+    <h3 id="modalEmpresaTitle">Nueva empresa</h3>
+    <label>Nombre *</label><input id="e-nombre" placeholder="Nombre empresa">
+    <label>RUT</label><input id="e-rut" placeholder="Ej: 76003477-0">
+    <label>Razón social</label><input id="e-razon" placeholder="Razón social">
+    <label>Grupo *</label><select id="e-grupo"></select>
+    <div class="modal-cb" id="e-default-wrap">
+      <input type="checkbox" id="e-default" checked>
+      <label for="e-default" style="margin:0">Cargar instituciones por defecto</label>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalEmpresa')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarEmpresa()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalCert">
+  <div class="modal">
+    <h3 id="modalCertTitle">Nuevo certificado</h3>
+    <label>Institución *</label>
+    <select id="c-inst" onchange="autoTipo()">
+      <option value="">— Seleccionar —</option>
+      {% for inst, tipo, cat in instituciones %}
+      <option value="{{ inst }}" data-tipo="{{ tipo }}" data-cat="{{ cat }}">{{ inst }}</option>
+      {% endfor %}
+    </select>
+    <label>Tipo de certificado</label><input id="c-tipo" placeholder="Certificado de deuda">
+    <div class="modal-row">
+      <div><label>Mes</label>
+        <select id="c-mes"><option value="">—</option>
+        {% for m in meses %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select>
+      </div>
+      <div><label>Año</label>
+        <select id="c-anio">{% for y in range(2022,2032) %}<option value="{{ y }}" {% if y==2026 %}selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+      </div>
+    </div>
+    <label>Estado</label>
+    <select id="c-estado">{% for e in estados %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
+    <label>Formato</label>
+    <select id="c-formato"><option value="">Sin especificar</option><option value="Digital">Digital</option><option value="Escaneado">Escaneado</option></select>
+    <label>Notas</label><textarea id="c-notas" rows="2"></textarea>
+    <div class="modal-cb"><input type="checkbox" id="c-sindeuda"><label for="c-sindeuda" style="margin:0;color:#166534">✅ Sin deuda</label></div>
+    <div class="modal-cb"><input type="checkbox" id="c-sinafil"><label for="c-sinafil" style="margin:0;color:#1d4ed8">✅ Sin afiliados</label></div>
+    <label>Adjunto (PDF/imagen)</label>
+    <input type="file" id="c-adjunto" accept=".pdf,.png,.jpg,.jpeg">
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalCert')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCert()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalImportar">
+  <div class="modal">
+    <h3>⚡ Importar certificados</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Excel de razones sociales + PDFs de certificados.</p>
+    <label>Excel (RUT, GRUPO, RAZON SOCIAL) *</label><input type="file" id="i-excel" accept=".xlsx,.xls">
+    <label>PDFs de certificados *</label><input type="file" id="i-pdfs" accept=".pdf" multiple>
+    <div id="import-result" style="margin-top:10px;font-size:12px;display:none"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalImportar')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-importar" onclick="importar()">⚡ Importar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalMigrar">
+  <div class="modal">
+    <h3>📦 Migrar datos existentes</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Sube tu <strong>certificados_data.json</strong> para importar todos tus datos.</p>
+    <label>Archivo certificados_data.json *</label><input type="file" id="m-json" accept=".json">
+    <div id="migrar-result" style="margin-top:10px;font-size:12px;display:none"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalMigrar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="migrar()">📦 Migrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalReporte">
+  <div class="modal" style="width:320px">
+    <h3>📊 Generar reporte</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:14px">¿De qué quieres el reporte?</p>
+    <button class="btn btn-primary" style="width:100%;padding:12px;font-size:13px;margin-bottom:8px" onclick="verReporte('empresa')">📄 Esta empresa</button>
+    <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:13px" onclick="verReporte('grupo')">🏢 Grupo completo</button>
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal('modalReporte')">Cancelar</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalMas">
+  <div class="modal" style="width:280px">
+    <h3>Opciones</h3>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px">
+      <button class="btn btn-ghost" style="text-align:left;display:none" id="mas-editar" onclick="editarEmpresa()">✏ Editar empresa</button>
+      <button class="btn btn-ghost" style="text-align:left" onclick="exportarCSV()">⬇ Exportar CSV</button>
+      <button class="btn btn-ghost" style="text-align:left;display:none" id="mas-restablecer" onclick="restablecerTipos()">↺ Restablecer tipos</button>
+      <hr style="border-color:#e2e8f0">
+      <button class="btn btn-danger" style="text-align:left;display:none" id="mas-eliminar" onclick="eliminarEmpresa()">🗑 Eliminar empresa</button>
+    </div>
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal('modalMas')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal usuarios -->
+<div class="modal-bg" id="modalUsuarios">
+  <div class="modal" style="width:min(600px,92vw)">
+    <h3>👥 Gestionar usuarios</h3>
+    <div id="usuarios-list" style="margin:12px 0"></div>
+    <button class="btn btn-primary" onclick="openModal('modalNuevoUsuario')">＋ Nuevo usuario</button>
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal('modalUsuarios')">Cerrar</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalNuevoUsuario">
+  <div class="modal">
+    <h3 id="modalUsuarioTitle">Nuevo usuario</h3>
+    <label>Nombre completo *</label><input id="u-nombre" placeholder="Ej: Juan Pérez">
+    <label>Usuario (login) *</label><input id="u-username" placeholder="Ej: juan.perez">
+    <label>Contraseña *</label><input type="password" id="u-password" placeholder="Contraseña">
+    <label>Email (para notificaciones)</label><input type="email" id="u-email" placeholder="email@empresa.com">
+    <label>Rol *</label>
+    <select id="u-rol">
+      <option value="admin">Admin</option>
+      <option value="consultor">Consultor</option>
+      <option value="terreno">Terreno</option>
+    </select>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalNuevoUsuario')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarUsuario()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal solicitud -->
+<div class="modal-bg" id="modalSolicitud">
+  <div class="modal">
+    <h3>📋 Nueva solicitud de certificado</h3>
+    <label>Empresa *</label>
+    <input type="text" id="sol-buscar" placeholder="Buscar empresa por nombre o RUT…" 
+           oninput="filtrarEmpresas()" autocomplete="off"
+           style="margin-bottom:4px">
+    <select id="sol-empresa" size="5" style="height:120px;font-size:12px">
+      <option value="">— Escribe para buscar —</option>
+    </select>
+    <input type="hidden" id="sol-empresa-val">
+    <label>Institución *</label>
+    <select id="sol-inst">
+      <option value="">— Seleccionar institución —</option>
+      {% for inst, tipo, cat in instituciones %}
+      <option value="{{ inst }}">{{ inst }}</option>
+      {% endfor %}
+    </select>
+    <label>Notas u observaciones</label>
+    <textarea id="sol-notas" rows="2" placeholder="Información adicional…"></textarea>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalSolicitud')">Cancelar</button>
+      <button class="btn btn-orange" onclick="enviarSolicitud()">📋 Enviar solicitud</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let grupos=[], empresaId=null, grupoId=null, certData=[], editCertId=null;
+let editEmpId=null, editGrpId=null, editUsrId=null;
+let currentUser=null;
+let allEmpresas=[];
+
+const INST_MAP={};
+{% for inst, tipo, cat in instituciones %}
+INST_MAP["{{ inst }}"]={tipo:"{{ tipo }}",cat:"{{ cat }}"};
+{% endfor %}
+
+const ROLES={admin:"Admin",consultor:"Consultor",terreno:"Terreno"};
+
+async function init(){
+  const r = await fetch("/api/me");
+  currentUser = await r.json();
+  document.getElementById("user-name").textContent = currentUser.nombre;
+  document.getElementById("user-role").textContent  = ROLES[currentUser.rol] || currentUser.rol;
+  applyRoleUI();
+  await loadGrupos();
+  if(currentUser.rol === "terreno") verSolicitudes();
+}
+
+function applyRoleUI(){
+  const rol = currentUser.rol;
+  // Mostrar botones según rol
+  document.querySelectorAll(".admin-only").forEach(el=>{
+    el.style.display = (rol==="admin") ? "" : "none";
+  });
+  document.querySelectorAll(".consultor-only").forEach(el=>{
+    el.style.display = (rol==="consultor") ? "" : "none";
+  });
+  document.querySelectorAll(".terreno-only").forEach(el=>{
+    el.style.display = (rol==="terreno") ? "" : "none";
+  });
+  document.querySelectorAll(".admin-consultor-only").forEach(el=>{
+    el.style.display = (rol==="terreno") ? "none" : "";
+  });
+  // Menú más
+  const canEdit = rol === "admin";
+  if(document.getElementById("mas-editar")) document.getElementById("mas-editar").style.display = canEdit?"":"none";
+  if(document.getElementById("mas-restablecer")) document.getElementById("mas-restablecer").style.display = canEdit?"":"none";
+  if(document.getElementById("mas-eliminar")) document.getElementById("mas-eliminar").style.display = canEdit?"":"none";
+}
+
+async function loadGrupos(){
+  const r = await fetch("/api/grupos");
+  grupos  = await r.json();
+  renderTree();
+}
+
+function renderTree(){
+  const busq = document.getElementById("search-input").value.toLowerCase();
+  const tree  = document.getElementById("tree");
+  tree.innerHTML="";
+  for(const g of grupos){
+    const div=document.createElement("div");
+    div.innerHTML=`
+      <div class="g-header" onclick="toggleG(this)" oncontextmenu="ctxGrupo(event,${g.id},'${escHtml(g.nombre)}')">
+        <span>▶</span><span>🏢 ${escHtml(g.nombre)}</span>
+        <span style="margin-left:auto;font-size:10px;color:#475569">${g.n_empresas}</span>
+      </div>
+      <div id="gc-${g.id}"></div>`;
+    tree.appendChild(div);
+    loadGrupoEmps(g.id, busq);
+  }
+}
+
+async function loadGrupoEmps(gid, busq){
+  const r    = await fetch(`/api/grupos/${gid}/empresas_list`);
+  const emps = await r.json();
+  const cont = document.getElementById(`gc-${gid}`);
+  if(!cont) return;
+  cont.innerHTML="";
+  for(const e of emps){
+    const txt=`${e.rut?e.rut+" · ":""}${e.nombre}`;
+    if(busq && !txt.toLowerCase().includes(busq)) continue;
+    const div=document.createElement("div");
+    div.className="e-node"+(e.id===empresaId?" active":"");
+    div.id=`en-${e.id}`;
+    div.innerHTML=`<span>·</span><span>${escHtml(txt)}</span>`;
+    div.onclick=()=>selEmpresa(e.id,gid);
+    div.oncontextmenu=(ev)=>ctxEmpresa(ev,e.id,e.nombre);
+    cont.appendChild(div);
+  }
+}
+
+function toggleG(el){
+  const ch=el.nextElementSibling;
+  ch.style.display=ch.style.display==="none"?"":"none";
+}
+
+async function selEmpresa(eid,gid){
+  empresaId=eid; grupoId=gid;
+  document.querySelectorAll(".e-node").forEach(n=>n.classList.remove("active"));
+  const nd=document.getElementById(`en-${eid}`);
+  if(nd) nd.classList.add("active");
+  if(currentUser.rol!=="terreno") document.getElementById("btn-reporte").style.display="";
+  document.getElementById("btn-mas").style.display="";
+  if(currentUser.rol==="admin") document.getElementById("btn-agregar").style.display="";
+  document.getElementById("sol-view").style.display="none";
+  document.getElementById("tabla").style.display="";
+  const r=await fetch(`/api/empresas/${eid}`);
+  const emp=await r.json();
+  certData=emp.certificados||[];
+  const g=grupos.find(x=>x.id===gid);
+  document.getElementById("header-title").textContent=(g?g.nombre+" — ":"")+emp.nombre;
+  const meta=[];
+  if(emp.rut) meta.push("RUT: "+emp.rut);
+  if(emp.razon_social) meta.push("Razón social: "+emp.razon_social);
+  document.getElementById("header-meta").textContent=meta.join("   ·   ");
+  renderStats(); renderCerts();
+}
+
+function renderStats(){
+  const t=certData.length,ob=certData.filter(c=>c.estado==="Obtenido").length,
+        pe=certData.filter(c=>c.estado==="Pendiente").length,
+        pr=certData.filter(c=>c.estado==="En proceso").length,
+        sd=certData.filter(c=>c.sin_deuda).length,
+        pct=t?Math.round(ob/t*100):0;
+  document.getElementById("stats").innerHTML=`
+    <div class="stat-card"><div class="val">${t}</div><div class="lbl">Total</div></div>
+    <div class="stat-card green"><div class="val">${ob}</div><div class="lbl">Obtenidos</div></div>
+    <div class="stat-card yellow"><div class="val">${pe}</div><div class="lbl">Pendientes</div></div>
+    <div class="stat-card blue"><div class="val">${pr}</div><div class="lbl">En proceso</div></div>
+    <div class="stat-card green"><div class="val">${sd}</div><div class="lbl">Sin deuda</div></div>
+    <div class="progress-wrap"><p>Avance ${pct}%</p>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
+}
+
+function renderCerts(){
+  if(!empresaId) return;
+  const fe=document.getElementById("f-estado").value;
+  const fm=document.getElementById("f-mes").value;
+  const fb=document.getElementById("f-buscar").value.toLowerCase();
+  const canEdit = currentUser.rol !== "terreno" || false;
+  const canToggle = true; // todos pueden marcar sin deuda/sin afil
+  let data=certData.filter(c=>{
+    if(fe && c.estado!==fe) return false;
+    if(fm && c.mes!==fm) return false;
+    if(fb && !(c.institucion+c.tipo+c.notas).toLowerCase().includes(fb)) return false;
+    return true;
+  });
+  const ICONS={Obtenido:"✓",Pendiente:"●","En proceso":"◑",Vencido:"✕"};
+  document.getElementById("tbody").innerHTML=data.map(c=>{
+    const periodo=[c.mes,c.anio].filter(Boolean).join(" ");
+    const icon=ICONS[c.estado]||"";
+    const adjHtml=c.adjunto
+      ?`<a href="/adjuntos/${c.adjunto}" target="_blank" class="adj-link">📎 Ver</a>`
+      :`<label style="cursor:pointer;color:#2563eb;font-size:11px">📎 <input type="file" style="display:none" accept=".pdf,.png,.jpg" onchange="uploadAdj(${c.id},this)">Adjuntar</label>`;
+    const editBtns = currentUser.rol!=="terreno"
+      ? `<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editCert(${c.id})">✏</button>
+         <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="deleteCert(${c.id})">🗑</button>`
+      : "";
+    return `<tr>
+      <td>${escHtml(c.institucion)}</td>
+      <td style="color:#64748b">${escHtml(c.categoria)}</td>
+      <td style="color:#64748b">${escHtml(periodo||"—")}</td>
+      <td class="est-${c.estado.replace(" ","-")}">${icon} ${c.estado}</td>
+      <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_deuda')">${c.sin_deuda?"✅":"☐"}</td>
+      <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_afiliados')">${c.sin_afiliados?"✅":"☐"}</td>
+      <td class="check-cell clickable" onclick="toggleFormato(${c.id})" title="Clic para cambiar formato">${c.formato==="Digital"?"💻 Digital":c.formato==="Escaneado"?"🖨 Escaneado":"— Sin especificar"}</td>
+      <td>${adjHtml}</td>
+      <td style="color:#64748b;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.notas)}</td>
+      <td>${editBtns}</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("statusbar").textContent=`  ${data.length} certificado${data.length!==1?"s":""} mostrado${data.length!==1?"s":""}`;
+}
+
+function toggleFormato(cid){
+  const cert=certData.find(c=>c.id===cid); if(!cert) return;
+  const opciones=["","Digital","Escaneado"];
+  const actual=cert.formato||"";
+  const siguiente=opciones[(opciones.indexOf(actual)+1)%opciones.length];
+  cert.formato=siguiente;
+  renderCerts();
+  fetch(`/api/certificados/${cid}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({formato:siguiente})});
+}
+
+async function toggleField(cid,field){
+  const cert=certData.find(c=>c.id===cid); if(!cert) return;
+  cert[field]=!cert[field];
+  await fetch(`/api/certificados/${cid}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({[field]:cert[field]})});
+  renderStats(); renderCerts();
+}
+
+async function uploadAdj(cid,input){
+  const file=input.files[0]; if(!file) return;
+  const fd=new FormData(); fd.append("file",file);
+  const r=await fetch(`/api/certificados/${cid}/adjunto`,{method:"POST",body:fd});
+  const d=await r.json();
+  const cert=certData.find(c=>c.id===cid);
+  if(cert&&d.adjunto) cert.adjunto=d.adjunto;
+  renderCerts(); toast("Archivo adjuntado ✓");
+}
+
+function openModal(id){ document.getElementById(id).classList.add("open"); }
+function closeModal(id){ document.getElementById(id).classList.remove("open"); }
+function showMasMenu(){ openModal("modalMas"); }
+
+// ── Grupos ────────────────────────────────────────────────────────────────────
+function ctxGrupo(ev,gid,nombre){
+  ev.preventDefault();
+  if(currentUser.rol!=="admin") return;
+  const accion = prompt(`Grupo: ${nombre}\n\n1 - Eliminar grupo\n2 - Subir Poder Notarial\n\nEscribe 1 o 2:`);
+  if(accion==="1"){
+    if(confirm(`¿Eliminar el grupo "${nombre}" y todas sus empresas?`))
+      fetch(`/api/grupos/${gid}`,{method:"DELETE"}).then(()=>{loadGrupos();toast("Grupo eliminado");});
+  } else if(accion==="2"){
+    const inp=document.createElement("input");
+    inp.type="file"; inp.accept=".pdf,.doc,.docx";
+    inp.onchange=async()=>{
+      const fd=new FormData(); fd.append("file",inp.files[0]);
+      await fetch(`/api/grupos/${gid}/poder`,{method:"POST",body:fd});
+      toast("✅ Poder notarial subido");
+    };
+    inp.click();
+  }
+}
+async function guardarGrupo(){
+  const nombre=document.getElementById("g-nombre").value.trim();
+  if(!nombre) return alert("Ingresa el nombre.");
+  await fetch("/api/grupos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nombre})});
+  document.getElementById("g-nombre").value="";
+  closeModal("modalGrupo"); await loadGrupos(); toast("Grupo guardado ✓");
+}
+
+// ── Empresas ──────────────────────────────────────────────────────────────────
+function openModal_empresa(){
+  const sel=document.getElementById("e-grupo");
+  sel.innerHTML=grupos.map(g=>`<option value="${g.id}">${escHtml(g.nombre)}</option>`).join("");
+  if(grupoId) sel.value=grupoId;
+  const dw=document.getElementById("e-default-wrap");
+  if(dw) dw.style.display="";
+  document.getElementById("modalEmpresaTitle").textContent="Nueva empresa";
+  editEmpId=null;
+  openModal("modalEmpresa");
+}
+async function guardarEmpresa(){
+  const nombre=document.getElementById("e-nombre").value.trim();
+  const rut=document.getElementById("e-rut").value.trim();
+  const razon=document.getElementById("e-razon").value.trim();
+  const gid=parseInt(document.getElementById("e-grupo").value);
+  const def=document.getElementById("e-default")?.checked??true;
+  if(!nombre||!gid) return alert("Completa los campos obligatorios.");
+  if(editEmpId){
+    await fetch(`/api/empresas/${editEmpId}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({nombre,rut,razon_social:razon})});
+    editEmpId=null;
+  } else {
+    const r=await fetch(`/api/grupos/${gid}/empresas`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nombre,rut,razon_social:razon,cargar_default:def})});
+    const e=await r.json();
+    await selEmpresa(e.id,gid);
+  }
+  ["e-nombre","e-rut","e-razon"].forEach(id=>document.getElementById(id).value="");
+  closeModal("modalEmpresa"); await loadGrupos(); toast("Empresa guardada ✓");
+}
+async function editarEmpresa(){
+  closeModal("modalMas"); if(!empresaId) return;
+  const emp=await (await fetch(`/api/empresas/${empresaId}`)).json();
+  document.getElementById("e-nombre").value=emp.nombre;
+  document.getElementById("e-rut").value=emp.rut;
+  document.getElementById("e-razon").value=emp.razon_social;
+  const sel=document.getElementById("e-grupo");
+  sel.innerHTML=grupos.map(g=>`<option value="${g.id}">${escHtml(g.nombre)}</option>`).join("");
+  sel.value=emp.grupo_id;
+  const dw=document.getElementById("e-default-wrap");
+  if(dw) dw.style.display="none";
+  document.getElementById("modalEmpresaTitle").textContent="Editar empresa";
+  editEmpId=empresaId;
+  openModal("modalEmpresa");
+}
+async function eliminarEmpresa(){
+  closeModal("modalMas"); if(!empresaId) return;
+  const emp=await (await fetch(`/api/empresas/${empresaId}`)).json();
+  if(!confirm(`¿Eliminar "${emp.nombre}"?`)) return;
+  await fetch(`/api/empresas/${empresaId}`,{method:"DELETE"});
+  empresaId=null;
+  document.getElementById("header-title").textContent="Selecciona una empresa";
+  document.getElementById("stats").innerHTML="";
+  document.getElementById("tbody").innerHTML="";
+  await loadGrupos(); toast("Empresa eliminada");
+}
+function ctxEmpresa(ev,eid,nombre){
+  ev.preventDefault();
+  if(currentUser.rol!=="admin") return;
+  const accion = prompt(`Empresa: ${nombre}\n\n1 - Eliminar empresa\n2 - Subir ROL\n\nEscribe 1 o 2:`);
+  if(accion==="1"){
+    if(confirm(`¿Eliminar "${nombre}"?`))
+      fetch(`/api/empresas/${eid}`,{method:"DELETE"}).then(()=>loadGrupos());
+  } else if(accion==="2"){
+    const inp=document.createElement("input");
+    inp.type="file"; inp.accept=".pdf,.doc,.docx";
+    inp.onchange=async()=>{
+      const fd=new FormData(); fd.append("file",inp.files[0]);
+      await fetch(`/api/empresas/${eid}/rol`,{method:"POST",body:fd});
+      toast("✅ ROL subido");
+    };
+    inp.click();
+  }
+}
+
+// ── Certificados ──────────────────────────────────────────────────────────────
+function autoTipo(){
+  const inst=document.getElementById("c-inst").value;
+  if(INST_MAP[inst]) document.getElementById("c-tipo").value=INST_MAP[inst].tipo;
+}
+function openModal_cert(){
+  editCertId=null;
+  document.getElementById("modalCertTitle").textContent="Nuevo certificado";
+  ["c-tipo","c-notas"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("c-inst").value="";
+  document.getElementById("c-mes").value="";
+  document.getElementById("c-anio").value="2026";
+  document.getElementById("c-estado").value="Pendiente";
+  document.getElementById("c-formato").value="";
+  document.getElementById("c-sindeuda").checked=false;
+  document.getElementById("c-sinafil").checked=false;
+  openModal("modalCert");
+}
+function editCert(cid){
+  const c=certData.find(x=>x.id===cid); if(!c) return;
+  editCertId=cid;
+  document.getElementById("modalCertTitle").textContent="Editar certificado";
+  document.getElementById("c-inst").value=c.institucion;
+  document.getElementById("c-tipo").value=c.tipo;
+  document.getElementById("c-mes").value=c.mes;
+  document.getElementById("c-anio").value=c.anio;
+  document.getElementById("c-estado").value=c.estado;
+  document.getElementById("c-formato").value=c.formato||"";
+  document.getElementById("c-notas").value=c.notas;
+  document.getElementById("c-sindeuda").checked=c.sin_deuda;
+  document.getElementById("c-sinafil").checked=c.sin_afiliados;
+  openModal("modalCert");
+}
+async function guardarCert(){
+  const inst=document.getElementById("c-inst").value;
+  if(!inst) return alert("Selecciona la institución.");
+  const body={
+    institucion:inst, tipo:document.getElementById("c-tipo").value,
+    categoria:INST_MAP[inst]?.cat||"", mes:document.getElementById("c-mes").value,
+    anio:document.getElementById("c-anio").value, estado:document.getElementById("c-estado").value,
+    formato:document.getElementById("c-formato").value,
+    notas:document.getElementById("c-notas").value,
+    sin_deuda:document.getElementById("c-sindeuda").checked,
+    sin_afiliados:document.getElementById("c-sinafil").checked,
+  };
+  let cid=editCertId;
+  if(editCertId){
+    await fetch(`/api/certificados/${editCertId}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  } else {
+    const r=await fetch(`/api/empresas/${empresaId}/certificados`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    cid=(await r.json()).id;
+  }
+  const adjFile=document.getElementById("c-adjunto").files[0];
+  if(adjFile&&cid){const fd=new FormData();fd.append("file",adjFile);await fetch(`/api/certificados/${cid}/adjunto`,{method:"POST",body:fd});}
+  closeModal("modalCert");
+  const r=await fetch(`/api/empresas/${empresaId}`);
+  certData=(await r.json()).certificados||[];
+  renderStats(); renderCerts(); toast("Certificado guardado ✓");
+}
+async function deleteCert(cid){
+  if(!confirm("¿Eliminar este certificado?")) return;
+  await fetch(`/api/certificados/${cid}`,{method:"DELETE"});
+  certData=certData.filter(c=>c.id!==cid);
+  renderStats(); renderCerts();
+}
+async function restablecerTipos(){
+  closeModal("modalMas"); if(!empresaId) return;
+  if(!confirm("¿Cambiar todos los tipos a 'Certificado de deuda'?")) return;
+  for(const c of certData){
+    await fetch(`/api/certificados/${c.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:"Certificado de deuda"})});
+    c.tipo="Certificado de deuda";
+  }
+  renderCerts(); toast("Tipos restablecidos ✓");
+}
+
+// ── Usuarios ──────────────────────────────────────────────────────────────────
+async function openModal_usuarios(){
+  const r=await fetch("/api/usuarios");
+  const users=await r.json();
+  const BADGE={admin:"badge-admin",consultor:"badge-consultor",terreno:"badge-terreno"};
+  document.getElementById("usuarios-list").innerHTML=users.map(u=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">
+      <div>
+        <span style="font-weight:600;font-size:13px">${escHtml(u.nombre)}</span>
+        <span class="badge ${BADGE[u.rol]||""}" style="margin-left:6px">${ROLES[u.rol]||u.rol}</span><br>
+        <span style="font-size:11px;color:#64748b">${u.username}${u.email?" · "+u.email:""}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editUsuario(${u.id},'${u.username}','${escHtml(u.nombre)}','${u.email}','${u.rol}')">✏</button>
+        <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="eliminarUsuario(${u.id})">🗑</button>
+      </div>
+    </div>`).join("");
+  openModal("modalUsuarios");
+}
+function editUsuario(id,username,nombre,email,rol){
+  editUsrId=id;
+  document.getElementById("modalUsuarioTitle").textContent="Editar usuario";
+  document.getElementById("u-nombre").value=nombre;
+  document.getElementById("u-username").value=username;
+  document.getElementById("u-password").value="";
+  document.getElementById("u-email").value=email;
+  document.getElementById("u-rol").value=rol;
+  openModal("modalNuevoUsuario");
+}
+async function guardarUsuario(){
+  const nombre=document.getElementById("u-nombre").value.trim();
+  const username=document.getElementById("u-username").value.trim();
+  const password=document.getElementById("u-password").value;
+  const email=document.getElementById("u-email").value.trim();
+  const rol=document.getElementById("u-rol").value;
+  if(!nombre||!username) return alert("Nombre y usuario son obligatorios.");
+  if(!editUsrId&&!password) return alert("La contraseña es obligatoria para usuarios nuevos.");
+  const body={nombre,username,password,email,rol};
+  if(editUsrId){
+    await fetch(`/api/usuarios/${editUsrId}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    editUsrId=null;
+  } else {
+    await fetch("/api/usuarios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  }
+  closeModal("modalNuevoUsuario");
+  await openModal_usuarios();
+  toast("Usuario guardado ✓");
+}
+async function eliminarUsuario(uid){
+  if(!confirm("¿Eliminar este usuario?")) return;
+  const r=await fetch(`/api/usuarios/${uid}`,{method:"DELETE"});
+  const d=await r.json();
+  if(d.error) return alert(d.error);
+  await openModal_usuarios(); toast("Usuario eliminado");
+}
+
+// ── Solicitudes ───────────────────────────────────────────────────────────────
+let _todasEmpresas = [];
+
+async function abrirSolicitud(){
+  openModal("modalSolicitud");
+  document.getElementById("sol-buscar").value="";
+  document.getElementById("sol-empresa-val").value="";
+  await loadSolEmpresas();
+}
+
+function filtrarEmpresas(){
+  const busq = document.getElementById("sol-buscar").value.toLowerCase();
+  const sel  = document.getElementById("sol-empresa");
+  sel.innerHTML="";
+  const filtradas = _todasEmpresas.filter(e=>
+    e.nombre.toLowerCase().includes(busq) ||
+    e.rut.toLowerCase().includes(busq) ||
+    e.grupo.toLowerCase().includes(busq)
+  ).slice(0,50);
+  for(const e of filtradas){
+    const opt=document.createElement("option");
+    opt.value=JSON.stringify({rut:e.rut, nombre:e.nombre, grupo:e.grupo});
+    opt.textContent=`${e.rut} · ${e.nombre} (${e.grupo})`;
+    sel.appendChild(opt);
+  }
+  if(!filtradas.length){
+    const opt=document.createElement("option");
+    opt.value=""; opt.textContent="Sin resultados";
+    sel.appendChild(opt);
+  }
+}
+
+async function loadSolEmpresas(){
+  if(_todasEmpresas.length){ filtrarEmpresas(); return; }
+  const sel=document.getElementById("sol-empresa");
+  sel.innerHTML='<option value="">⏳ Cargando…</option>';
+  try {
+    const r=await fetch("/api/empresas_excel");
+    _todasEmpresas=await r.json();
+  } catch(err){
+    for(const g of grupos){
+      const r=await fetch(`/api/grupos/${g.id}/empresas_list`);
+      const emps=await r.json();
+      for(const e of emps) _todasEmpresas.push({rut:e.rut||"",nombre:e.nombre,grupo:g.nombre});
+    }
+  }
+  filtrarEmpresas();
+}
+async function enviarSolicitud(){
+  const sel=document.getElementById("sol-empresa");
+  const selVal=sel.options[sel.selectedIndex]?.value||"";
+  const institucion=document.getElementById("sol-inst").value;
+  const notas=document.getElementById("sol-notas").value;
+  if(!selVal||!institucion) return alert("Selecciona empresa e institución.");
+
+  let empresa_id=null;
+  let empresa_data=null;
+  try {
+    empresa_data=JSON.parse(selVal);
+  } catch(e){
+    empresa_id=parseInt(selVal);
+  }
+
+  const body = empresa_data
+    ? {empresa_excel: empresa_data, institucion, notas}
+    : {empresa_id, institucion, notas};
+
+  const r=await fetch("/api/solicitudes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.error) return alert(d.error);
+  closeModal("modalSolicitud");
+  toast("✅ Solicitud enviada — se notificó al equipo de terreno");
+}
+async function verSolicitudes(){
+  empresaId=null;
+  document.getElementById("tabla").style.display="none";
+  document.getElementById("sol-view").style.display="";
+  document.getElementById("stats").innerHTML="";
+  document.getElementById("header-title").textContent="📋 Solicitudes";
+  document.getElementById("header-meta").textContent="";
+  const r=await fetch("/api/solicitudes");
+  const sols=await r.json();
+  const pend=sols.filter(s=>s.estado==="Pendiente");
+  const atend=sols.filter(s=>s.estado!=="Pendiente");
+  let html="";
+  if(!sols.length){html='<p style="color:#64748b;font-size:13px">No hay solicitudes aún.</p>';}
+  if(pend.length){
+    html+=`<h4 style="font-size:12px;color:#92400e;margin-bottom:8px">● PENDIENTES (${pend.length})</h4>`;
+    html+=pend.map(s=>`
+      <div class="sol-card sol-pend">
+        <div class="sol-header">
+          <div class="sol-title">${escHtml(s.institucion)} — ${escHtml(s.empresa_nombre)}</div>
+          ${currentUser.rol==="terreno"?`<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="marcarAtendida(${s.id})">✓ Atender</button>`:""}
+        </div>
+        <div class="sol-meta">RUT: ${s.rut||"—"}   ·   Grupo: ${escHtml(s.grupo_nombre)}   ·   Solicitado por: ${escHtml(s.solicitado_nombre)}   ·   ${s.creada}</div>
+        ${s.notas?`<div style="font-size:11px;color:#64748b;margin-top:4px;font-style:italic">${escHtml(s.notas)}</div>`:""}
+      </div>`).join("");
+  }
+  if(atend.length){
+    html+=`<h4 style="font-size:12px;color:#166534;margin:16px 0 8px">✓ ATENDIDAS (${atend.length})</h4>`;
+    html+=atend.map(s=>`
+      <div class="sol-card sol-ok">
+        <div class="sol-header">
+          <div class="sol-title">${escHtml(s.institucion)} — ${escHtml(s.empresa_nombre)}</div>
+          <span style="font-size:11px;color:#166534">✓ Atendida ${s.atendida}</span>
+        </div>
+        <div class="sol-meta">Solicitado por: ${escHtml(s.solicitado_nombre)}   ·   ${s.creada}</div>
+      </div>`).join("");
+  }
+  document.getElementById("sol-list").innerHTML=html;
+}
+async function marcarAtendida(sid){
+  await fetch(`/api/solicitudes/${sid}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({estado:"Atendida"})});
+  await verSolicitudes(); toast("Solicitud marcada como atendida ✓");
+}
+
+// ── Importar / Migrar ─────────────────────────────────────────────────────────
+async function importar(){
+  const excel=document.getElementById("i-excel").files[0];
+  const pdfs=document.getElementById("i-pdfs").files;
+  if(!excel||!pdfs.length) return alert("Selecciona Excel y PDFs.");
+  const fd=new FormData(); fd.append("excel",excel);
+  for(const p of pdfs) fd.append("pdfs",p);
+  const div=document.getElementById("import-result");
+  const btn=document.getElementById("btn-importar");
+  div.style.display=""; div.innerHTML="⏳ Importando…";
+  btn.textContent="⏳ Importando…"; btn.disabled=true;
+  const r=await fetch("/api/importar",{method:"POST",body:fd});
+  const d=await r.json();
+  if(d.error){div.innerHTML=`❌ ${d.error}`;btn.textContent="⚡ Importar";btn.disabled=false;return;}
+  let html=`✅ <strong>Importación completada</strong><br>Empresas creadas: ${d.creadas}   ·   Certificados marcados: ${d.actualizadas}`;
+  if(d.no_procesados?.length) html+=`<br><br>⚠ No procesados: ${d.no_procesados.length}<br>`+d.no_procesados.slice(0,8).map(x=>`• ${x}`).join("<br>");
+  div.innerHTML=html;
+  btn.textContent="✅ Completado";
+  btn.style.background="#166534";
+  btn.disabled=true;
+  await loadGrupos();
+  toast("Importación completada ✓");
+  setTimeout(()=>{ closeModal("modalImportar"); btn.textContent="⚡ Importar"; btn.style.background=""; btn.disabled=false; }, 2000);
+}
+async function migrar(){
+  const f=document.getElementById("m-json").files[0];
+  if(!f) return alert("Selecciona el archivo JSON.");
+  const fd=new FormData(); fd.append("json",f);
+  const div=document.getElementById("migrar-result");
+  div.style.display=""; div.innerHTML="⏳ Migrando…";
+  const r=await fetch("/api/migrar",{method:"POST",body:fd});
+  const d=await r.json();
+  if(d.error){div.innerHTML=`❌ ${d.error}`;return;}
+  div.innerHTML=`✅ Empresas: ${d.empresas}   ·   Certificados: ${d.certificados}`;
+  await loadGrupos(); toast("Migración completada ✓");
+}
+
+// ── CSV ───────────────────────────────────────────────────────────────────────
+async function exportarCSV(){
+  closeModal("modalMas"); if(!empresaId) return;
+  const emp=await (await fetch(`/api/empresas/${empresaId}`)).json();
+  const g=grupos.find(x=>x.id===grupoId);
+  const rows=[["Grupo","Empresa","RUT","Razón Social","Institución","Categoría","Período","Estado","Sin deuda","Sin afiliados","Formato","Notas"]];
+  for(const c of emp.certificados)
+    rows.push([g?.nombre||"",emp.nombre,emp.rut,emp.razon_social,c.institucion,c.categoria,
+               [c.mes,c.anio].filter(Boolean).join(" "),c.estado,
+               c.sin_deuda?"Si":"No",c.sin_afiliados?"Si":"No",c.formato||"",c.notas]);
+  const csv=rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const a=document.createElement("a");
+  a.href="data:text/csv;charset=utf-8,\uFEFF"+encodeURIComponent(csv);
+  a.download=`certificados_${emp.nombre.replace(/\s/g,"_")}.csv`; a.click();
+  toast("CSV exportado ✓");
+}
+
+// ── Reporte ───────────────────────────────────────────────────────────────────
+function verReporte(tipo){
+  closeModal("modalReporte");
+  if(tipo==="empresa") window.open(`/reporte/empresa/${empresaId}`,"_blank");
+  else window.open(`/reporte/grupo/${grupoId}`,"_blank");
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function escHtml(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";setTimeout(()=>t.style.display="none",3000);}
+document.querySelectorAll(".modal-bg").forEach(bg=>bg.addEventListener("click",e=>{if(e.target===bg)bg.classList.remove("open");}));
+document.getElementById("btn-agregar").onclick=openModal_cert;
+document.querySelector("[onclick=\"openModal('modalUsuarios')\"]")&&(document.querySelector("[onclick=\"openModal('modalUsuarios')\"]").onclick=openModal_usuarios);
+
+
+// ── Opti Bot ──────────────────────────────────────────────────────────────────
+const OPTI_IMGS = {
+  wave:   '/static/opti_wave.png',
+  listen: '/static/opti_listen.png',
+  think:  '/static/opti_think.png',
+  talk:   '/static/opti_talk.png',
+};
+
+const OPTI_FAQ = {
+  "¿Cómo importo certificados?": "Para importar certificados:\n1. Haz clic en ⚡ Importar certificados en el menú lateral\n2. Selecciona el Excel de razones sociales\n3. Selecciona los PDFs de certificados\n4. Haz clic en Importar\n\nEl sistema creará las empresas automáticamente.",
+  "¿Cómo marco sin deuda?": "En la tabla de certificados, haz clic directo en la casilla ☐ de la columna 'Sin deuda'. Cambia inmediatamente.",
+  "¿Cómo creo una solicitud?": "Como Consultor:\n1. Clic en 📋 Nueva solicitud\n2. Busca la empresa\n3. Selecciona la institución\n4. Haz clic en Enviar solicitud\n\nEl equipo de terreno recibirá una notificación por email.",
+  "¿Cómo genero un reporte?": "Selecciona una empresa en el panel izquierdo, luego haz clic en 📊 Reporte. Puedes generar reporte de la empresa o del grupo completo.",
+  "¿Cómo cambio el formato?": "En la tabla, haz clic directo en la columna 'Formato' para cambiar entre Digital → Escaneado → Sin especificar.",
+  "Tengo un problema": "REPORT",
+};
+
+let optiOpen = false, optiFirst = true;
+
+function setOptiImg(state){
+  const src = OPTI_IMGS[state] || OPTI_IMGS.wave;
+  document.getElementById('opti-bubble').querySelector('img').src = src;
+  document.getElementById('opti-avatar').src = src;
+}
+
+function toggleOpti(){
+  optiOpen = !optiOpen;
+  document.getElementById('opti-panel').classList.toggle('open', optiOpen);
+  document.getElementById('opti-badge').style.display = 'none';
+  document.getElementById('opti-welcome').style.display = 'none';
+  if(optiOpen && optiFirst){
+    optiFirst = false;
+    setOptiImg('wave');
+    setTimeout(()=>{
+      optiAddMsg('bot', `¡Hola ${currentUser?.nombre?.split(' ')[0]||''}! 👋 Soy <strong>Opti</strong>, tu asistente.<br>¿En qué te puedo ayudar?`);
+      optiShowOptions();
+      setOptiImg('talk');
+      setTimeout(()=>setOptiImg('wave'), 2000);
+    }, 300);
+  }
+}
+
+function optiShowTyping(){
+  const div = document.createElement('div');
+  div.className = 'opti-msg bot opti-typing-wrap';
+  div.id = 'opti-typing';
+  div.innerHTML = '<div class="opti-typing"><span></span><span></span><span></span></div>';
+  document.getElementById('opti-msgs').appendChild(div);
+  document.getElementById('opti-msgs').scrollTop = 9999;
+}
+function optiHideTyping(){
+  const el = document.getElementById('opti-typing');
+  if(el) el.remove();
+}
+
+function optiAddMsg(type, text, onDone){
+  const div = document.createElement('div');
+  div.className = `opti-msg ${type}`;
+  document.getElementById('opti-msgs').appendChild(div);
+  document.getElementById('opti-msgs').scrollTop = 9999;
+  if(type === 'user'){
+    div.innerHTML = text.replace(/\n/g,'<br>');
+    if(onDone) onDone();
+    return;
+  }
+  // Typewriter effect para bot
+  const clean = text.replace(/\n/g,'<br>');
+  const words = clean.split(/(<br>|<[^>]+>|[^<]+)/g).filter(Boolean);
+  let i = 0, current = '';
+  const speed = 18;
+  function typeNext(){
+    if(i >= words.length){ if(onDone) onDone(); return; }
+    const chunk = words[i++];
+    if(chunk.startsWith('<')){
+      current += chunk;
+    } else {
+      // Type char by char
+      let ci = 0;
+      function typeChar(){
+        if(ci >= chunk.length){
+          setTimeout(typeNext, speed);
+          return;
+        }
+        current += chunk[ci++];
+        div.innerHTML = current;
+        document.getElementById('opti-msgs').scrollTop = 9999;
+        setTimeout(typeChar, speed);
+      }
+      typeChar();
+      return;
+    }
+    div.innerHTML = current;
+    setTimeout(typeNext, speed);
+  }
+  typeNext();
+}
+
+function optiShowOptions(){
+  document.getElementById('opti-options').innerHTML = Object.keys(OPTI_FAQ).map(q=>
+    `<button class="opti-opt" onclick="optiAnswer('${q.replace(/'/g,"&#39;")}')">${q}</button>`
+  ).join('');
+}
+
+function optiAnswer(q){
+  optiAddMsg('user', q);
+  document.getElementById('opti-options').innerHTML = '';
+  setOptiImg('think');
+  if(OPTI_FAQ[q] === 'REPORT'){
+    optiShowTyping();
+    setTimeout(()=>{
+      optiHideTyping();
+      setOptiImg('listen');
+      optiAddMsg('bot', 'Cuéntame qué problema tienes. Lo enviaré directamente al administrador.');
+      document.getElementById('opti-input').placeholder = 'Describe el problema...';
+      document.getElementById('opti-input').dataset.mode = 'report';
+    }, 1200);
+  } else {
+    optiShowTyping();
+    setTimeout(()=>{
+      optiHideTyping();
+      setOptiImg('talk');
+      optiAddMsg('bot', OPTI_FAQ[q]);
+      setTimeout(()=>{
+        optiShowTyping();
+        setTimeout(()=>{
+          optiHideTyping();
+          optiAddMsg('bot', '¿Hay algo más en que pueda ayudarte?');
+          optiShowOptions();
+          setOptiImg('wave');
+        }, 1000);
+      }, 600);
+    }, 1400);
+  }
+}
+
+async function optiSend(){
+  const input = document.getElementById('opti-input');
+  const text  = input.value.trim();
+  if(!text) return;
+  setOptiImg('listen');
+  optiAddMsg('user', text);
+  input.value = '';
+  document.getElementById('opti-options').innerHTML = '';
+
+  if(input.dataset.mode === 'report'){
+    input.dataset.mode = '';
+    input.placeholder = 'Escribe tu mensaje...';
+    optiShowTyping();
+    setOptiImg('think');
+    setTimeout(async()=>{
+      optiHideTyping();
+      try {
+        await fetch('/api/certi_report',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({mensaje:text, usuario:currentUser?.nombre})});
+        setOptiImg('talk');
+        optiAddMsg('bot','✅ Reporte enviado al administrador. Te contactarán pronto.');
+      } catch(e){
+        optiAddMsg('bot','❌ No se pudo enviar. Contacta directamente al administrador.');
+      }
+      setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
+    }, 1500);
+  } else {
+    optiShowTyping();
+    setOptiImg('think');
+    setTimeout(()=>{
+      optiHideTyping();
+      const lower = text.toLowerCase();
+      let resp = 'No estoy seguro de esa pregunta. Puedo ayudarte con:';
+      if(lower.includes('import')||lower.includes('carg')) resp = OPTI_FAQ['¿Cómo importo certificados?'];
+      else if(lower.includes('deuda')) resp = OPTI_FAQ['¿Cómo marco sin deuda?'];
+      else if(lower.includes('solicit')) resp = OPTI_FAQ['¿Cómo creo una solicitud?'];
+      else if(lower.includes('report')) resp = OPTI_FAQ['¿Cómo genero un reporte?'];
+      else if(lower.includes('format')) resp = OPTI_FAQ['¿Cómo cambio el formato?'];
+      setOptiImg('talk');
+      optiAddMsg('bot', resp);
+      setTimeout(()=>{
+        optiShowTyping();
+        setTimeout(()=>{
+          optiHideTyping();
+          optiShowOptions();
+          setOptiImg('wave');
+        }, 1000);
+      }, 600);
+    }, 1400);
+  }
+}
+
+// Input listener — cambiar a escuchando mientras escribe
+document.addEventListener('DOMContentLoaded', ()=>{
+  const inp = document.getElementById('opti-input');
+  if(inp){
+    inp.addEventListener('input', ()=>{
+      if(optiOpen && inp.value.trim()) setOptiImg('listen');
+      else if(optiOpen) setOptiImg('wave');
+    });
+  }
+});
+
+// Badge y bienvenida al entrar
+setTimeout(()=>{
+  if(optiFirst){
+    document.getElementById('opti-badge').style.display = 'flex';
+    const wb = document.getElementById('opti-welcome');
+    const wt = document.getElementById('opti-welcome-text');
+    const nombre = currentUser?.nombre?.split(' ')[0] || '';
+    wt.innerHTML = `👋 ¡Bienvenido <strong>${nombre}</strong>!<br>¿Qué vamos a hacer hoy?`;
+    wb.style.display = 'block';
+    // Auto ocultar después de 6 segundos
+    setTimeout(()=>{ wb.style.display='none'; }, 6000);
+  }
+}, 1800);
+
+init();
+
+// Cerrar sesión al salir
+window.addEventListener("beforeunload", function(){
+  navigator.sendBeacon("/logout_beacon");
+});
+</script>
+
+<!-- Opti Bot -->
+<div id="opti-trigger" onclick="toggleOpti()">
+  <img src="/static/opti_wave.png" alt="Opti">
+  <div id="opti-badge">1</div>
+</div>
+<div id="opti-welcome" style="display:none">
+  <button id="opti-welcome-close" onclick="document.getElementById('opti-welcome').style.display='none'">✕</button>
+  <span id="opti-welcome-text"></span>
+</div>
+<div id="opti-panel">
+  <!-- Avatar lado izquierdo -->
+  <div id="opti-left">
+    <img id="opti-avatar" src="/static/opti_wave.png" alt="Opti">
+    <div id="opti-name">Opti</div>
+    <div id="opti-status">● En línea</div>
+    <div id="opti-state-label">Esperando</div>
+  </div>
+  <!-- Chat lado derecho -->
+  <div id="opti-right">
+    <div id="opti-chat-header">
+      <span>💬 Chat con Opti</span>
+      <button id="opti-close" onclick="toggleOpti()">✕</button>
+    </div>
+    <div id="opti-msgs"></div>
+    <div id="opti-options"></div>
+    <div id="opti-input-wrap">
+      <input id="opti-input" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter')optiSend()">
+      <button id="opti-send" onclick="optiSend()">➤</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

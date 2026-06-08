@@ -239,9 +239,13 @@ def logout():
 @login_required
 def index():
     user = get_current_user()
-    return render_template("index.html",
+    resp = make_response(render_template("index.html",
         instituciones=INSTITUCIONES, estados=ESTADOS, meses=MESES,
-        user=user)
+        user=user))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 # ── API usuario actual ────────────────────────────────────────────────────────
 @app.route("/api/me")

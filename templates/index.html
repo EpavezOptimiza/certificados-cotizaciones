@@ -1107,8 +1107,10 @@ let _empresasSeleccionadas = new Set(); // guarda JSON string de cada empresa
 async function abrirSolicitud(){
   openModal("modalSolicitud");
   _empresasSeleccionadas.clear();
+  _todasEmpresas = []; // forzar recarga fresca
   document.getElementById("sol-buscar").value = "";
   document.getElementById("sol-notas").value = "";
+  document.getElementById("sol-empresa-list").innerHTML = '<div style="padding:10px;font-size:12px;color:#64748b">⏳ Cargando…</div>';
   actualizarContador();
   selTodasInst(true);
   await loadSolEmpresas();

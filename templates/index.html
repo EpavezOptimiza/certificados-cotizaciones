@@ -280,7 +280,6 @@ body.dark .pref-label{color:#e2e8f0}
           <th>Categoría</th>
           <th>Período</th>
           <th>Estado</th>
-          <th>Generación</th>
           <th>Sin deuda</th>
           <th>Sin afiliados</th>
           <th>Formato</th>
@@ -449,33 +448,55 @@ body.dark .pref-label{color:#e2e8f0}
 
 <!-- Modal solicitud -->
 <div class="modal-bg" id="modalSolicitud">
-  <div class="modal">
+  <div class="modal" style="width:min(620px,95vw);max-height:92vh">
     <h3>📋 Nueva solicitud de certificado</h3>
-    <label>Empresa *</label>
-    <input type="text" id="sol-buscar" placeholder="Buscar empresa por nombre o RUT…" 
-           oninput="filtrarEmpresas()" autocomplete="off"
-           style="margin-bottom:4px">
-    <select id="sol-empresa" size="5" style="height:120px;font-size:12px">
-      <option value="">— Escribe para buscar —</option>
-    </select>
-    <input type="hidden" id="sol-empresa-val">
-    <label>Institución *</label>
-    <select id="sol-inst">
-      <option value="">— Seleccionar institución —</option>
+
+    <!-- Buscar empresas -->
+    <label>Empresas *</label>
+    <input type="text" id="sol-buscar" placeholder="Buscar por nombre, RUT o grupo…"
+           oninput="filtrarEmpresas()" autocomplete="off" style="margin-bottom:6px">
+
+    <!-- Botones de selección rápida por grupo -->
+    <div id="sol-grupos-btns" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
+
+    <!-- Contador seleccionados -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:11px;color:#64748b" id="sol-sel-count">0 empresas seleccionadas</span>
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="deseleccionarTodas()">Limpiar</button>
+    </div>
+
+    <!-- Lista con checkboxes -->
+    <div id="sol-empresa-list" style="max-height:180px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc"></div>
+
+    <!-- Instituciones con checkboxes -->
+    <label style="margin-top:12px">Instituciones *</label>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="selTodasInst(true)">Todas</button>
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="selTodasInst(false)">Ninguna</button>
+    </div>
+    <div id="sol-inst-list" style="max-height:140px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:grid;grid-template-columns:1fr 1fr;gap:0">
       {% for inst, tipo, cat in instituciones %}
-      <option value="{{ inst }}">{{ inst }}</option>
+      <label style="display:flex;align-items:center;gap:7px;padding:6px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f1f5f9">
+        <input type="checkbox" class="sol-inst-cb" value="{{ inst }}" checked style="width:auto">
+        {{ inst }}
+      </label>
       {% endfor %}
-    </select>
-    <label>Generación *</label>
+    </div>
+
+    <label style="margin-top:10px">Generación *</label>
     <select id="sol-generacion">
       <option value="Inicial">Inicial — primera vez que se obtiene</option>
       <option value="Posterior">Posterior — renovación o actualización</option>
     </select>
     <label>Notas u observaciones</label>
     <textarea id="sol-notas" rows="2" placeholder="Información adicional…"></textarea>
+
+    <!-- Resumen -->
+    <div id="sol-resumen" style="margin-top:10px;font-size:11px;color:#2563eb;background:#eff6ff;border-radius:6px;padding:8px 10px;display:none"></div>
+
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalSolicitud')">Cancelar</button>
-      <button class="btn btn-orange" onclick="enviarSolicitud()">📋 Enviar solicitud</button>
+      <button class="btn btn-orange" onclick="enviarSolicitud()">📋 Enviar solicitudes</button>
     </div>
   </div>
 </div>
@@ -673,13 +694,11 @@ function renderCerts(){
     return true;
   });
   const ICONS={Obtenido:"✓",Pendiente:"●","En proceso":"◑",Vencido:"✕"};
-  document.getElementById("tbody").innerHTML=data.map(c=>{
+
+  function filaHTML(c){
     const periodo=[c.mes,c.anio].filter(Boolean).join(" ");
     const icon=ICONS[c.estado]||"";
     const gen=c.generacion||"Inicial";
-    const genBadge=gen==="Inicial"
-      ? `<span style="background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600">Inicial</span>`
-      : `<span style="background:#fff7ed;color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600">Posterior</span>`;
     const adjHtml=c.adjunto
       ?`<a href="/adjuntos/${c.adjunto}" target="_blank" class="adj-link">📎 Ver</a>`
       :`<label style="cursor:pointer;color:#2563eb;font-size:11px">📎 <input type="file" style="display:none" accept=".pdf,.png,.jpg" onchange="uploadAdj(${c.id},this)">Adjuntar</label>`;
@@ -688,27 +707,41 @@ function renderCerts(){
       ? `<button class="btn btn-orange" style="padding:3px 7px;font-size:10px" title="Mover a Inicial" onclick="moverGenCert(${c.id})">↑ Inicial</button>`
       : "";
     const editBtns = canEdit
-      ? `<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editCert(${c.id})">✏</button>
+      ? `${moverBtn}<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editCert(${c.id})">✏</button>
          <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="deleteCert(${c.id})">🗑</button>`
       : "";
-    // Consultor y Admin pueden subir adjunto también
-    const adjUpload = (currentUser.rol!=="terreno" && !c.adjunto)
-      ? `<label style="cursor:pointer;color:#2563eb;font-size:11px">📎 <input type="file" style="display:none" accept=".pdf,.png,.jpg" onchange="uploadAdj(${c.id},this)">Adjuntar</label>`
-      : adjHtml;
     return `<tr>
       <td>${escHtml(c.institucion)}</td>
       <td style="color:#64748b">${escHtml(c.categoria)}</td>
       <td style="color:#64748b">${escHtml(periodo||"—")}</td>
       <td class="est-${c.estado.replace(" ","-")}">${icon} ${c.estado}</td>
-      <td>${genBadge} ${moverBtn}</td>
       <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_deuda')">${c.sin_deuda?"✅":"☐"}</td>
       <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_afiliados')">${c.sin_afiliados?"✅":"☐"}</td>
       <td class="check-cell clickable" onclick="toggleFormato(${c.id})" title="Clic para cambiar formato">${c.formato==="Digital"?"💻 Digital":c.formato==="Escaneado"?"🖨 Escaneado":"— Sin especificar"}</td>
-      <td>${adjUpload}</td>
+      <td>${adjHtml}</td>
       <td style="color:#64748b;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.notas)}</td>
       <td>${editBtns}</td>
     </tr>`;
-  }).join("");
+  }
+
+  const iniciales  = data.filter(c=>(c.generacion||"Inicial")==="Inicial");
+  const posteriores = data.filter(c=>c.generacion==="Posterior");
+
+  const sepRow = (label, color, bg) =>
+    `<tr><td colspan="10" style="background:${bg};color:${color};font-size:11px;font-weight:700;padding:6px 12px;letter-spacing:.4px;border-bottom:2px solid ${color}22">${label}</td></tr>`;
+
+  let html = "";
+  if(iniciales.length){
+    html += sepRow("📄 INICIALES", "#1d4ed8", "#eff6ff");
+    html += iniciales.map(filaHTML).join("");
+  }
+  if(posteriores.length){
+    html += sepRow("🔄 POSTERIORES", "#92400e", "#fff7ed");
+    html += posteriores.map(filaHTML).join("");
+  }
+  if(!html) html = `<tr><td colspan="10" style="text-align:center;padding:20px;color:#94a3b8;font-size:13px">Sin certificados</td></tr>`;
+
+  document.getElementById("tbody").innerHTML = html;
   document.getElementById("statusbar").textContent=`  ${data.length} certificado${data.length!==1?"s":""} mostrado${data.length!==1?"s":""}`;
 }
 
@@ -1004,40 +1037,103 @@ async function eliminarUsuario(uid){
 
 // ── Solicitudes ───────────────────────────────────────────────────────────────
 let _todasEmpresas = [];
+let _empresasSeleccionadas = new Set(); // guarda JSON string de cada empresa
 
 async function abrirSolicitud(){
   openModal("modalSolicitud");
-  document.getElementById("sol-buscar").value="";
-  document.getElementById("sol-empresa-val").value="";
+  _empresasSeleccionadas.clear();
+  document.getElementById("sol-buscar").value = "";
+  document.getElementById("sol-notas").value = "";
+  actualizarContador();
+  selTodasInst(true);
   await loadSolEmpresas();
+  renderGruposBtns();
+}
+
+function renderGruposBtns(){
+  // Botones por grupo para selección rápida
+  const grupos_unicos = [...new Set(_todasEmpresas.map(e=>e.grupo))].sort();
+  const cont = document.getElementById("sol-grupos-btns");
+  if(!cont) return;
+  cont.innerHTML = grupos_unicos.map(g=>
+    `<button class="btn btn-ghost" style="padding:3px 8px;font-size:10px" onclick="selGrupo('${escHtml(g)}')">${escHtml(g)}</button>`
+  ).join("");
+}
+
+function selGrupo(grupo){
+  const del_grupo = _todasEmpresas.filter(e=>e.grupo===grupo);
+  const todas_sel = del_grupo.every(e=>_empresasSeleccionadas.has(JSON.stringify({rut:e.rut,nombre:e.nombre,grupo:e.grupo})));
+  del_grupo.forEach(e=>{
+    const key = JSON.stringify({rut:e.rut,nombre:e.nombre,grupo:e.grupo});
+    if(todas_sel) _empresasSeleccionadas.delete(key);
+    else _empresasSeleccionadas.add(key);
+  });
+  filtrarEmpresas();
+  actualizarContador();
+}
+
+function deseleccionarTodas(){
+  _empresasSeleccionadas.clear();
+  filtrarEmpresas();
+  actualizarContador();
+}
+
+function actualizarContador(){
+  const n = _empresasSeleccionadas.size;
+  const el = document.getElementById("sol-sel-count");
+  if(el) el.textContent = `${n} empresa${n!==1?"s":""} seleccionada${n!==1?"s":""}`;
+  // Resumen
+  const res = document.getElementById("sol-resumen");
+  if(res){
+    const inst = [...document.querySelectorAll(".sol-inst-cb:checked")].map(c=>c.value);
+    const total = n * inst.length;
+    if(n > 0 && inst.length > 0){
+      res.style.display = "";
+      res.textContent = `Se crearán ${total} solicitud${total!==1?"es":""} (${n} empresa${n!==1?"s":""} × ${inst.length} institución${inst.length!==1?"es":""})`;
+    } else {
+      res.style.display = "none";
+    }
+  }
 }
 
 function filtrarEmpresas(){
   const busq = document.getElementById("sol-buscar").value.toLowerCase();
-  const sel  = document.getElementById("sol-empresa");
-  sel.innerHTML="";
+  const cont  = document.getElementById("sol-empresa-list");
+  if(!cont) return;
   const filtradas = _todasEmpresas.filter(e=>
+    !busq ||
     e.nombre.toLowerCase().includes(busq) ||
     e.rut.toLowerCase().includes(busq) ||
     e.grupo.toLowerCase().includes(busq)
   );
-  for(const e of filtradas){
-    const opt=document.createElement("option");
-    opt.value=JSON.stringify({rut:e.rut, nombre:e.nombre, grupo:e.grupo});
-    opt.textContent=`${e.rut} · ${e.nombre} (${e.grupo})`;
-    sel.appendChild(opt);
-  }
-  if(!filtradas.length){
-    const opt=document.createElement("option");
-    opt.value=""; opt.textContent="Sin resultados";
-    sel.appendChild(opt);
-  }
+  cont.innerHTML = filtradas.length ? filtradas.map(e=>{
+    const key = JSON.stringify({rut:e.rut,nombre:e.nombre,grupo:e.grupo});
+    const sel = _empresasSeleccionadas.has(key);
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f1f5f9;${sel?'background:#eff6ff':''}">
+      <input type="checkbox" style="width:auto" ${sel?"checked":""} onchange="toggleEmpresa('${key.replace(/'/g,"&#39;")}',this)">
+      <span style="flex:1"><span style="font-weight:${sel?'600':'400'}">${escHtml(e.nombre)}</span><br>
+      <span style="font-size:10px;color:#64748b">${escHtml(e.rut)} · ${escHtml(e.grupo)}</span></span>
+    </label>`;
+  }).join("") : '<div style="padding:10px;font-size:12px;color:#64748b">Sin resultados</div>';
+}
+
+function toggleEmpresa(key, cb){
+  if(cb.checked) _empresasSeleccionadas.add(key);
+  else _empresasSeleccionadas.delete(key);
+  actualizarContador();
+  // Re-render para actualizar highlight sin perder scroll
+  filtrarEmpresas();
+}
+
+function selTodasInst(val){
+  document.querySelectorAll(".sol-inst-cb").forEach(cb=>cb.checked=val);
+  actualizarContador();
 }
 
 async function loadSolEmpresas(){
   if(_todasEmpresas.length){ filtrarEmpresas(); return; }
-  const sel=document.getElementById("sol-empresa");
-  sel.innerHTML='<option value="">⏳ Cargando…</option>';
+  const cont = document.getElementById("sol-empresa-list");
+  if(cont) cont.innerHTML = '<div style="padding:10px;font-size:12px;color:#64748b">⏳ Cargando…</div>';
   try {
     const r=await fetch("/api/empresas_excel");
     _todasEmpresas=await r.json();
@@ -1049,32 +1145,42 @@ async function loadSolEmpresas(){
     }
   }
   filtrarEmpresas();
+  renderGruposBtns();
 }
-async function enviarSolicitud(){
-  const sel=document.getElementById("sol-empresa");
-  const selVal=sel.options[sel.selectedIndex]?.value||"";
-  const institucion=document.getElementById("sol-inst").value;
-  const generacion=document.getElementById("sol-generacion").value;
-  const notas=document.getElementById("sol-notas").value;
-  if(!selVal||!institucion) return alert("Selecciona empresa e institución.");
 
-  let empresa_id=null;
-  let empresa_data=null;
-  try {
-    empresa_data=JSON.parse(selVal);
-  } catch(e){
-    empresa_id=parseInt(selVal);
+async function enviarSolicitud(){
+  const empresas = [..._empresasSeleccionadas].map(k=>JSON.parse(k));
+  const instituciones = [...document.querySelectorAll(".sol-inst-cb:checked")].map(c=>c.value);
+  const generacion = document.getElementById("sol-generacion").value;
+  const notas = document.getElementById("sol-notas").value;
+  if(!empresas.length) return alert("Selecciona al menos una empresa.");
+  if(!instituciones.length) return alert("Selecciona al menos una institución.");
+
+  const btn = document.querySelector("#modalSolicitud .btn-orange");
+  btn.textContent = "⏳ Enviando…"; btn.disabled = true;
+
+  let creadas = 0, errores = 0;
+  for(const emp of empresas){
+    for(const inst of instituciones){
+      const body = {empresa_excel: emp, institucion: inst, notas, generacion};
+      try {
+        const r = await fetch("/api/solicitudes",{method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(body)});
+        const d = await r.json();
+        if(d.error) errores++;
+        else creadas++;
+      } catch(e){ errores++; }
+    }
   }
 
-  const body = empresa_data
-    ? {empresa_excel: empresa_data, institucion, notas, generacion}
-    : {empresa_id, institucion, notas, generacion};
-
-  const r=await fetch("/api/solicitudes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  const d=await r.json();
-  if(d.error) return alert(d.error);
+  btn.textContent = "📋 Enviar solicitudes"; btn.disabled = false;
   closeModal("modalSolicitud");
-  toast("✅ Solicitud enviada — se notificó al equipo de terreno");
+  _empresasSeleccionadas.clear();
+  const msg = errores
+    ? `✅ ${creadas} solicitud${creadas!==1?"es":""} creada${creadas!==1?"s":""} · ⚠ ${errores} con error`
+    : `✅ ${creadas} solicitud${creadas!==1?"es":""} enviada${creadas!==1?"s":""}`;
+  toast(msg);
 }
 async function verSolicitudes(){
   empresaId=null;

@@ -1121,7 +1121,7 @@ function renderGruposBtns(){
   const cont = document.getElementById("sol-grupos-btns");
   if(!cont) return;
   cont.innerHTML = grupos_unicos.map(g=>
-    `<button class="btn btn-ghost" style="padding:3px 8px;font-size:10px" onclick="selGrupo('${escHtml(g)}')">${escHtml(g)}</button>`
+    `<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;border-radius:20px;border:1px solid #e2e8f0" onclick="selGrupo('${escHtml(g)}')">${escHtml(g)}</button>`
   ).join("");
 }
 
@@ -1177,12 +1177,14 @@ function filtrarEmpresas(){
     const key = JSON.stringify({rut:e.rut,nombre:e.nombre,grupo:e.grupo});
     const keyEsc = escHtml(key);
     const sel = _empresasSeleccionadas.has(key);
-    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f1f5f9;${sel?'background:#eff6ff':''}">
-      <input type="checkbox" class="emp-cb" data-key="${keyEsc}" style="width:auto" ${sel?"checked":""}>
-      <span style="flex:1"><span style="font-weight:${sel?'600':'400'}">${escHtml(e.nombre)}</span><br>
-      <span style="font-size:10px;color:#64748b">${escHtml(e.rut||'')} · ${escHtml(e.grupo||'')}</span></span>
+    return `<label style="display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid #f1f5f9;background:${sel?'#eff6ff':'#fff'};transition:background .1s">
+      <input type="checkbox" class="emp-cb" data-key="${keyEsc}" style="width:14px;height:14px;flex-shrink:0" ${sel?"checked":""}>
+      <span style="flex:1;min-width:0">
+        <span style="font-weight:${sel?'600':'400'};color:#0f172a;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.nombre)}</span>
+        <span style="font-size:10px;color:#94a3b8">${escHtml(e.rut||'—')} · ${escHtml(e.grupo||'')}</span>
+      </span>
     </label>`;
-  }).join("") : '<div style="padding:10px;font-size:12px;color:#64748b">Sin resultados para "'+escHtml(busq)+'"</div>';
+  }).join("") : `<div style="padding:12px;font-size:12px;color:#64748b;text-align:center">Sin resultados para "<strong>${escHtml(busq)}</strong>"</div>`;
   // Eventos via delegación para evitar problemas con caracteres especiales
   cont.querySelectorAll(".emp-cb").forEach(cb=>{
     cb.addEventListener("change", ()=>{

@@ -679,68 +679,64 @@ def get_solicitudes():
 @app.route("/api/solicitudes", methods=["POST"])
 @api_login_required
 def crear_solicitud():
-    user = get_current_user()
-    if user["rol"] not in ("admin","consultor"):
-        return jsonify({"error": "Sin permisos"}), 403
-    d = request.json
+    try:
+        user = get_current_user()
+        if user["rol"] not in ("admin","consultor"):
+            return jsonify({"error": "Sin permisos"}), 403
+        d = request.json
 
-    # Si viene empresa_excel, buscar si ya existe en DB
-    empresa_id = d.get("empresa_id")
-    empresa_excel_json = None
-    if not empresa_id and d.get("empresa_excel"):
-        ex = d["empresa_excel"]
+        empresa_id = d.get("empresa_id")
+        empresa_excel_json = None
+        if not empresa_id and d.get("empresa_excel"):
+            ex = d["empresa_excel"]
+            with get_conn() as conn:
+                emp_row = conn.execute(
+                    "SELECT e.id FROM empresas e WHERE REPLACE(e.rut,'-','')=?",
+                    (ex["rut"].replace("-",""),)).fetchone()
+                if emp_row:
+                    empresa_id = emp_row["id"]
+                else:
+                    empresa_excel_json = json.dumps(ex)
+
         with get_conn() as conn:
-            emp_row = conn.execute(
-                "SELECT e.id FROM empresas e WHERE REPLACE(e.rut,'-','')=?",
-                (ex["rut"].replace("-",""),)).fetchone()
-            if emp_row:
-                # Empresa ya existe — usar su ID
-                empresa_id = emp_row["id"]
-            else:
-                # Empresa NO existe — guardar datos para crearla cuando Terreno suba PDFs
-                empresa_excel_json = json.dumps(ex)
+            cur = conn.execute("""INSERT INTO solicitudes
+                (empresa_id,institucion,solicitado_por,estado,notas,creada,generacion,empresa_excel)
+                VALUES(?,?,?,?,?,?,?,?)""",
+                (empresa_id, d["institucion"], user["id"],
+                 "Pendiente", d.get("notas",""),
+                 datetime.now().strftime("%d/%m/%Y %H:%M"),
+                 d.get("generacion","Inicial"),
+                 empresa_excel_json))
+            sid = cur.lastrowid
 
-    with get_conn() as conn:
-        cur = conn.execute("""INSERT INTO solicitudes
-            (empresa_id,institucion,solicitado_por,estado,notas,creada,generacion,empresa_excel)
-            VALUES(?,?,?,?,?,?,?,?)""",
-            (empresa_id, d["institucion"], user["id"],
-             "Pendiente", d.get("notas",""),
-             datetime.now().strftime("%d/%m/%Y %H:%M"),
-             d.get("generacion","Inicial"),
-             empresa_excel_json))
-        sid = cur.lastrowid
+            terrenos = conn.execute(
+                "SELECT email,nombre FROM usuarios WHERE rol='terreno' AND email != ''").fetchall()
+            emp = conn.execute("""
+                SELECT e.*, g.poder as grupo_poder
+                FROM empresas e JOIN grupos g ON g.id = e.grupo_id
+                WHERE e.id=?""", (empresa_id,)).fetchone() if empresa_id else None
 
-        # Datos para email
-        terrenos = conn.execute(
-            "SELECT email,nombre FROM usuarios WHERE rol='terreno' AND email != ''").fetchall()
-        emp = conn.execute("""
-            SELECT e.*, g.poder as grupo_poder
-            FROM empresas e JOIN grupos g ON g.id = e.grupo_id
-            WHERE e.id=?""", (empresa_id,)).fetchone() if empresa_id else None
+            empresa_nombre = emp["nombre"] if emp else (d.get("empresa_excel",{}).get("nombre","") if d.get("empresa_excel") else "")
+            empresa_rut    = emp["rut"] if emp else (d.get("empresa_excel",{}).get("rut","") if d.get("empresa_excel") else "")
+            empresa_poder  = emp["grupo_poder"] if emp else ""
+            empresa_rol    = emp["rol_doc"] if emp else ""
 
-        empresa_nombre = emp["nombre"] if emp else (d.get("empresa_excel",{}).get("nombre","") if d.get("empresa_excel") else "")
-        empresa_rut    = emp["rut"] if emp else (d.get("empresa_excel",{}).get("rut","") if d.get("empresa_excel") else "")
-        empresa_poder  = emp["grupo_poder"] if emp else ""
-        empresa_rol    = emp["rol_doc"] if emp else ""
+            registrar_log(conn, user["id"], "Nueva solicitud",
+                f"{d['institucion']} — {empresa_nombre}")
 
-        registrar_log(conn, user["id"], "Nueva solicitud",
-            f"{d['institucion']} — {empresa_nombre}")
+        for t in terrenos:
+            send_email_solicitud(t["email"], t["nombre"], {
+                "empresa": empresa_nombre, "rut": empresa_rut,
+                "institucion": d["institucion"], "solicitado_por": user["nombre"],
+                "notas": d.get("notas",""), "sid": sid,
+                "poder": empresa_poder, "rol_doc": empresa_rol,
+            })
 
-    # Enviar emails
-    for t in terrenos:
-        send_email_solicitud(t["email"], t["nombre"], {
-            "empresa": empresa_nombre,
-            "rut": empresa_rut,
-            "institucion": d["institucion"],
-            "solicitado_por": user["nombre"],
-            "notas": d.get("notas",""),
-            "sid": sid,
-            "poder": empresa_poder,
-            "rol_doc": empresa_rol,
-        })
-
-    return jsonify({"id": sid}), 201
+        return jsonify({"id": sid}), 201
+    except Exception as e:
+        import traceback
+        print(f"[ERROR crear_solicitud] {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/solicitudes/<int:sid>", methods=["PUT"])
 @api_login_required

@@ -1188,9 +1188,8 @@ document.querySelector("[onclick=\"openModal('modalUsuarios')\"]")&&(document.qu
 
 
 // ── Opti Stats + Actividad + Tips ────────────────────────────────────────────
-const OPTI_TIPS = [
+const OPTI_TIPS_BASE = [
   "💡 Puedes marcar Sin deuda directo desde la tabla haciendo clic en la celda.",
-  "📋 Como Consultor puedes crear solicitudes para varias empresas a la vez.",
   "🔄 Usa el filtro de Generación para ver solo Iniciales o Posteriores.",
   "📊 El reporte de grupo muestra todas las empresas de un grupo juntas.",
   "⚙ Personaliza tu experiencia desde el ícono de configuración en el sidebar.",
@@ -1198,11 +1197,45 @@ const OPTI_TIPS = [
   "📎 Puedes adjuntar PDFs directo desde la tabla sin abrir ningún modal.",
 ];
 let _tipIdx = 0;
+let _optiStatsCache = null;
+
+function generarTips(stats, rol){
+  const tips = [...OPTI_TIPS_BASE];
+  if(!stats) return tips;
+  const pend = stats.solicitudes_pendientes || 0;
+  const ob   = stats.certs_obtenidos || 0;
+  const tot  = stats.certs_total || 0;
+  const pct  = tot ? Math.round(ob/tot*100) : 0;
+
+  if(rol === "terreno"){
+    if(pend > 0)
+      tips.unshift(`📋 Tienes ${pend} solicitud${pend>1?"es":""} pendiente${pend>1?"s":""} — ¡no las olvides!`);
+    if(pct < 50 && tot > 0)
+      tips.unshift(`⏳ Solo el ${pct}% de certificados obtenidos — hay trabajo por hacer.`);
+    if(pct === 100)
+      tips.unshift("🎉 ¡Todos los certificados están obtenidos! Buen trabajo.");
+  }
+  if(rol === "consultor"){
+    if(pend > 0)
+      tips.unshift(`⏳ Hay ${pend} solicitud${pend>1?"es":""} pendiente${pend>1?"s":""} de atender por Terreno.`);
+    if(pct >= 80 && pct < 100)
+      tips.unshift(`🔜 Casi listos — ${pct}% de certificados obtenidos. ¡Ya falta poco!`);
+    tips.unshift("📋 Recuerda indicar si la solicitud es Inicial o Posterior al crearla.");
+  }
+  if(rol === "admin"){
+    if(stats.empresas_total > 0)
+      tips.unshift(`🏢 Gestionando ${stats.empresas_total} empresa${stats.empresas_total>1?"s":""} en el sistema.`);
+    if(pend > 0)
+      tips.unshift(`⚠ Hay ${pend} solicitud${pend>1?"es":""} pendiente${pend>1?"s":""}. Puedes revisar el estado en la vista de solicitudes.`);
+  }
+  return tips;
+}
 
 async function cargarOptiStats(){
   try {
     const r = await fetch("/api/opti_stats");
     const d = await r.json();
+    _optiStatsCache = d;
     const sv = document.getElementById("ostat-sol-val");
     const cv = document.getElementById("ostat-cert-val");
     const ev = document.getElementById("ostat-emp-val");
@@ -1223,15 +1256,19 @@ async function cargarOptiStats(){
         al.innerHTML = '<div class="opti-act-item" style="color:#475569">Sin actividad reciente</div>';
       }
     }
+    // Rearmar tips con contexto y mostrar primero
+    _tipIdx = 0;
+    rotarTip();
   } catch(e){}
 }
 
 function rotarTip(){
   const el = document.getElementById("opti-tip");
   if(!el) return;
+  const tips = generarTips(_optiStatsCache, currentUser?.rol);
   el.style.opacity = "0";
   setTimeout(()=>{
-    el.textContent = OPTI_TIPS[_tipIdx % OPTI_TIPS.length];
+    el.textContent = tips[_tipIdx % tips.length];
     _tipIdx++;
     el.style.transition = "opacity .5s";
     el.style.opacity = "1";

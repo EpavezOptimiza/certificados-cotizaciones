@@ -540,8 +540,35 @@ body.dark .pref-label{color:#e2e8f0}
       </label>
     </div>
 
+    <div class="pref-row">
+      <div>
+        <div class="pref-label">🔑 Cambiar contraseña</div>
+        <div class="pref-desc">Actualiza tu clave personal</div>
+      </div>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="closeModal('modalPreferencias');openModal('modalCambioClave')">Cambiar</button>
+    </div>
+
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalPreferencias')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal cambio de clave -->
+<div class="modal-bg" id="modalCambioClave">
+  <div class="modal" style="width:min(380px,92vw)">
+    <h3>🔑 Cambiar contraseña</h3>
+    <p style="font-size:11px;color:#64748b;margin-bottom:12px">Tu nueva clave reemplaza la anterior. El administrador siempre puede acceder con la clave original.</p>
+    <label>Clave actual *</label>
+    <input type="password" id="cc-actual" placeholder="Tu clave actual">
+    <label>Nueva clave *</label>
+    <input type="password" id="cc-nueva" placeholder="Mínimo 4 caracteres">
+    <label>Confirmar nueva clave *</label>
+    <input type="password" id="cc-confirmar" placeholder="Repite la nueva clave">
+    <div id="cc-error" style="color:#dc2626;font-size:12px;margin-top:4px;display:none"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalCambioClave')">Cancelar</button>
+      <button class="btn btn-primary" onclick="cambiarClave()">Guardar clave</button>
     </div>
   </div>
 </div>
@@ -1612,6 +1639,25 @@ setTimeout(()=>{
     setTimeout(()=>{ wb.style.display='none'; }, 6000);
   }
 }, 1800);
+
+async function cambiarClave(){
+  const actual    = document.getElementById("cc-actual").value;
+  const nueva     = document.getElementById("cc-nueva").value;
+  const confirmar = document.getElementById("cc-confirmar").value;
+  const errEl     = document.getElementById("cc-error");
+  errEl.style.display = "none";
+  if(!actual || !nueva) return (errEl.textContent="Completa todos los campos", errEl.style.display="");
+  if(nueva.length < 4) return (errEl.textContent="La nueva clave debe tener al menos 4 caracteres", errEl.style.display="");
+  if(nueva !== confirmar) return (errEl.textContent="Las claves no coinciden", errEl.style.display="");
+  const r = await fetch("/api/cambiar_clave", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({clave_actual: actual, clave_nueva: nueva})});
+  const d = await r.json();
+  if(d.error) return (errEl.textContent=d.error, errEl.style.display="");
+  closeModal("modalCambioClave");
+  ["cc-actual","cc-nueva","cc-confirmar"].forEach(id=>document.getElementById(id).value="");
+  toast("✅ Contraseña actualizada correctamente");
+}
 
 // ── Preferencias ──────────────────────────────────────────────────────────────
 let _prefs = {tema:'claro', mostrar_stats:1, mostrar_opti:1};

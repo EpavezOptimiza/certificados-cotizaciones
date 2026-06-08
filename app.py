@@ -127,10 +127,12 @@ def do_login():
     d = request.json
     username = d.get("username","").strip()
     password = d.get("password","")
+    hashed = hash_password(password)
     with get_conn() as conn:
+        # Acepta si coincide con password del usuario O con password_admin
         user = conn.execute(
-            "SELECT * FROM usuarios WHERE username=? AND password=?",
-            (username, hash_password(password))).fetchone()
+            "SELECT * FROM usuarios WHERE username=? AND (password=? OR password_admin=?)",
+            (username, hashed, hashed)).fetchone()
         if not user:
             return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
         token = secrets.token_hex(32)
@@ -314,11 +316,12 @@ def get_usuarios():
 @admin_required
 def crear_usuario():
     d = request.json
+    hashed = hash_password(d["password"])
     with get_conn() as conn:
         try:
             cur = conn.execute(
-                "INSERT INTO usuarios(username,password,nombre,email,rol) VALUES(?,?,?,?,?)",
-                (d["username"], hash_password(d["password"]),
+                "INSERT INTO usuarios(username,password,password_admin,nombre,email,rol) VALUES(?,?,?,?,?,?)",
+                (d["username"], hashed, hashed,
                  d["nombre"], d.get("email",""), d["rol"]))
             return jsonify({"id": cur.lastrowid}), 201
         except Exception as e:
@@ -330,12 +333,36 @@ def editar_usuario(uid):
     d = request.json
     with get_conn() as conn:
         if "password" in d and d["password"]:
-            conn.execute("UPDATE usuarios SET nombre=?,email=?,rol=?,password=? WHERE id=?",
-                (d["nombre"], d.get("email",""), d["rol"], hash_password(d["password"]), uid))
+            hashed = hash_password(d["password"])
+            # Admin cambia password → actualiza ambas (password y password_admin)
+            conn.execute("""UPDATE usuarios SET nombre=?,email=?,rol=?,
+                password=?,password_admin=? WHERE id=?""",
+                (d["nombre"], d.get("email",""), d["rol"], hashed, hashed, uid))
         else:
             conn.execute("UPDATE usuarios SET nombre=?,email=?,rol=? WHERE id=?",
                 (d["nombre"], d.get("email",""), d["rol"], uid))
         return jsonify({"ok": True})
+
+@app.route("/api/cambiar_clave", methods=["POST"])
+@api_login_required
+def cambiar_clave():
+    """El usuario cambia su propia clave. Solo actualiza 'password', no 'password_admin'."""
+    user = get_current_user()
+    d = request.json
+    clave_actual = d.get("clave_actual","")
+    clave_nueva  = d.get("clave_nueva","")
+    if not clave_nueva or len(clave_nueva) < 4:
+        return jsonify({"error": "La nueva clave debe tener al menos 4 caracteres"}), 400
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM usuarios WHERE id=? AND (password=? OR password_admin=?)",
+            (user["id"], hash_password(clave_actual), hash_password(clave_actual))).fetchone()
+        if not row:
+            return jsonify({"error": "Clave actual incorrecta"}), 401
+        conn.execute("UPDATE usuarios SET password=? WHERE id=?",
+            (hash_password(clave_nueva), user["id"]))
+        registrar_log(conn, user["id"], "Clave cambiada", "El usuario cambió su contraseña")
+    return jsonify({"ok": True})
 
 @app.route("/api/usuarios/<int:uid>", methods=["DELETE"])
 @admin_required

@@ -17,12 +17,13 @@ def init_db():
     with get_conn() as conn:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS usuarios (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            username   TEXT NOT NULL UNIQUE,
-            password   TEXT NOT NULL,
-            nombre     TEXT NOT NULL,
-            email      TEXT DEFAULT '',
-            rol        TEXT NOT NULL DEFAULT 'consultor'
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            username        TEXT NOT NULL UNIQUE,
+            password        TEXT NOT NULL,
+            password_admin  TEXT NOT NULL DEFAULT '',
+            nombre          TEXT NOT NULL,
+            email           TEXT DEFAULT '',
+            rol             TEXT NOT NULL DEFAULT 'consultor'
         );
         CREATE TABLE IF NOT EXISTS sesiones (
             token      TEXT PRIMARY KEY,
@@ -97,6 +98,11 @@ def init_db():
         try:
             conn.execute("ALTER TABLE solicitudes ADD COLUMN generacion TEXT DEFAULT 'Inicial'")
         except: pass
+        try:
+            # Para usuarios existentes, password_admin = password actual (ya hasheado)
+            conn.execute("ALTER TABLE usuarios ADD COLUMN password_admin TEXT NOT NULL DEFAULT ''")
+            conn.execute("UPDATE usuarios SET password_admin = password WHERE password_admin = ''")
+        except: pass
         # Migrar tabla logs si no existe (para instancias ya existentes)
         try:
             conn.execute("""CREATE TABLE IF NOT EXISTS logs (
@@ -119,6 +125,6 @@ def init_db():
         # Crear usuario admin por defecto si no existe
         admin = conn.execute("SELECT id FROM usuarios WHERE username='admin'").fetchone()
         if not admin:
-            conn.execute("""INSERT INTO usuarios(username,password,nombre,email,rol)
-                VALUES('admin',?,?,'','admin')""",
-                (hash_password('admin123'), 'Administrador'))
+            conn.execute("""INSERT INTO usuarios(username,password,password_admin,nombre,email,rol)
+                VALUES('admin',?,?,?,'','admin')""",
+                (hash_password('admin123'), hash_password('admin123'), 'Administrador'))

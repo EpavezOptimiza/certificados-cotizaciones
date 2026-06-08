@@ -247,6 +247,37 @@ def index():
 def get_me():
     return jsonify(get_current_user())
 
+@app.route("/api/preferencias")
+@api_login_required
+def get_preferencias():
+    user = get_current_user()
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM preferencias WHERE usuario_id=?", (user["id"],)).fetchone()
+        if row:
+            return jsonify(dict(row))
+        # Defaults si no existen aún
+        return jsonify({"usuario_id": user["id"], "tema": "claro",
+                        "mostrar_stats": 1, "mostrar_opti": 1})
+
+@app.route("/api/preferencias", methods=["POST"])
+@api_login_required
+def guardar_preferencias():
+    user = get_current_user()
+    d = request.json
+    with get_conn() as conn:
+        conn.execute("""INSERT INTO preferencias(usuario_id, tema, mostrar_stats, mostrar_opti)
+            VALUES(?,?,?,?)
+            ON CONFLICT(usuario_id) DO UPDATE SET
+                tema=excluded.tema,
+                mostrar_stats=excluded.mostrar_stats,
+                mostrar_opti=excluded.mostrar_opti""",
+            (user["id"],
+             d.get("tema", "claro"),
+             1 if d.get("mostrar_stats", True) else 0,
+             1 if d.get("mostrar_opti", True) else 0))
+    return jsonify({"ok": True})
+
 @app.route("/api/opti_stats")
 @api_login_required
 def opti_stats():
@@ -474,15 +505,15 @@ def crear_cert(eid):
     with get_conn() as conn:
         cur = conn.execute("""INSERT INTO certificados
             (empresa_id,institucion,tipo,categoria,estado,mes,anio,
-             folio,notas,adjunto,sin_deuda,sin_afiliados,formato)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             folio,notas,adjunto,sin_deuda,sin_afiliados,formato,generacion)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (eid, d.get("institucion",""), d.get("tipo","Certificado de deuda"),
              d.get("categoria",""), d.get("estado","Pendiente"),
              d.get("mes",""), d.get("anio",""), d.get("folio",""),
              d.get("notas",""), d.get("adjunto",""),
              1 if d.get("sin_deuda") else 0,
              1 if d.get("sin_afiliados") else 0,
-             d.get("formato","")))
+             d.get("formato",""), d.get("generacion","Inicial")))
         return jsonify({"id": cur.lastrowid}), 201
 
 @app.route("/api/certificados/<int:cid>", methods=["PUT"])
@@ -496,7 +527,7 @@ def editar_cert(cid):
         d = {k:v for k,v in d.items() if k in allowed}
     with get_conn() as conn:
         fields, vals = [], []
-        for k in ["institucion","tipo","categoria","estado","mes","anio","folio","notas","adjunto","formato"]:
+        for k in ["institucion","tipo","categoria","estado","mes","anio","folio","notas","adjunto","formato","generacion"]:
             if k in d: fields.append(f"{k}=?"); vals.append(d[k])
         if "sin_deuda"    in d: fields.append("sin_deuda=?");    vals.append(1 if d["sin_deuda"] else 0)
         if "sin_afiliados" in d: fields.append("sin_afiliados=?"); vals.append(1 if d["sin_afiliados"] else 0)
@@ -518,6 +549,10 @@ def eliminar_cert(cid):
 @app.route("/api/certificados/<int:cid>/adjunto", methods=["POST"])
 @api_login_required
 def upload_adjunto(cid):
+    user = get_current_user()
+    # Consultor y Admin también pueden subir adjuntos
+    if user["rol"] not in ("admin", "consultor", "terreno"):
+        return jsonify({"error": "Sin permisos"}), 403
     f = request.files.get("file")
     if not f: return jsonify({"error":"No file"}), 400
     fname = f"{cid}_{f.filename}"
@@ -532,6 +567,54 @@ def upload_adjunto(cid):
 @login_required
 def ver_adjunto(fname):
     return send_from_directory(ADJUNTOS, fname)
+
+@app.route("/api/certificados/<int:cid>/mover_generacion", methods=["POST"])
+@api_login_required
+def mover_generacion_cert(cid):
+    """Mueve un certificado Posterior a Inicial, eliminando el Inicial anterior de la misma institución."""
+    user = get_current_user()
+    if user["rol"] not in ("admin", "consultor"):
+        return jsonify({"error": "Sin permisos"}), 403
+    with get_conn() as conn:
+        cert = conn.execute("SELECT * FROM certificados WHERE id=?", (cid,)).fetchone()
+        if not cert:
+            return jsonify({"error": "Certificado no encontrado"}), 404
+        cert = dict(cert)
+        if cert["generacion"] != "Posterior":
+            return jsonify({"error": "Solo se pueden mover certificados Posteriores"}), 400
+        # Eliminar el Inicial anterior de la misma empresa e institución
+        conn.execute("""DELETE FROM certificados
+            WHERE empresa_id=? AND LOWER(institucion)=LOWER(?) AND generacion='Inicial' AND id!=?""",
+            (cert["empresa_id"], cert["institucion"], cid))
+        # Marcar el Posterior como Inicial
+        conn.execute("UPDATE certificados SET generacion='Inicial' WHERE id=?", (cid,))
+        registrar_log(conn, user["id"], "Generación movida",
+            f"Cert #{cid} ({cert['institucion']}) → Inicial")
+    return jsonify({"ok": True})
+
+@app.route("/api/empresas/<int:eid>/mover_generacion", methods=["POST"])
+@api_login_required
+def mover_generacion_empresa(eid):
+    """Mueve TODOS los Posteriores de una empresa a Iniciales, eliminando los Iniciales anteriores."""
+    user = get_current_user()
+    if user["rol"] not in ("admin", "consultor"):
+        return jsonify({"error": "Sin permisos"}), 403
+    with get_conn() as conn:
+        posteriores = conn.execute(
+            "SELECT * FROM certificados WHERE empresa_id=? AND generacion='Posterior'", (eid,)).fetchall()
+        if not posteriores:
+            return jsonify({"error": "No hay certificados Posteriores para mover"}), 400
+        for p in posteriores:
+            p = dict(p)
+            # Eliminar Inicial anterior de la misma institución
+            conn.execute("""DELETE FROM certificados
+                WHERE empresa_id=? AND LOWER(institucion)=LOWER(?) AND generacion='Inicial' AND id!=?""",
+                (eid, p["institucion"], p["id"]))
+            # Promover a Inicial
+            conn.execute("UPDATE certificados SET generacion='Inicial' WHERE id=?", (p["id"],))
+        registrar_log(conn, user["id"], "Generación masiva movida",
+            f"Empresa #{eid} — {len(posteriores)} certs Posterior → Inicial")
+    return jsonify({"ok": True, "movidos": len(posteriores)})
 
 # ── API Solicitudes ───────────────────────────────────────────────────────────
 @app.route("/api/solicitudes", methods=["GET"])
@@ -593,11 +676,12 @@ def crear_solicitud():
 
     with get_conn() as conn:
         cur = conn.execute("""INSERT INTO solicitudes
-            (empresa_id,institucion,solicitado_por,estado,notas,creada)
-            VALUES(?,?,?,?,?,?)""",
+            (empresa_id,institucion,solicitado_por,estado,notas,creada,generacion)
+            VALUES(?,?,?,?,?,?,?)""",
             (empresa_id, d["institucion"], user["id"],
              "Pendiente", d.get("notas",""),
-             datetime.now().strftime("%d/%m/%Y %H:%M")))
+             datetime.now().strftime("%d/%m/%Y %H:%M"),
+             d.get("generacion","Inicial")))
         sid = cur.lastrowid
 
         # Enviar email a usuarios de terreno
@@ -708,8 +792,8 @@ def certs_default(conn, empresa_id):
     for nombre, tipo, cat in INSTITUCIONES:
         conn.execute("""INSERT INTO certificados
             (empresa_id,institucion,tipo,categoria,estado,mes,anio,
-             folio,notas,adjunto,sin_deuda,sin_afiliados,formato)
-            VALUES(?,?,?,?,'Pendiente','',?,'','','',0,0,'')""",
+             folio,notas,adjunto,sin_deuda,sin_afiliados,formato,generacion)
+            VALUES(?,?,?,?,'Pendiente','',?,'','','',0,0,'','Inicial')""",
             (empresa_id, nombre, tipo, cat, anio))
 
 def inst_match(nombre):

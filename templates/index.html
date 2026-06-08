@@ -97,7 +97,51 @@ tr:hover td{background:#eff6ff}
 .sol-pend{border-left:3px solid #f59e0b}
 .sol-ok{border-left:3px solid #22c55e;opacity:.7}
 
-/* Opti Bot */
+/* ── Tema oscuro ── */
+body.dark{background:#0f172a;color:#e2e8f0}
+body.dark #sidebar{background:#020617}
+body.dark #sidebar-header{border-color:#0f172a}
+body.dark #user-info{background:#0f172a}
+body.dark .sb-btn{background:#0f172a;color:#94a3b8}
+body.dark .sb-btn:hover{background:#1e293b}
+body.dark #search-wrap input{background:#0f172a;color:#cbd5e1}
+body.dark .g-header:hover,body.dark .e-node:hover{background:#0f172a}
+body.dark #main{background:#0f172a}
+body.dark #header{background:#1e293b;border-color:#334155}
+body.dark #stats{background:#0f172a;border-color:#1e293b}
+body.dark .stat-card{background:#1e293b;border-color:#334155}
+body.dark .green{background:#052e16;border-color:#166534}.dark .green .val{color:#4ade80}
+body.dark .yellow{background:#451a03;border-color:#92400e}.dark .yellow .val{color:#fbbf24}
+body.dark .blue{background:#172554;border-color:#1d4ed8}.dark .blue .val{color:#60a5fa}
+body.dark #filters{background:#1e293b;border-color:#334155}
+body.dark #filters select,body.dark #filters input{background:#0f172a;border-color:#334155;color:#e2e8f0}
+body.dark table{background:#1e293b}
+body.dark th{background:#0f172a;color:#94a3b8;border-color:#334155}
+body.dark td{border-color:#1e293b}
+body.dark tr:nth-child(even) td{background:#172032}
+body.dark tr:hover td{background:#1e3a5f}
+body.dark #statusbar{background:#0f172a;border-color:#1e293b;color:#475569}
+body.dark .modal{background:#1e293b;color:#e2e8f0}
+body.dark .modal input,body.dark .modal select,body.dark .modal textarea{background:#0f172a;border-color:#334155;color:#e2e8f0}
+body.dark .btn-ghost{background:#334155;color:#cbd5e1}
+body.dark .btn-ghost:hover{background:#475569}
+body.dark .sol-card{background:#1e293b;border-color:#334155}
+body.dark #opti-msgs{background:#0f172a}
+body.dark .opti-msg.bot{background:#1e293b;border-color:#334155;color:#e2e8f0}
+/* Toggle switch */
+.pref-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e2e8f0}
+body.dark .pref-row{border-color:#334155}
+.pref-row:last-child{border-bottom:none}
+.pref-label{font-size:13px;color:#0f172a}
+body.dark .pref-label{color:#e2e8f0}
+.pref-desc{font-size:11px;color:#64748b;margin-top:2px}
+.toggle-wrap{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle-wrap input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:#cbd5e1;border-radius:24px;cursor:pointer;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;width:18px;height:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle-wrap input:checked+.toggle-slider{background:#2563eb}
+.toggle-wrap input:checked+.toggle-slider:before{transform:translateX(20px)}
+
 #opti-bubble{position:fixed;bottom:16px;right:16px;z-index:9000;cursor:pointer;transition:transform .2s;width:160px;height:160px;background:none!important;border:none!important}
 #opti-bubble:hover{transform:scale(1.08)}
 #opti-bubble img{width:160px;height:160px;object-fit:contain;background:transparent!important;mix-blend-mode:normal;filter:drop-shadow(0 4px 20px rgba(37,99,235,.5))}
@@ -160,7 +204,10 @@ tr:hover td{background:#eff6ff}
       <div class="name" id="user-name">...</div>
       <div class="role" id="user-role"></div>
     </div>
-    <a href="/logout">Salir</a>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="abrirPreferencias()" title="Preferencias" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;padding:2px">⚙</button>
+      <a href="/logout">Salir</a>
+    </div>
   </div>
   <div id="sidebar-btns">
     <button class="sb-btn admin-only" onclick="openModal('modalGrupo')" style="display:none">＋ Nuevo grupo</button>
@@ -203,9 +250,16 @@ tr:hover td{background:#eff6ff}
       <option value="">Todos</option>
       {% for m in meses %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
     </select>
+    <label>Generación</label>
+    <select id="f-generacion" onchange="renderCerts()">
+      <option value="">Todas</option>
+      <option value="Inicial">Inicial</option>
+      <option value="Posterior">Posterior</option>
+    </select>
     <label>Buscar</label>
     <input type="text" id="f-buscar" placeholder="Buscar…" oninput="renderCerts()" style="width:160px">
     <button class="btn btn-primary admin-only" onclick="openModal_cert()" id="btn-agregar" style="display:none;margin-left:auto">＋ Agregar certificado</button>
+    <button class="btn btn-orange admin-consultor-only" onclick="moverGeneracionEmpresa()" id="btn-mover-gen" style="display:none;margin-left:4px" title="Mover todos los Posteriores a Iniciales">🔄 Mover Posteriores → Iniciales</button>
   </div>
   <div id="table-wrap">
     <div id="sol-view" style="display:none;padding:4px">
@@ -219,6 +273,7 @@ tr:hover td{background:#eff6ff}
           <th>Categoría</th>
           <th>Período</th>
           <th>Estado</th>
+          <th>Generación</th>
           <th>Sin deuda</th>
           <th>Sin afiliados</th>
           <th>Formato</th>
@@ -288,6 +343,11 @@ tr:hover td{background:#eff6ff}
     <select id="c-estado">{% for e in estados %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
     <label>Formato</label>
     <select id="c-formato"><option value="">Sin especificar</option><option value="Digital">Digital</option><option value="Escaneado">Escaneado</option></select>
+    <label>Generación</label>
+    <select id="c-generacion">
+      <option value="Inicial">Inicial</option>
+      <option value="Posterior">Posterior</option>
+    </select>
     <label>Notas</label><textarea id="c-notas" rows="2"></textarea>
     <div class="modal-cb"><input type="checkbox" id="c-sindeuda"><label for="c-sindeuda" style="margin:0;color:#166534">✅ Sin deuda</label></div>
     <div class="modal-cb"><input type="checkbox" id="c-sinafil"><label for="c-sinafil" style="margin:0;color:#1d4ed8">✅ Sin afiliados</label></div>
@@ -400,11 +460,61 @@ tr:hover td{background:#eff6ff}
       <option value="{{ inst }}">{{ inst }}</option>
       {% endfor %}
     </select>
+    <label>Generación *</label>
+    <select id="sol-generacion">
+      <option value="Inicial">Inicial — primera vez que se obtiene</option>
+      <option value="Posterior">Posterior — renovación o actualización</option>
+    </select>
     <label>Notas u observaciones</label>
     <textarea id="sol-notas" rows="2" placeholder="Información adicional…"></textarea>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalSolicitud')">Cancelar</button>
       <button class="btn btn-orange" onclick="enviarSolicitud()">📋 Enviar solicitud</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal preferencias -->
+<div class="modal-bg" id="modalPreferencias">
+  <div class="modal" style="width:min(420px,92vw)">
+    <h3>⚙ Preferencias</h3>
+    <p style="font-size:11px;color:#64748b;margin-bottom:16px">Configuración personal — se guarda en el servidor.</p>
+
+    <div class="pref-row">
+      <div>
+        <div class="pref-label">🌙 Tema oscuro</div>
+        <div class="pref-desc">Cambia la apariencia de la app</div>
+      </div>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="pref-tema" onchange="aplicarPreferencias()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="pref-row">
+      <div>
+        <div class="pref-label">📊 Mostrar estadísticas</div>
+        <div class="pref-desc">Tarjetas de resumen sobre la tabla</div>
+      </div>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="pref-stats" checked onchange="aplicarPreferencias()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="pref-row">
+      <div>
+        <div class="pref-label">🤖 Mostrar Opti</div>
+        <div class="pref-desc">Botón flotante del asistente</div>
+      </div>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="pref-opti" checked onchange="aplicarPreferencias()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalPreferencias')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -430,6 +540,7 @@ async function init(){
   document.getElementById("user-name").textContent = currentUser.nombre;
   document.getElementById("user-role").textContent  = ROLES[currentUser.rol] || currentUser.rol;
   applyRoleUI();
+  await cargarPreferencias();
   await loadGrupos();
   if(currentUser.rol === "terreno") verSolicitudes();
 }
@@ -511,6 +622,7 @@ async function selEmpresa(eid,gid){
   if(currentUser.rol!=="terreno") document.getElementById("btn-reporte").style.display="";
   document.getElementById("btn-mas").style.display="";
   if(currentUser.rol==="admin") document.getElementById("btn-agregar").style.display="";
+  if(currentUser.rol!=="terreno") document.getElementById("btn-mover-gen").style.display="";
   document.getElementById("sol-view").style.display="none";
   document.getElementById("tabla").style.display="";
   const r=await fetch(`/api/empresas/${eid}`);
@@ -545,12 +657,12 @@ function renderCerts(){
   if(!empresaId) return;
   const fe=document.getElementById("f-estado").value;
   const fm=document.getElementById("f-mes").value;
+  const fg=document.getElementById("f-generacion").value;
   const fb=document.getElementById("f-buscar").value.toLowerCase();
-  const canEdit = currentUser.rol !== "terreno" || false;
-  const canToggle = true; // todos pueden marcar sin deuda/sin afil
   let data=certData.filter(c=>{
     if(fe && c.estado!==fe) return false;
     if(fm && c.mes!==fm) return false;
+    if(fg && (c.generacion||"Inicial")!==fg) return false;
     if(fb && !(c.institucion+c.tipo+c.notas).toLowerCase().includes(fb)) return false;
     return true;
   });
@@ -558,22 +670,35 @@ function renderCerts(){
   document.getElementById("tbody").innerHTML=data.map(c=>{
     const periodo=[c.mes,c.anio].filter(Boolean).join(" ");
     const icon=ICONS[c.estado]||"";
+    const gen=c.generacion||"Inicial";
+    const genBadge=gen==="Inicial"
+      ? `<span style="background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600">Inicial</span>`
+      : `<span style="background:#fff7ed;color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600">Posterior</span>`;
     const adjHtml=c.adjunto
       ?`<a href="/adjuntos/${c.adjunto}" target="_blank" class="adj-link">📎 Ver</a>`
       :`<label style="cursor:pointer;color:#2563eb;font-size:11px">📎 <input type="file" style="display:none" accept=".pdf,.png,.jpg" onchange="uploadAdj(${c.id},this)">Adjuntar</label>`;
-    const editBtns = currentUser.rol!=="terreno"
+    const canEdit = currentUser.rol!=="terreno";
+    const moverBtn = canEdit && gen==="Posterior"
+      ? `<button class="btn btn-orange" style="padding:3px 7px;font-size:10px" title="Mover a Inicial" onclick="moverGenCert(${c.id})">↑ Inicial</button>`
+      : "";
+    const editBtns = canEdit
       ? `<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editCert(${c.id})">✏</button>
          <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="deleteCert(${c.id})">🗑</button>`
       : "";
+    // Consultor y Admin pueden subir adjunto también
+    const adjUpload = (currentUser.rol!=="terreno" && !c.adjunto)
+      ? `<label style="cursor:pointer;color:#2563eb;font-size:11px">📎 <input type="file" style="display:none" accept=".pdf,.png,.jpg" onchange="uploadAdj(${c.id},this)">Adjuntar</label>`
+      : adjHtml;
     return `<tr>
       <td>${escHtml(c.institucion)}</td>
       <td style="color:#64748b">${escHtml(c.categoria)}</td>
       <td style="color:#64748b">${escHtml(periodo||"—")}</td>
       <td class="est-${c.estado.replace(" ","-")}">${icon} ${c.estado}</td>
+      <td>${genBadge} ${moverBtn}</td>
       <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_deuda')">${c.sin_deuda?"✅":"☐"}</td>
       <td class="check-cell clickable" onclick="toggleField(${c.id},'sin_afiliados')">${c.sin_afiliados?"✅":"☐"}</td>
       <td class="check-cell clickable" onclick="toggleFormato(${c.id})" title="Clic para cambiar formato">${c.formato==="Digital"?"💻 Digital":c.formato==="Escaneado"?"🖨 Escaneado":"— Sin especificar"}</td>
-      <td>${adjHtml}</td>
+      <td>${adjUpload}</td>
       <td style="color:#64748b;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.notas)}</td>
       <td>${editBtns}</td>
     </tr>`;
@@ -727,6 +852,7 @@ function openModal_cert(){
   document.getElementById("c-anio").value="2026";
   document.getElementById("c-estado").value="Pendiente";
   document.getElementById("c-formato").value="";
+  document.getElementById("c-generacion").value="Inicial";
   document.getElementById("c-sindeuda").checked=false;
   document.getElementById("c-sinafil").checked=false;
   openModal("modalCert");
@@ -741,6 +867,7 @@ function editCert(cid){
   document.getElementById("c-anio").value=c.anio;
   document.getElementById("c-estado").value=c.estado;
   document.getElementById("c-formato").value=c.formato||"";
+  document.getElementById("c-generacion").value=c.generacion||"Inicial";
   document.getElementById("c-notas").value=c.notas;
   document.getElementById("c-sindeuda").checked=c.sin_deuda;
   document.getElementById("c-sinafil").checked=c.sin_afiliados;
@@ -754,6 +881,7 @@ async function guardarCert(){
     categoria:INST_MAP[inst]?.cat||"", mes:document.getElementById("c-mes").value,
     anio:document.getElementById("c-anio").value, estado:document.getElementById("c-estado").value,
     formato:document.getElementById("c-formato").value,
+    generacion:document.getElementById("c-generacion").value,
     notas:document.getElementById("c-notas").value,
     sin_deuda:document.getElementById("c-sindeuda").checked,
     sin_afiliados:document.getElementById("c-sinafil").checked,
@@ -777,6 +905,30 @@ async function deleteCert(cid){
   await fetch(`/api/certificados/${cid}`,{method:"DELETE"});
   certData=certData.filter(c=>c.id!==cid);
   renderStats(); renderCerts();
+}
+
+async function moverGenCert(cid){
+  if(!confirm("¿Mover este Posterior a Inicial? El Inicial anterior de esta institución será eliminado.")) return;
+  const r=await fetch(`/api/certificados/${cid}/mover_generacion`,{method:"POST"});
+  const d=await r.json();
+  if(d.error) return alert(d.error);
+  // Recargar empresa
+  const res=await fetch(`/api/empresas/${empresaId}`);
+  certData=(await res.json()).certificados||[];
+  renderStats(); renderCerts(); toast("✅ Certificado movido a Inicial");
+}
+
+async function moverGeneracionEmpresa(){
+  if(!empresaId) return;
+  const hayPost=certData.some(c=>(c.generacion||"Inicial")==="Posterior");
+  if(!hayPost) return alert("No hay certificados Posteriores en esta empresa.");
+  if(!confirm("¿Mover TODOS los Posteriores a Iniciales? Los Iniciales anteriores serán eliminados.")) return;
+  const r=await fetch(`/api/empresas/${empresaId}/mover_generacion`,{method:"POST"});
+  const d=await r.json();
+  if(d.error) return alert(d.error);
+  const res=await fetch(`/api/empresas/${empresaId}`);
+  certData=(await res.json()).certificados||[];
+  renderStats(); renderCerts(); toast(`✅ ${d.movidos} certificado${d.movidos!==1?"s":""} movido${d.movidos!==1?"s":""} a Inicial`);
 }
 async function restablecerTipos(){
   closeModal("modalMas"); if(!empresaId) return;
@@ -896,6 +1048,7 @@ async function enviarSolicitud(){
   const sel=document.getElementById("sol-empresa");
   const selVal=sel.options[sel.selectedIndex]?.value||"";
   const institucion=document.getElementById("sol-inst").value;
+  const generacion=document.getElementById("sol-generacion").value;
   const notas=document.getElementById("sol-notas").value;
   if(!selVal||!institucion) return alert("Selecciona empresa e institución.");
 
@@ -908,8 +1061,8 @@ async function enviarSolicitud(){
   }
 
   const body = empresa_data
-    ? {empresa_excel: empresa_data, institucion, notas}
-    : {empresa_id, institucion, notas};
+    ? {empresa_excel: empresa_data, institucion, notas, generacion}
+    : {empresa_id, institucion, notas, generacion};
 
   const r=await fetch("/api/solicitudes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d=await r.json();
@@ -938,7 +1091,7 @@ async function verSolicitudes(){
           <div class="sol-title">${escHtml(s.institucion)} — ${escHtml(s.empresa_nombre)}</div>
           ${currentUser.rol==="terreno"?`<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="marcarAtendida(${s.id})">✓ Atender</button>`:""}
         </div>
-        <div class="sol-meta">RUT: ${s.rut||"—"}   ·   Grupo: ${escHtml(s.grupo_nombre)}   ·   Solicitado por: ${escHtml(s.solicitado_nombre)}   ·   ${s.creada}</div>
+        <div class="sol-meta">RUT: ${s.rut||"—"}   ·   Grupo: ${escHtml(s.grupo_nombre)}   ·   Solicitado por: ${escHtml(s.solicitado_nombre)}   ·   ${s.creada}   ·   <strong>${s.generacion||"Inicial"}</strong></div>
         ${s.notas?`<div style="font-size:11px;color:#64748b;margin-top:4px;font-style:italic">${escHtml(s.notas)}</div>`:""}
       </div>`).join("");
   }
@@ -1253,6 +1406,57 @@ setTimeout(()=>{
     setTimeout(()=>{ wb.style.display='none'; }, 6000);
   }
 }, 1800);
+
+// ── Preferencias ──────────────────────────────────────────────────────────────
+let _prefs = {tema:'claro', mostrar_stats:1, mostrar_opti:1};
+
+async function cargarPreferencias(){
+  try {
+    const r = await fetch("/api/preferencias");
+    _prefs = await r.json();
+  } catch(e){ /* usa defaults */ }
+  aplicarPreferencias(false);
+}
+
+async function aplicarPreferencias(guardar=true){
+  // Leer toggles si el modal ya existe
+  const temaEl  = document.getElementById("pref-tema");
+  const statsEl = document.getElementById("pref-stats");
+  const optiEl  = document.getElementById("pref-opti");
+  if(temaEl)  _prefs.tema          = temaEl.checked  ? "oscuro" : "claro";
+  if(statsEl) _prefs.mostrar_stats = statsEl.checked ? 1 : 0;
+  if(optiEl)  _prefs.mostrar_opti  = optiEl.checked  ? 1 : 0;
+
+  // Aplicar tema
+  document.body.classList.toggle("dark", _prefs.tema === "oscuro");
+
+  // Aplicar stats
+  const statsDiv = document.getElementById("stats");
+  if(statsDiv) statsDiv.style.display = _prefs.mostrar_stats ? "" : "none";
+
+  // Aplicar Opti
+  const optiTrig = document.getElementById("opti-trigger");
+  if(optiTrig) optiTrig.style.display = _prefs.mostrar_opti ? "" : "none";
+  const optiPanel = document.getElementById("opti-panel");
+  if(optiPanel && !_prefs.mostrar_opti) optiPanel.classList.remove("open");
+
+  if(guardar){
+    await fetch("/api/preferencias", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(_prefs)});
+  }
+}
+
+function abrirPreferencias(){
+  // Sincronizar toggles con estado actual
+  const temaEl  = document.getElementById("pref-tema");
+  const statsEl = document.getElementById("pref-stats");
+  const optiEl  = document.getElementById("pref-opti");
+  if(temaEl)  temaEl.checked  = _prefs.tema === "oscuro";
+  if(statsEl) statsEl.checked = !!_prefs.mostrar_stats;
+  if(optiEl)  optiEl.checked  = !!_prefs.mostrar_opti;
+  openModal("modalPreferencias");
+}
 
 init();
 

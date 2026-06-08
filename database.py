@@ -56,7 +56,8 @@ def init_db():
             adjunto        TEXT DEFAULT '',
             sin_deuda      INTEGER DEFAULT 0,
             sin_afiliados  INTEGER DEFAULT 0,
-            formato        TEXT DEFAULT ''
+            formato        TEXT DEFAULT '',
+            generacion     TEXT DEFAULT 'Inicial'
         );
         CREATE TABLE IF NOT EXISTS solicitudes (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +67,8 @@ def init_db():
             estado         TEXT DEFAULT 'Pendiente',
             notas          TEXT DEFAULT '',
             creada         TEXT NOT NULL,
-            atendida       TEXT DEFAULT ''
+            atendida       TEXT DEFAULT '',
+            generacion     TEXT DEFAULT 'Inicial'
         );
         CREATE TABLE IF NOT EXISTS logs (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +76,12 @@ def init_db():
             accion     TEXT NOT NULL,
             detalle    TEXT DEFAULT '',
             fecha      TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS preferencias (
+            usuario_id   INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+            tema         TEXT DEFAULT 'claro',
+            mostrar_stats INTEGER DEFAULT 1,
+            mostrar_opti  INTEGER DEFAULT 1
         );
         """)
         # Migrar columnas nuevas si no existen
@@ -83,6 +91,12 @@ def init_db():
         try:
             conn.execute("ALTER TABLE empresas ADD COLUMN rol_doc TEXT DEFAULT ''")
         except: pass
+        try:
+            conn.execute("ALTER TABLE certificados ADD COLUMN generacion TEXT DEFAULT 'Inicial'")
+        except: pass
+        try:
+            conn.execute("ALTER TABLE solicitudes ADD COLUMN generacion TEXT DEFAULT 'Inicial'")
+        except: pass
         # Migrar tabla logs si no existe (para instancias ya existentes)
         try:
             conn.execute("""CREATE TABLE IF NOT EXISTS logs (
@@ -91,6 +105,14 @@ def init_db():
                 accion     TEXT NOT NULL,
                 detalle    TEXT DEFAULT '',
                 fecha      TEXT NOT NULL
+            )""")
+        except: pass
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS preferencias (
+                usuario_id    INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+                tema          TEXT DEFAULT 'claro',
+                mostrar_stats INTEGER DEFAULT 1,
+                mostrar_opti  INTEGER DEFAULT 1
             )""")
         except: pass
 

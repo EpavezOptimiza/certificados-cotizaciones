@@ -1364,6 +1364,8 @@ async function aceptarTodasSolicitudes(){
   await verSolicitudes();
   toast(`✅ ${ok} solicitud${ok!==1?"es":""} marcada${ok!==1?"s":""} como atendidas`);
 }
+
+async function eliminarSolicitud(sid){
   if(!confirm("¿Eliminar esta solicitud?")) return;
   await fetch(`/api/solicitudes/${sid}`,{method:"DELETE"});
   await verSolicitudes(); toast("Solicitud eliminada");

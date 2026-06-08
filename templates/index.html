@@ -198,13 +198,13 @@ body.dark .pref-label{color:#e2e8f0}
 #opti-panel.open{display:flex}
 
 /* En pantallas bajas (<700px) reducir trigger y subir panel */
-@media (max-height:700px){
+@media (max-height:600px){
   #opti-trigger{width:100px;height:100px;bottom:12px;right:12px}
   #opti-trigger img{width:100px;height:100px}
   #opti-panel{bottom:120px;max-height:calc(100vh - 140px)}
   #opti-welcome{bottom:120px;right:12px}
 }
-@media (max-height:500px){
+@media (max-height:400px){
   #opti-trigger{width:70px;height:70px;bottom:8px;right:8px}
   #opti-trigger img{width:70px;height:70px}
   #opti-panel{bottom:88px;max-height:calc(100vh - 100px)}
@@ -219,7 +219,7 @@ body.dark .pref-label{color:#e2e8f0}
   padding:16px 10px;gap:8px;
   overflow-y:auto;
 }
-#opti-avatar{width:120px!important;height:120px!important;max-width:120px!important;max-height:120px!important;object-fit:contain;filter:drop-shadow(0 0 24px rgba(59,130,246,.8));transition:all .4s;display:block}
+#opti-avatar{width:140px!important;height:140px!important;max-width:140px!important;max-height:140px!important;object-fit:contain;filter:drop-shadow(0 0 24px rgba(59,130,246,.8));transition:all .4s;display:block}
 #opti-name{color:#fff;font-size:13px;font-weight:700}
 #opti-state-label{color:#60a5fa;font-size:9px;text-transform:uppercase;letter-spacing:.5px}
 #opti-right{flex:1;display:flex;flex-direction:column;overflow:hidden}

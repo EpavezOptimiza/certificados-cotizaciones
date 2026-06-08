@@ -1307,7 +1307,10 @@ async function verSolicitudes(){
   if(pend.length){
     html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <h4 style="font-size:12px;color:#92400e">● PENDIENTES (${pend.length})</h4>
-      ${currentUser.rol==="admin"?`<button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="eliminarTodasSolicitudes('Pendiente')">🗑 Eliminar todas las pendientes</button>`:""}
+      <div style="display:flex;gap:6px">
+        ${currentUser.rol==="terreno"?`<button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="aceptarTodasSolicitudes()">✓ Aceptar todas</button>`:""}
+        ${currentUser.rol==="admin"?`<button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="eliminarTodasSolicitudes('Pendiente')">🗑 Eliminar todas las pendientes</button>`:""}
+      </div>
     </div>`;
     html+=pend.map(s=>`
       <div class="sol-card sol-pend">
@@ -1346,7 +1349,21 @@ async function marcarAtendida(sid){
   await verSolicitudes(); toast("Solicitud marcada como atendida ✓");
 }
 
-async function eliminarSolicitud(sid){
+async function aceptarTodasSolicitudes(){
+  if(!confirm("¿Marcar todas las solicitudes pendientes como Atendidas?")) return;
+  const r = await fetch("/api/solicitudes");
+  const sols = await r.json();
+  const pend = sols.filter(s=>s.estado==="Pendiente");
+  let ok = 0;
+  for(const s of pend){
+    await fetch(`/api/solicitudes/${s.id}`,{method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({estado:"Atendida"})});
+    ok++;
+  }
+  await verSolicitudes();
+  toast(`✅ ${ok} solicitud${ok!==1?"es":""} marcada${ok!==1?"s":""} como atendidas`);
+}
   if(!confirm("¿Eliminar esta solicitud?")) return;
   await fetch(`/api/solicitudes/${sid}`,{method:"DELETE"});
   await verSolicitudes(); toast("Solicitud eliminada");

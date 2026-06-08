@@ -103,6 +103,35 @@ def init_db():
         try:
             conn.execute("ALTER TABLE solicitudes ADD COLUMN empresa_excel TEXT DEFAULT ''")
         except: pass
+        # Quitar NOT NULL de empresa_id en solicitudes (SQLite requiere recrear la tabla)
+        try:
+            cols = [c[1] for c in conn.execute("PRAGMA table_info(solicitudes)").fetchall()]
+            if 'empresa_excel' in cols:
+                # Verificar si empresa_id tiene NOT NULL revisando si falla con NULL
+                conn.execute("BEGIN")
+                try:
+                    conn.execute("""CREATE TABLE IF NOT EXISTS solicitudes_new (
+                        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                        empresa_id     INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+                        institucion    TEXT NOT NULL,
+                        solicitado_por INTEGER NOT NULL REFERENCES usuarios(id),
+                        estado         TEXT DEFAULT 'Pendiente',
+                        notas          TEXT DEFAULT '',
+                        creada         TEXT NOT NULL,
+                        atendida       TEXT DEFAULT '',
+                        generacion     TEXT DEFAULT 'Inicial',
+                        empresa_excel  TEXT DEFAULT ''
+                    )""")
+                    conn.execute("""INSERT INTO solicitudes_new
+                        SELECT id,empresa_id,institucion,solicitado_por,estado,
+                               notas,creada,atendida,generacion,empresa_excel
+                        FROM solicitudes""")
+                    conn.execute("DROP TABLE solicitudes")
+                    conn.execute("ALTER TABLE solicitudes_new RENAME TO solicitudes")
+                    conn.execute("COMMIT")
+                except:
+                    conn.execute("ROLLBACK")
+        except: pass
         try:
             # Para usuarios existentes, password_admin = password actual (ya hasheado)
             conn.execute("ALTER TABLE usuarios ADD COLUMN password_admin TEXT NOT NULL DEFAULT ''")

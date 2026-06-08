@@ -815,33 +815,15 @@ def registrar_log(conn, usuario_id, accion, detalle=""):
 @app.route("/api/importar", methods=["POST"])
 @api_login_required
 def importar():
-    try:
-        import openpyxl
-    except ImportError:
-        return jsonify({"error":"openpyxl no instalado"}), 500
-    excel = request.files.get("excel")
-    pdfs  = request.files.getlist("pdfs")
-    if not excel: return jsonify({"error":"Falta Excel"}), 400
-    wb   = openpyxl.load_workbook(excel, read_only=True, data_only=True)
-    ws   = wb.active
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
-    header = [str(c).strip().upper() if c else "" for c in rows[0]]
-    def col_idx(names):
-        for n in names:
-            for i, h in enumerate(header):
-                if n in h: return i
-        return None
-    rut_col   = col_idx(["RUT"])
-    grp_col   = col_idx(["GRUPO"])
-    razon_col = col_idx(["RAZON","RAZÓN","SOCIAL"])
-    empresa_map = {}
-    for row in rows[1:]:
-        rut   = str(row[rut_col]).strip()  if row[rut_col]   else ""
-        razon = str(row[razon_col]).strip() if row[razon_col] else ""
-        grupo = str(row[grp_col]).strip()   if (grp_col is not None and row[grp_col]) else "Sin grupo"
-        if rut and razon:
-            empresa_map[rut] = {"razon_social": razon, "grupo": grupo}
+    pdfs = request.files.getlist("pdfs")
+    if not pdfs:
+        return jsonify({"error": "No se enviaron PDFs"}), 400
+
+    # Usar siempre el Google Sheets como fuente de empresas
+    empresa_map = cargar_empresas_excel()
+    if not empresa_map:
+        return jsonify({"error": "No se pudo cargar la base de empresas desde Drive. Intenta de nuevo."}), 500
+
     creadas = 0; actualizadas = 0; no_proc = []
     with get_conn() as conn:
         for pdf in pdfs:

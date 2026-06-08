@@ -363,8 +363,7 @@ body.dark .pref-label{color:#e2e8f0}
 <div class="modal-bg" id="modalImportar">
   <div class="modal">
     <h3>⚡ Importar certificados</h3>
-    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Excel de razones sociales + PDFs de certificados.</p>
-    <label>Excel (RUT, GRUPO, RAZON SOCIAL) *</label><input type="file" id="i-excel" accept=".xlsx,.xls">
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Selecciona los PDFs — la base de empresas se obtiene automáticamente desde Drive.</p>
     <label>PDFs de certificados *</label><input type="file" id="i-pdfs" accept=".pdf" multiple>
     <div id="import-result" style="margin-top:10px;font-size:12px;display:none"></div>
     <div class="modal-btns">
@@ -1115,10 +1114,9 @@ async function marcarAtendida(sid){
 
 // ── Importar / Migrar ─────────────────────────────────────────────────────────
 async function importar(){
-  const excel=document.getElementById("i-excel").files[0];
   const pdfs=document.getElementById("i-pdfs").files;
-  if(!excel||!pdfs.length) return alert("Selecciona Excel y PDFs.");
-  const fd=new FormData(); fd.append("excel",excel);
+  if(!pdfs.length) return alert("Selecciona al menos un PDF.");
+  const fd=new FormData();
   for(const p of pdfs) fd.append("pdfs",p);
   const div=document.getElementById("import-result");
   const btn=document.getElementById("btn-importar");

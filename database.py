@@ -63,14 +63,15 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS solicitudes (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            empresa_id     INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+            empresa_id     INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
             institucion    TEXT NOT NULL,
             solicitado_por INTEGER NOT NULL REFERENCES usuarios(id),
             estado         TEXT DEFAULT 'Pendiente',
             notas          TEXT DEFAULT '',
             creada         TEXT NOT NULL,
             atendida       TEXT DEFAULT '',
-            generacion     TEXT DEFAULT 'Inicial'
+            generacion     TEXT DEFAULT 'Inicial',
+            empresa_excel  TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS logs (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +99,9 @@ def init_db():
         except: pass
         try:
             conn.execute("ALTER TABLE solicitudes ADD COLUMN generacion TEXT DEFAULT 'Inicial'")
+        except: pass
+        try:
+            conn.execute("ALTER TABLE solicitudes ADD COLUMN empresa_excel TEXT DEFAULT ''")
         except: pass
         try:
             # Para usuarios existentes, password_admin = password actual (ya hasheado)

@@ -684,60 +684,60 @@ def crear_solicitud():
         return jsonify({"error": "Sin permisos"}), 403
     d = request.json
 
-    # Si viene empresa_excel, buscar o crear la empresa en DB
+    # Si viene empresa_excel, buscar si ya existe en DB
     empresa_id = d.get("empresa_id")
+    empresa_excel_json = None
     if not empresa_id and d.get("empresa_excel"):
         ex = d["empresa_excel"]
         with get_conn() as conn:
-            # Buscar por RUT
             emp_row = conn.execute(
                 "SELECT e.id FROM empresas e WHERE REPLACE(e.rut,'-','')=?",
                 (ex["rut"].replace("-",""),)).fetchone()
             if emp_row:
+                # Empresa ya existe — usar su ID
                 empresa_id = emp_row["id"]
             else:
-                # Buscar/crear grupo
-                grp = conn.execute("SELECT id FROM grupos WHERE UPPER(nombre)=UPPER(?)",
-                                    (ex["grupo"],)).fetchone()
-                gid = grp["id"] if grp else conn.execute(
-                    "INSERT INTO grupos(nombre) VALUES(?)", (ex["grupo"],)).lastrowid
-                cur = conn.execute(
-                    "INSERT INTO empresas(grupo_id,nombre,rut,razon_social) VALUES(?,?,?,?)",
-                    (gid, ex["nombre"], ex["rut"], ex["nombre"]))
-                empresa_id = cur.lastrowid
-                certs_default(conn, empresa_id)
+                # Empresa NO existe — guardar datos para crearla cuando Terreno suba PDFs
+                empresa_excel_json = json.dumps(ex)
 
     with get_conn() as conn:
         cur = conn.execute("""INSERT INTO solicitudes
-            (empresa_id,institucion,solicitado_por,estado,notas,creada,generacion)
-            VALUES(?,?,?,?,?,?,?)""",
+            (empresa_id,institucion,solicitado_por,estado,notas,creada,generacion,empresa_excel)
+            VALUES(?,?,?,?,?,?,?,?)""",
             (empresa_id, d["institucion"], user["id"],
              "Pendiente", d.get("notas",""),
              datetime.now().strftime("%d/%m/%Y %H:%M"),
-             d.get("generacion","Inicial")))
+             d.get("generacion","Inicial"),
+             empresa_excel_json))
         sid = cur.lastrowid
 
-        # Enviar email a usuarios de terreno
+        # Datos para email
         terrenos = conn.execute(
             "SELECT email,nombre FROM usuarios WHERE rol='terreno' AND email != ''").fetchall()
         emp = conn.execute("""
             SELECT e.*, g.poder as grupo_poder
             FROM empresas e JOIN grupos g ON g.id = e.grupo_id
-            WHERE e.id=?""", (empresa_id,)).fetchone()
+            WHERE e.id=?""", (empresa_id,)).fetchone() if empresa_id else None
+
+        empresa_nombre = emp["nombre"] if emp else (d.get("empresa_excel",{}).get("nombre","") if d.get("empresa_excel") else "")
+        empresa_rut    = emp["rut"] if emp else (d.get("empresa_excel",{}).get("rut","") if d.get("empresa_excel") else "")
+        empresa_poder  = emp["grupo_poder"] if emp else ""
+        empresa_rol    = emp["rol_doc"] if emp else ""
+
         registrar_log(conn, user["id"], "Nueva solicitud",
-            f"{d['institucion']} — {emp['nombre'] if emp else ''}")
+            f"{d['institucion']} — {empresa_nombre}")
 
     # Enviar emails
     for t in terrenos:
         send_email_solicitud(t["email"], t["nombre"], {
-            "empresa": emp["nombre"] if emp else "",
-            "rut": emp["rut"] if emp else "",
+            "empresa": empresa_nombre,
+            "rut": empresa_rut,
             "institucion": d["institucion"],
             "solicitado_por": user["nombre"],
             "notas": d.get("notas",""),
             "sid": sid,
-            "poder": emp["grupo_poder"] if emp else "",
-            "rol_doc": emp["rol_doc"] if emp else "",
+            "poder": empresa_poder,
+            "rol_doc": empresa_rol,
         })
 
     return jsonify({"id": sid}), 201
@@ -747,10 +747,32 @@ def crear_solicitud():
 def actualizar_solicitud(sid):
     d = request.json
     with get_conn() as conn:
+        sol = conn.execute("SELECT * FROM solicitudes WHERE id=?", (sid,)).fetchone()
+        nuevo_estado = d["estado"]
+
+        # Si se completa y la empresa no existe aún, crearla ahora
+        if nuevo_estado == "Completada" and sol and not sol["empresa_id"] and sol["empresa_excel"]:
+            ex = json.loads(sol["empresa_excel"])
+            emp_row = conn.execute(
+                "SELECT id FROM empresas WHERE REPLACE(rut,'-','')=?",
+                (ex["rut"].replace("-",""),)).fetchone()
+            if emp_row:
+                empresa_id = emp_row["id"]
+            else:
+                grp = conn.execute("SELECT id FROM grupos WHERE UPPER(nombre)=UPPER(?)",
+                                    (ex["grupo"],)).fetchone()
+                gid = grp["id"] if grp else conn.execute(
+                    "INSERT INTO grupos(nombre) VALUES(?)", (ex["grupo"],)).lastrowid
+                empresa_id = conn.execute(
+                    "INSERT INTO empresas(grupo_id,nombre,rut,razon_social) VALUES(?,?,?,?)",
+                    (gid, ex["nombre"], ex["rut"], ex["nombre"])).lastrowid
+                certs_default(conn, empresa_id)
+            conn.execute("UPDATE solicitudes SET empresa_id=? WHERE id=?", (empresa_id, sid))
+
         conn.execute("UPDATE solicitudes SET estado=?,atendida=? WHERE id=?",
-            (d["estado"], datetime.now().strftime("%d/%m/%Y %H:%M"), sid))
+            (nuevo_estado, datetime.now().strftime("%d/%m/%Y %H:%M"), sid))
         user = get_current_user()
-        registrar_log(conn, user["id"], "Solicitud actualizada", f"#{sid} → {d['estado']}")
+        registrar_log(conn, user["id"], "Solicitud actualizada", f"#{sid} → {nuevo_estado}")
         return jsonify({"ok": True})
 
 # ── Email ─────────────────────────────────────────────────────────────────────

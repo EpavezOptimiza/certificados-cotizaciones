@@ -136,8 +136,25 @@ body.dark .modal input,body.dark .modal select,body.dark .modal textarea{backgro
 body.dark .btn-ghost{background:#334155;color:#cbd5e1}
 body.dark .btn-ghost:hover{background:#475569}
 body.dark .sol-card{background:#1e293b;border-color:#334155}
-body.dark #opti-msgs{background:#0f172a}
-body.dark .opti-msg.bot{background:#1e293b;border-color:#334155;color:#e2e8f0}
+body.dark #opti-panel{background:#1e293b}
+body.dark #sol-empresa-list{background:#0f172a;border-color:#334155}
+body.dark #sol-empresa-list label{background:#0f172a;border-color:#1e293b;color:#e2e8f0}
+body.dark #sol-empresa-list label:hover{background:#1e293b}
+body.dark #sol-empresa-list label[style*="background:#eff6ff"]{background:#172554!important}
+body.dark #sol-inst-list{background:#0f172a;border-color:#334155}
+body.dark #sol-inst-list label{background:#0f172a;border-color:#1e293b;color:#e2e8f0}
+body.dark #sol-grupos-btns button{background:#1e293b;border-color:#334155;color:#94a3b8}
+body.dark #sol-resumen{background:#172554;border-color:#1d4ed8;color:#93c5fd}body.dark #opti-right{background:#1e293b}
+body.dark #opti-chat-header{background:#0f172a;border-color:#334155;color:#e2e8f0}
+body.dark #opti-msgs{background:#1e293b}
+body.dark .opti-msg.bot{background:#0f172a;border-color:#334155;color:#e2e8f0}
+body.dark .opti-msg.user{background:#1d4ed8;color:#fff}
+body.dark #opti-input-wrap{background:#0f172a;border-color:#334155}
+body.dark #opti-input{background:#1e293b;border-color:#334155;color:#e2e8f0}
+body.dark #opti-input::placeholder{color:#475569}
+body.dark .opti-opt{background:#1e293b;color:#60a5fa;border-color:#334155}
+body.dark .opti-opt:hover{background:#0f172a}
+body.dark #opti-options{background:#1e293b;border-color:#334155}
 /* Toggle switch */
 .pref-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e2e8f0}
 body.dark .pref-row{border-color:#334155}
@@ -1121,9 +1138,15 @@ async function abrirSolicitud(){
   renderGruposBtns();
 }
 
-function renderGruposBtns(){
-  // Botones por grupo para selección rápida
-  const grupos_unicos = [...new Set(_todasEmpresas.map(e=>e.grupo))].sort();
+function renderGruposBtns(busq=''){
+  const grupos_unicos = [...new Set(
+    _todasEmpresas
+      .filter(e => !busq || 
+        (e.nombre||'').toLowerCase().includes(busq) ||
+        (e.rut||'').toLowerCase().includes(busq) ||
+        (e.grupo||'').toLowerCase().includes(busq))
+      .map(e=>e.grupo)
+  )].sort();
   const cont = document.getElementById("sol-grupos-btns");
   if(!cont) return;
   cont.innerHTML = grupos_unicos.map(g=>
@@ -1171,6 +1194,7 @@ function filtrarEmpresas(){
   const busq = document.getElementById("sol-buscar").value.toLowerCase().trim();
   const cont  = document.getElementById("sol-empresa-list");
   if(!cont) return;
+  renderGruposBtns(busq);
   const filtradas = busq
     ? _todasEmpresas.filter(e=>
         (e.nombre||"").toLowerCase().includes(busq) ||

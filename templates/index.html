@@ -862,7 +862,7 @@ function filtrarEmpresas(){
     e.nombre.toLowerCase().includes(busq) ||
     e.rut.toLowerCase().includes(busq) ||
     e.grupo.toLowerCase().includes(busq)
-  ).slice(0,50);
+  );
   for(const e of filtradas){
     const opt=document.createElement("option");
     opt.value=JSON.stringify({rut:e.rut, nombre:e.nombre, grupo:e.grupo});

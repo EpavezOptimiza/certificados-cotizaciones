@@ -657,21 +657,27 @@ def get_solicitudes():
     with get_conn() as conn:
         if user["rol"] == "consultor":
             rows = conn.execute("""
-                SELECT s.*, e.nombre as empresa_nombre, e.rut,
-                       g.nombre as grupo_nombre, u.nombre as solicitado_nombre
+                SELECT s.*,
+                       COALESCE(e.nombre, JSON_EXTRACT(s.empresa_excel,'$.nombre'), '—') as empresa_nombre,
+                       COALESCE(e.rut,    JSON_EXTRACT(s.empresa_excel,'$.rut'),    '—') as rut,
+                       COALESCE(g.nombre, JSON_EXTRACT(s.empresa_excel,'$.grupo'),  '—') as grupo_nombre,
+                       u.nombre as solicitado_nombre
                 FROM solicitudes s
-                JOIN empresas e ON e.id = s.empresa_id
-                JOIN grupos g ON g.id = e.grupo_id
+                LEFT JOIN empresas e ON e.id = s.empresa_id
+                LEFT JOIN grupos g ON g.id = e.grupo_id
                 JOIN usuarios u ON u.id = s.solicitado_por
                 WHERE s.solicitado_por = ?
                 ORDER BY s.creada DESC""", (user["id"],)).fetchall()
         else:
             rows = conn.execute("""
-                SELECT s.*, e.nombre as empresa_nombre, e.rut,
-                       g.nombre as grupo_nombre, u.nombre as solicitado_nombre
+                SELECT s.*,
+                       COALESCE(e.nombre, JSON_EXTRACT(s.empresa_excel,'$.nombre'), '—') as empresa_nombre,
+                       COALESCE(e.rut,    JSON_EXTRACT(s.empresa_excel,'$.rut'),    '—') as rut,
+                       COALESCE(g.nombre, JSON_EXTRACT(s.empresa_excel,'$.grupo'),  '—') as grupo_nombre,
+                       u.nombre as solicitado_nombre
                 FROM solicitudes s
-                JOIN empresas e ON e.id = s.empresa_id
-                JOIN grupos g ON g.id = e.grupo_id
+                LEFT JOIN empresas e ON e.id = s.empresa_id
+                LEFT JOIN grupos g ON g.id = e.grupo_id
                 JOIN usuarios u ON u.id = s.solicitado_por
                 ORDER BY s.creada DESC""").fetchall()
         return jsonify([dict(r) for r in rows])

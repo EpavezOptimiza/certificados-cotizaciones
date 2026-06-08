@@ -247,6 +247,30 @@ def index():
 def get_me():
     return jsonify(get_current_user())
 
+@app.route("/api/opti_stats")
+@api_login_required
+def opti_stats():
+    with get_conn() as conn:
+        sol_pendientes = conn.execute(
+            "SELECT COUNT(*) FROM solicitudes WHERE estado='Pendiente'").fetchone()[0]
+        certs_obtenidos = conn.execute(
+            "SELECT COUNT(*) FROM certificados WHERE estado='Obtenido'").fetchone()[0]
+        certs_total = conn.execute(
+            "SELECT COUNT(*) FROM certificados").fetchone()[0]
+        empresas_total = conn.execute(
+            "SELECT COUNT(*) FROM empresas").fetchone()[0]
+        logs = conn.execute("""
+            SELECT l.accion, l.detalle, l.fecha, u.nombre as usuario
+            FROM logs l LEFT JOIN usuarios u ON u.id = l.usuario_id
+            ORDER BY l.id DESC LIMIT 6""").fetchall()
+    return jsonify({
+        "solicitudes_pendientes": sol_pendientes,
+        "certs_obtenidos": certs_obtenidos,
+        "certs_total": certs_total,
+        "empresas_total": empresas_total,
+        "actividad": [dict(r) for r in logs]
+    })
+
 # ── API Usuarios (solo admin) ─────────────────────────────────────────────────
 @app.route("/api/usuarios")
 @admin_required
@@ -500,6 +524,8 @@ def upload_adjunto(cid):
     f.save(os.path.join(ADJUNTOS, fname))
     with get_conn() as conn:
         conn.execute("UPDATE certificados SET adjunto=? WHERE id=?", (fname, cid))
+        user = get_current_user()
+        registrar_log(conn, user["id"], "Certificado subido", fname)
     return jsonify({"adjunto": fname})
 
 @app.route("/adjuntos/<path:fname>")
@@ -581,6 +607,8 @@ def crear_solicitud():
             SELECT e.*, g.poder as grupo_poder
             FROM empresas e JOIN grupos g ON g.id = e.grupo_id
             WHERE e.id=?""", (empresa_id,)).fetchone()
+        registrar_log(conn, user["id"], "Nueva solicitud",
+            f"{d['institucion']} — {emp['nombre'] if emp else ''}")
 
     # Enviar emails
     for t in terrenos:
@@ -604,6 +632,8 @@ def actualizar_solicitud(sid):
     with get_conn() as conn:
         conn.execute("UPDATE solicitudes SET estado=?,atendida=? WHERE id=?",
             (d["estado"], datetime.now().strftime("%d/%m/%Y %H:%M"), sid))
+        user = get_current_user()
+        registrar_log(conn, user["id"], "Solicitud actualizada", f"#{sid} → {d['estado']}")
         return jsonify({"ok": True})
 
 # ── Email ─────────────────────────────────────────────────────────────────────
@@ -691,6 +721,11 @@ def inst_match(nombre):
 
 def row_to_dict(row):
     return dict(row) if row else None
+
+def registrar_log(conn, usuario_id, accion, detalle=""):
+    conn.execute(
+        "INSERT INTO logs(usuario_id, accion, detalle, fecha) VALUES(?,?,?,?)",
+        (usuario_id, accion, detalle, datetime.now().strftime("%d/%m/%Y %H:%M")))
 
 # ── Importar Excel + PDFs ─────────────────────────────────────────────────────
 @app.route("/api/importar", methods=["POST"])

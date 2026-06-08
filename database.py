@@ -68,6 +68,13 @@ def init_db():
             creada         TEXT NOT NULL,
             atendida       TEXT DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS logs (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+            accion     TEXT NOT NULL,
+            detalle    TEXT DEFAULT '',
+            fecha      TEXT NOT NULL
+        );
         """)
         # Migrar columnas nuevas si no existen
         try:
@@ -75,6 +82,16 @@ def init_db():
         except: pass
         try:
             conn.execute("ALTER TABLE empresas ADD COLUMN rol_doc TEXT DEFAULT ''")
+        except: pass
+        # Migrar tabla logs si no existe (para instancias ya existentes)
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS logs (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                accion     TEXT NOT NULL,
+                detalle    TEXT DEFAULT '',
+                fecha      TEXT NOT NULL
+            )""")
         except: pass
 
         # Crear usuario admin por defecto si no existe

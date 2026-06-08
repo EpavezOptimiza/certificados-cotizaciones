@@ -258,7 +258,6 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="sb-btn admin-only" onclick="openModal('modalGrupo')" style="display:none">＋ Nuevo grupo</button>
     <button class="sb-btn admin-only" onclick="openModal_empresa()" style="display:none">＋ Nueva empresa</button>
     <button class="sb-btn accent admin-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
-    <button class="sb-btn admin-only" onclick="openModal('modalMigrar')" style="display:none" style="background:#1e3a5f;color:#93c5fd">📦 Migrar JSON</button>
     <button class="sb-btn admin-only" onclick="openModal('modalUsuarios')" style="display:none">👥 Gestionar usuarios</button>
     <button class="sb-btn orange consultor-only" onclick="abrirSolicitud()" style="display:none">📋 Nueva solicitud</button>
     <button class="sb-btn accent terreno-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
@@ -417,18 +416,7 @@ body.dark .pref-label{color:#e2e8f0}
   </div>
 </div>
 
-<div class="modal-bg" id="modalMigrar">
-  <div class="modal">
-    <h3>📦 Migrar datos existentes</h3>
-    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Sube tu <strong>certificados_data.json</strong> para importar todos tus datos.</p>
-    <label>Archivo certificados_data.json *</label><input type="file" id="m-json" accept=".json">
-    <div id="migrar-result" style="margin-top:10px;font-size:12px;display:none"></div>
-    <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closeModal('modalMigrar')">Cancelar</button>
-      <button class="btn btn-primary" onclick="migrar()">📦 Migrar</button>
-    </div>
-  </div>
-</div>
+
 
 <div class="modal-bg" id="modalReporte">
   <div class="modal" style="width:320px">
@@ -1325,19 +1313,6 @@ async function importar(){
   toast("Importación completada ✓");
   setTimeout(()=>{ closeModal("modalImportar"); btn.textContent="⚡ Importar"; btn.style.background=""; btn.disabled=false; }, 2000);
 }
-async function migrar(){
-  const f=document.getElementById("m-json").files[0];
-  if(!f) return alert("Selecciona el archivo JSON.");
-  const fd=new FormData(); fd.append("json",f);
-  const div=document.getElementById("migrar-result");
-  div.style.display=""; div.innerHTML="⏳ Migrando…";
-  const r=await fetch("/api/migrar",{method:"POST",body:fd});
-  const d=await r.json();
-  if(d.error){div.innerHTML=`❌ ${d.error}`;return;}
-  div.innerHTML=`✅ Empresas: ${d.empresas}   ·   Certificados: ${d.certificados}`;
-  await loadGrupos(); toast("Migración completada ✓");
-}
-
 // ── CSV ───────────────────────────────────────────────────────────────────────
 async function exportarCSV(){
   closeModal("modalMas"); if(!empresaId) return;

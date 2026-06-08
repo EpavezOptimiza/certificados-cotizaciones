@@ -905,53 +905,6 @@ def importar():
                 no_proc.append(f"{fname} → certificado '{inst_n}' no encontrado")
     return jsonify({"creadas":creadas,"actualizadas":actualizadas,"no_procesados":no_proc})
 
-# ── Migrar JSON ───────────────────────────────────────────────────────────────
-@app.route("/api/migrar", methods=["POST"])
-@api_login_required
-def migrar_json():
-    user = get_current_user()
-    if user["rol"] != "admin":
-        return jsonify({"error":"Solo el admin puede migrar datos"}), 403
-    f = request.files.get("json")
-    if not f: return jsonify({"error":"Falta JSON"}), 400
-    data = json.load(f)
-    emp_count = 0; cert_count = 0
-    with get_conn() as conn:
-        for g_d in data.get("grupos", []):
-            grp = conn.execute("SELECT id FROM grupos WHERE UPPER(nombre)=UPPER(?)", (g_d["nombre"],)).fetchone()
-            gid = grp["id"] if grp else conn.execute("INSERT INTO grupos(nombre) VALUES(?)", (g_d["nombre"],)).lastrowid
-            for e_d in g_d.get("empresas", []):
-                emp = conn.execute("SELECT id FROM empresas WHERE grupo_id=? AND rut=?", (gid, e_d.get("rut",""))).fetchone()
-                if emp:
-                    eid = emp["id"]
-                else:
-                    eid = conn.execute("INSERT INTO empresas(grupo_id,nombre,rut,razon_social) VALUES(?,?,?,?)",
-                        (gid, e_d["nombre"], e_d.get("rut",""), e_d.get("razon_social",""))).lastrowid
-                    emp_count += 1
-                for c_d in e_d.get("certificados", []):
-                    ex = conn.execute("SELECT id FROM certificados WHERE empresa_id=? AND institucion=?",
-                        (eid, c_d["institucion"])).fetchone()
-                    if ex:
-                        conn.execute("""UPDATE certificados SET estado=?,mes=?,anio=?,notas=?,
-                            sin_deuda=?,sin_afiliados=?,formato=? WHERE id=?""",
-                            (c_d.get("estado","Pendiente"), c_d.get("mes",""), c_d.get("anio",""),
-                             c_d.get("notas",""), 1 if c_d.get("sin_deuda") else 0,
-                             1 if c_d.get("sin_afiliados") else 0, c_d.get("formato",""), ex["id"]))
-                    else:
-                        conn.execute("""INSERT INTO certificados
-                            (empresa_id,institucion,tipo,categoria,estado,mes,anio,
-                             folio,notas,adjunto,sin_deuda,sin_afiliados,formato)
-                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                            (eid, c_d.get("institucion",""), c_d.get("tipo","Certificado de deuda"),
-                             c_d.get("categoria",""), c_d.get("estado","Pendiente"),
-                             c_d.get("mes",""), c_d.get("anio",""), c_d.get("folio",""),
-                             c_d.get("notas",""), c_d.get("adjunto",""),
-                             1 if c_d.get("sin_deuda") else 0,
-                             1 if c_d.get("sin_afiliados") else 0,
-                             c_d.get("formato","")))
-                    cert_count += 1
-    return jsonify({"empresas": emp_count, "certificados": cert_count})
-
 # ── Reportes ──────────────────────────────────────────────────────────────────
 @app.route("/reporte/empresa/<int:eid>")
 @login_required

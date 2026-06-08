@@ -138,7 +138,7 @@ def do_login():
         token = secrets.token_hex(32)
         conn.execute("INSERT INTO sesiones(token,usuario_id,creada) VALUES(?,?,?)",
                      (token, user["id"], datetime.now().isoformat()))
-    resp = make_response(jsonify({"ok": True, "rol": user["rol"]}))
+    resp = make_response(jsonify({"ok": True, "rol": user["rol"], "clave_cambiada": bool(dict(user).get("clave_cambiada", 0))}))
     resp.set_cookie("session_token", token, max_age=86400*30, httponly=True)
     return resp
 
@@ -247,7 +247,9 @@ def index():
 @app.route("/api/me")
 @api_login_required
 def get_me():
-    return jsonify(get_current_user())
+    user = dict(get_current_user())
+    user["clave_cambiada"] = bool(user.get("clave_cambiada", 0))
+    return jsonify(user)
 
 @app.route("/api/preferencias")
 @api_login_required
@@ -359,7 +361,7 @@ def cambiar_clave():
             (user["id"], hash_password(clave_actual), hash_password(clave_actual))).fetchone()
         if not row:
             return jsonify({"error": "Clave actual incorrecta"}), 401
-        conn.execute("UPDATE usuarios SET password=? WHERE id=?",
+        conn.execute("UPDATE usuarios SET password=?, clave_cambiada=1 WHERE id=?",
             (hash_password(clave_nueva), user["id"]))
         registrar_log(conn, user["id"], "Clave cambiada", "El usuario cambió su contraseña")
     return jsonify({"ok": True})

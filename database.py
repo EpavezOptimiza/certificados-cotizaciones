@@ -23,7 +23,8 @@ def init_db():
             password_admin  TEXT NOT NULL DEFAULT '',
             nombre          TEXT NOT NULL,
             email           TEXT DEFAULT '',
-            rol             TEXT NOT NULL DEFAULT 'consultor'
+            rol             TEXT NOT NULL DEFAULT 'consultor',
+            clave_cambiada  INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS sesiones (
             token      TEXT PRIMARY KEY,
@@ -102,6 +103,11 @@ def init_db():
             # Para usuarios existentes, password_admin = password actual (ya hasheado)
             conn.execute("ALTER TABLE usuarios ADD COLUMN password_admin TEXT NOT NULL DEFAULT ''")
             conn.execute("UPDATE usuarios SET password_admin = password WHERE password_admin = ''")
+        except: pass
+        try:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN clave_cambiada INTEGER DEFAULT 0")
+            # Admin ya tiene clave propia por defecto
+            conn.execute("UPDATE usuarios SET clave_cambiada=1 WHERE rol='admin'")
         except: pass
         # Migrar tabla logs si no existe (para instancias ya existentes)
         try:

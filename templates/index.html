@@ -158,10 +158,48 @@ body.dark .pref-label{color:#e2e8f0}
 @keyframes opti-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 #opti-trigger{animation:opti-float 3s ease-in-out infinite}
 #opti-trigger:hover{animation:none;transform:scale(1.08)}
-#opti-panel{position:fixed;bottom:210px;right:20px;width:520px;background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.2);z-index:9000;display:none;flex-direction:row;overflow:hidden;height:560px}
+
+/* Panel principal — se adapta a pantalla disponible */
+#opti-panel{
+  position:fixed;
+  bottom:210px;
+  right:20px;
+  width:min(520px, calc(100vw - 32px));
+  max-height:calc(100vh - 230px);
+  min-height:300px;
+  background:#fff;
+  border-radius:20px;
+  box-shadow:0 8px 40px rgba(0,0,0,.2);
+  z-index:9000;
+  display:none;
+  flex-direction:row;
+  overflow:hidden;
+}
 #opti-panel.open{display:flex}
-#opti-left{width:200px;min-width:200px;background:linear-gradient(180deg,#0f172a,#1e3a8a);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 12px;gap:10px}
-#opti-avatar{width:180px!important;height:180px!important;max-width:180px!important;max-height:180px!important;object-fit:contain;filter:drop-shadow(0 0 24px rgba(59,130,246,.8));transition:all .4s;display:block}
+
+/* En pantallas bajas (<700px) reducir trigger y subir panel */
+@media (max-height:700px){
+  #opti-trigger{width:100px;height:100px;bottom:12px;right:12px}
+  #opti-trigger img{width:100px;height:100px}
+  #opti-panel{bottom:120px;max-height:calc(100vh - 140px)}
+  #opti-welcome{bottom:120px;right:12px}
+}
+@media (max-height:500px){
+  #opti-trigger{width:70px;height:70px;bottom:8px;right:8px}
+  #opti-trigger img{width:70px;height:70px}
+  #opti-panel{bottom:88px;max-height:calc(100vh - 100px)}
+  #opti-welcome{display:none}
+}
+
+/* Panel izquierdo — se encoge si hay poco espacio */
+#opti-left{
+  width:200px;min-width:160px;
+  background:linear-gradient(180deg,#0f172a,#1e3a8a);
+  display:flex;flex-direction:column;align-items:center;
+  padding:16px 10px;gap:8px;
+  overflow-y:auto;
+}
+#opti-avatar{width:120px!important;height:120px!important;max-width:120px!important;max-height:120px!important;object-fit:contain;filter:drop-shadow(0 0 24px rgba(59,130,246,.8));transition:all .4s;display:block}
 #opti-name{color:#fff;font-size:13px;font-weight:700}
 #opti-state-label{color:#60a5fa;font-size:9px;text-transform:uppercase;letter-spacing:.5px}
 #opti-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
@@ -597,6 +635,18 @@ async function init(){
   await cargarPreferencias();
   await loadGrupos();
   if(currentUser.rol === "terreno") verSolicitudes();
+  // Mostrar modal cambio de clave si es primer login
+  if(!currentUser.clave_cambiada){
+    setTimeout(()=>{
+      openModal("modalCambioClave");
+      // Ocultar botón cancelar para forzar el cambio
+      const cancelBtn = document.querySelector("#modalCambioClave .btn-ghost");
+      if(cancelBtn) cancelBtn.style.display = "none";
+      // Agregar mensaje de bienvenida
+      const modal = document.querySelector("#modalCambioClave h3");
+      if(modal) modal.textContent = "👋 ¡Bienvenido! Cambia tu contraseña";
+    }, 800);
+  }
 }
 
 function applyRoleUI(){

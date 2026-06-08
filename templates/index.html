@@ -1162,31 +1162,43 @@ function actualizarContador(){
 }
 
 function filtrarEmpresas(){
-  const busq = document.getElementById("sol-buscar").value.toLowerCase();
+  const busq = document.getElementById("sol-buscar").value.toLowerCase().trim();
   const cont  = document.getElementById("sol-empresa-list");
   if(!cont) return;
-  const filtradas = _todasEmpresas.filter(e=>
-    !busq ||
-    e.nombre.toLowerCase().includes(busq) ||
-    e.rut.toLowerCase().includes(busq) ||
-    e.grupo.toLowerCase().includes(busq)
-  );
+  const filtradas = busq
+    ? _todasEmpresas.filter(e=>
+        (e.nombre||"").toLowerCase().includes(busq) ||
+        (e.rut||"").toLowerCase().includes(busq) ||
+        (e.grupo||"").toLowerCase().includes(busq) ||
+        (e.razon_social||"").toLowerCase().includes(busq)
+      )
+    : _todasEmpresas;
   cont.innerHTML = filtradas.length ? filtradas.map(e=>{
     const key = JSON.stringify({rut:e.rut,nombre:e.nombre,grupo:e.grupo});
+    const keyEsc = escHtml(key);
     const sel = _empresasSeleccionadas.has(key);
     return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f1f5f9;${sel?'background:#eff6ff':''}">
-      <input type="checkbox" style="width:auto" ${sel?"checked":""} onchange="toggleEmpresa('${key.replace(/'/g,"&#39;")}',this)">
+      <input type="checkbox" class="emp-cb" data-key="${keyEsc}" style="width:auto" ${sel?"checked":""}>
       <span style="flex:1"><span style="font-weight:${sel?'600':'400'}">${escHtml(e.nombre)}</span><br>
-      <span style="font-size:10px;color:#64748b">${escHtml(e.rut)} · ${escHtml(e.grupo)}</span></span>
+      <span style="font-size:10px;color:#64748b">${escHtml(e.rut||'')} · ${escHtml(e.grupo||'')}</span></span>
     </label>`;
-  }).join("") : '<div style="padding:10px;font-size:12px;color:#64748b">Sin resultados</div>';
+  }).join("") : '<div style="padding:10px;font-size:12px;color:#64748b">Sin resultados para "'+escHtml(busq)+'"</div>';
+  // Eventos via delegación para evitar problemas con caracteres especiales
+  cont.querySelectorAll(".emp-cb").forEach(cb=>{
+    cb.addEventListener("change", ()=>{
+      const key = cb.dataset.key;
+      if(cb.checked) _empresasSeleccionadas.add(key);
+      else _empresasSeleccionadas.delete(key);
+      actualizarContador();
+      filtrarEmpresas();
+    });
+  });
 }
 
 function toggleEmpresa(key, cb){
   if(cb.checked) _empresasSeleccionadas.add(key);
   else _empresasSeleccionadas.delete(key);
   actualizarContador();
-  // Re-render para actualizar highlight sin perder scroll
   filtrarEmpresas();
 }
 
@@ -1441,14 +1453,33 @@ const OPTI_IMGS = {
   talk:   '/static/opti_talk.png',
 };
 
-const OPTI_FAQ = {
-  "¿Cómo importo certificados?": "Para importar certificados:\n1. Haz clic en ⚡ Importar certificados en el menú lateral\n2. Selecciona el Excel de razones sociales\n3. Selecciona los PDFs de certificados\n4. Haz clic en Importar\n\nEl sistema creará las empresas automáticamente.",
-  "¿Cómo marco sin deuda?": "En la tabla de certificados, haz clic directo en la casilla ☐ de la columna 'Sin deuda'. Cambia inmediatamente.",
-  "¿Cómo creo una solicitud?": "Como Consultor:\n1. Clic en 📋 Nueva solicitud\n2. Busca la empresa\n3. Selecciona la institución\n4. Haz clic en Enviar solicitud\n\nEl equipo de terreno recibirá una notificación por email.",
-  "¿Cómo genero un reporte?": "Selecciona una empresa en el panel izquierdo, luego haz clic en 📊 Reporte. Puedes generar reporte de la empresa o del grupo completo.",
-  "¿Cómo cambio el formato?": "En la tabla, haz clic directo en la columna 'Formato' para cambiar entre Digital → Escaneado → Sin especificar.",
-  "Tengo un problema": "REPORT",
-};
+function getOptiFAQ(){
+  const rol = currentUser?.rol || 'consultor';
+  const faq = {
+    "¿Cómo marco sin deuda?":
+      "En la tabla de certificados, haz clic directo en la casilla ☐ de la columna 'Sin deuda'. Cambia inmediatamente a ✅.",
+    "¿Cómo cambio el formato?":
+      "En la tabla, haz clic directo en la columna 'Formato' para cambiar entre Digital → Escaneado → Sin especificar.",
+    "Tengo un problema": "REPORT",
+  };
+  if(rol === 'terreno' || rol === 'admin'){
+    faq["¿Cómo importo certificados?"] =
+      "Para importar certificados de forma masiva:\n1. Haz clic en ⚡ Importar certificados en el menú lateral\n2. Selecciona los PDFs de certificados\n3. Haz clic en Importar\n\nLa base de empresas se carga automáticamente desde Drive.";
+  } else {
+    faq["¿Cómo adjunto un certificado?"] =
+      "Como Consultor puedes adjuntar uno a uno:\n1. Selecciona la empresa\n2. En la tabla, busca el certificado\n3. Haz clic en 📎 Adjuntar\n4. Selecciona el PDF desde tu equipo.";
+  }
+  if(rol !== 'terreno'){
+    faq["¿Cómo creo una solicitud?"] =
+      "Para crear una solicitud:\n1. Haz clic en 📋 Nueva Solicitud en el menú lateral\n2. Selecciona una o varias empresas con los checkboxes\n3. Elige las instituciones y si es Inicial o Posterior\n4. Haz clic en Enviar solicitudes.";
+    faq["¿Cómo genero un reporte?"] =
+      "Selecciona una empresa en el panel izquierdo, luego haz clic en 📊 Reporte. Puedes generar reporte de la empresa o del grupo completo desde el menú ⋯ Más.";
+  } else {
+    faq["¿Cómo veo mis solicitudes?"] =
+      "Haz clic en 📋 Solicitudes en el menú lateral para ver todas las solicitudes pendientes asignadas a ti.";
+  }
+  return faq;
+}
 
 let optiOpen = false, optiFirst = true, optiHistorial = [];
 
@@ -1549,16 +1580,18 @@ function optiAddMsg(type, text, onDone){
 }
 
 function optiShowOptions(){
-  document.getElementById('opti-options').innerHTML = Object.keys(OPTI_FAQ).map(q=>
+  const faq = getOptiFAQ();
+  document.getElementById('opti-options').innerHTML = Object.keys(faq).map(q=>
     `<button class="opti-opt" onclick="optiAnswer('${q.replace(/'/g,"&#39;")}')">${q}</button>`
   ).join('');
 }
 
 function optiAnswer(q){
+  const faq = getOptiFAQ();
   optiAddMsg('user', q);
   document.getElementById('opti-options').innerHTML = '';
   setOptiImg('think');
-  if(OPTI_FAQ[q] === 'REPORT'){
+  if(faq[q] === 'REPORT'){
     optiShowTyping();
     setTimeout(()=>{
       optiHideTyping();
@@ -1572,7 +1605,7 @@ function optiAnswer(q){
     setTimeout(()=>{
       optiHideTyping();
       setOptiImg('talk');
-      optiAddMsg('bot', OPTI_FAQ[q]);
+      optiAddMsg('bot', faq[q]);
       setTimeout(()=>{
         optiShowTyping();
         setTimeout(()=>{

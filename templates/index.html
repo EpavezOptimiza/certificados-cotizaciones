@@ -1268,7 +1268,7 @@ async function enviarSolicitud(){
   const btn = document.querySelector("#modalSolicitud .btn-orange");
   btn.textContent = "⏳ Enviando…"; btn.disabled = true;
 
-  let creadas = 0, errores = 0;
+  let creadas = 0, errores = 0, errMsg = '';
   for(const emp of empresas){
     for(const inst of instituciones){
       const body = {empresa_excel: emp, institucion: inst, notas, generacion};
@@ -1277,9 +1277,9 @@ async function enviarSolicitud(){
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify(body)});
         const d = await r.json();
-        if(d.error) errores++;
+        if(d.error){ errores++; errMsg = d.error; }
         else creadas++;
-      } catch(e){ errores++; }
+      } catch(e){ errores++; errMsg = e.message; }
     }
   }
 
@@ -1287,9 +1287,9 @@ async function enviarSolicitud(){
   closeModal("modalSolicitud");
   _empresasSeleccionadas.clear();
   const msg = errores
-    ? `✅ ${creadas} solicitud${creadas!==1?"es":""} creada${creadas!==1?"s":""} · ⚠ ${errores} con error`
+    ? `✅ ${creadas} creada${creadas!==1?"s":""} · ⚠ ${errores} error${errores!==1?"es":""}: ${errMsg}`
     : `✅ ${creadas} solicitud${creadas!==1?"es":""} enviada${creadas!==1?"s":""}`;
-  toast(msg);
+  toast(msg, errores ? 8000 : 3000);
 }
 async function verSolicitudes(){
   empresaId=null;
@@ -1383,7 +1383,7 @@ function verReporte(tipo){
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function escHtml(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
-function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";setTimeout(()=>t.style.display="none",3000);}
+function toast(msg, dur=3000){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";t.style.maxWidth="500px";t.style.whiteSpace="pre-wrap";setTimeout(()=>t.style.display="none",dur);}
 document.querySelectorAll(".modal-bg").forEach(bg=>bg.addEventListener("click",e=>{if(e.target===bg)bg.classList.remove("open");}));
 document.getElementById("btn-agregar").onclick=openModal_cert;
 document.querySelector("[onclick=\"openModal('modalUsuarios')\"]")&&(document.querySelector("[onclick=\"openModal('modalUsuarios')\"]").onclick=openModal_usuarios);

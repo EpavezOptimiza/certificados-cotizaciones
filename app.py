@@ -744,7 +744,20 @@ def crear_solicitud():
         print(f"[ERROR crear_solicitud] {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/solicitudes/<int:sid>", methods=["PUT"])
+@app.route("/api/solicitudes/<int:sid>", methods=["DELETE"])
+@admin_required
+def eliminar_solicitud(sid):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM solicitudes WHERE id=?", (sid,))
+    return jsonify({"ok": True})
+
+@app.route("/api/solicitudes/bulk_delete", methods=["POST"])
+@admin_required
+def bulk_delete_solicitudes():
+    estado = request.json.get("estado","")
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM solicitudes WHERE estado=?", (estado,))
+        return jsonify({"eliminadas": cur.rowcount})
 @api_login_required
 def actualizar_solicitud(sid):
     d = request.json

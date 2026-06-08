@@ -1305,24 +1305,36 @@ async function verSolicitudes(){
   let html="";
   if(!sols.length){html='<p style="color:#64748b;font-size:13px">No hay solicitudes aún.</p>';}
   if(pend.length){
-    html+=`<h4 style="font-size:12px;color:#92400e;margin-bottom:8px">● PENDIENTES (${pend.length})</h4>`;
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h4 style="font-size:12px;color:#92400e">● PENDIENTES (${pend.length})</h4>
+      ${currentUser.rol==="admin"?`<button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="eliminarTodasSolicitudes('Pendiente')">🗑 Eliminar todas las pendientes</button>`:""}
+    </div>`;
     html+=pend.map(s=>`
       <div class="sol-card sol-pend">
         <div class="sol-header">
           <div class="sol-title">${escHtml(s.institucion)} — ${escHtml(s.empresa_nombre)}</div>
-          ${currentUser.rol==="terreno"?`<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="marcarAtendida(${s.id})">✓ Atender</button>`:""}
+          <div style="display:flex;gap:6px;align-items:center">
+            ${currentUser.rol==="terreno"?`<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="marcarAtendida(${s.id})">✓ Atender</button>`:""}
+            ${currentUser.rol==="admin"?`<button class="btn btn-danger" style="font-size:11px;padding:4px 8px" onclick="eliminarSolicitud(${s.id})" title="Eliminar">🗑</button>`:""}
+          </div>
         </div>
         <div class="sol-meta">RUT: ${s.rut||"—"}   ·   Grupo: ${escHtml(s.grupo_nombre)}   ·   Solicitado por: ${escHtml(s.solicitado_nombre)}   ·   ${s.creada}   ·   <strong>${s.generacion||"Inicial"}</strong></div>
         ${s.notas?`<div style="font-size:11px;color:#64748b;margin-top:4px;font-style:italic">${escHtml(s.notas)}</div>`:""}
       </div>`).join("");
   }
   if(atend.length){
-    html+=`<h4 style="font-size:12px;color:#166534;margin:16px 0 8px">✓ ATENDIDAS (${atend.length})</h4>`;
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px">
+      <h4 style="font-size:12px;color:#166534">✓ ATENDIDAS (${atend.length})</h4>
+      ${currentUser.rol==="admin"?`<button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="eliminarTodasSolicitudes('Atendida')">🗑 Eliminar todas las atendidas</button>`:""}
+    </div>`;
     html+=atend.map(s=>`
       <div class="sol-card sol-ok">
         <div class="sol-header">
           <div class="sol-title">${escHtml(s.institucion)} — ${escHtml(s.empresa_nombre)}</div>
-          <span style="font-size:11px;color:#166534">✓ Atendida ${s.atendida}</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:11px;color:#166534">✓ Atendida ${s.atendida}</span>
+            ${currentUser.rol==="admin"?`<button class="btn btn-danger" style="font-size:11px;padding:4px 8px" onclick="eliminarSolicitud(${s.id})" title="Eliminar">🗑</button>`:""}
+          </div>
         </div>
         <div class="sol-meta">Solicitado por: ${escHtml(s.solicitado_nombre)}   ·   ${s.creada}</div>
       </div>`).join("");
@@ -1332,6 +1344,23 @@ async function verSolicitudes(){
 async function marcarAtendida(sid){
   await fetch(`/api/solicitudes/${sid}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({estado:"Atendida"})});
   await verSolicitudes(); toast("Solicitud marcada como atendida ✓");
+}
+
+async function eliminarSolicitud(sid){
+  if(!confirm("¿Eliminar esta solicitud?")) return;
+  await fetch(`/api/solicitudes/${sid}`,{method:"DELETE"});
+  await verSolicitudes(); toast("Solicitud eliminada");
+}
+
+async function eliminarTodasSolicitudes(estado){
+  const label = estado==="Pendiente" ? "pendientes" : "atendidas";
+  if(!confirm(`¿Eliminar TODAS las solicitudes ${label}? Esta acción no se puede deshacer.`)) return;
+  const r = await fetch(`/api/solicitudes/bulk_delete`,{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({estado})});
+  const d = await r.json();
+  await verSolicitudes();
+  toast(`✅ ${d.eliminadas} solicitud${d.eliminadas!==1?"es":""} eliminada${d.eliminadas!==1?"s":""}`);
 }
 
 // ── Importar / Migrar ─────────────────────────────────────────────────────────

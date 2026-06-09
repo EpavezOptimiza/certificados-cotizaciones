@@ -8,9 +8,11 @@ from flask import (Blueprint, render_template, request, jsonify,
                    send_file, session, current_app, make_response)
 from functools import wraps
 
+import os as _os
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
 cartas_bp = Blueprint("cartas", __name__,
-    template_folder="templates/cartas",
-    static_folder="static/cartas",
+    template_folder=_os.path.join(_HERE, "templates", "cartas"),
+    static_folder=_os.path.join(_HERE, "static", "cartas") if _os.path.exists(_os.path.join(_HERE, "static", "cartas")) else None,
     url_prefix="/cartas")
 
 # ── Estado de jobs (en memoria, Railway reinicia limpia) ──────────────────────

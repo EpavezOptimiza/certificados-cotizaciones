@@ -27,14 +27,26 @@ def set_job(job_id, data):
 # ── Auth helper (reutiliza el de app.py) ──────────────────────────────────────
 def _get_user():
     from flask import request as _r
-    from database import get_conn
     token = _r.cookies.get("session_token")
     if not token: return None
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT u.* FROM sesiones s JOIN usuarios u ON u.id=s.usuario_id WHERE s.token=?",
-            (token,)).fetchone()
-        return dict(row) if row else None
+    try:
+        from app import get_current_user
+        return get_current_user()
+    except:
+        pass
+    try:
+        import sys, os
+        # Intentar importar get_conn desde el directorio raíz
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from database import get_conn
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT u.* FROM sesiones s JOIN usuarios u ON u.id=s.usuario_id WHERE s.token=?",
+                (token,)).fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"[cartas] _get_user error: {e}")
+        return None
 
 def cartas_login_required(f):
     @wraps(f)

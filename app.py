@@ -15,6 +15,11 @@ DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "adjuntos"))
 ADJUNTOS = DATA_DIR
 os.makedirs(ADJUNTOS, exist_ok=True)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
+app.config["DATA_DIR"] = DATA_DIR
+
+# Módulo Cartas Previsionales
+from cartas import cartas_bp
+app.register_blueprint(cartas_bp)
 
 EXCEL_URL = "https://docs.google.com/spreadsheets/d/1xNA3CS_WX4KeOc4vRizCUC5rpNoTmCGmswpOjWK9VjI/gviz/tq?tqx=out:csv"
 _empresa_cache = None

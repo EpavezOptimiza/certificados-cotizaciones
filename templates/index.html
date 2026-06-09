@@ -91,7 +91,7 @@ tr:hover td{background:#eff6ff}
 #toast{position:fixed;bottom:20px;right:20px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;display:none;z-index:9999}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
 .badge-admin{background:#fef2f2;color:#991b1b}
-.badge-consultor{background:#eff6ff;color:#1d4ed8}
+.badge-ahorro{background:#eff6ff;color:#1d4ed8}
 .badge-terreno{background:#f0fdf4;color:#166534}
 .sol-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:8px}
 .sol-card .sol-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
@@ -279,7 +279,7 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="sb-btn admin-only" onclick="openModal_empresa()" style="display:none">＋ Nueva empresa</button>
     <button class="sb-btn accent admin-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
     <button class="sb-btn admin-only" onclick="openModal('modalUsuarios')" style="display:none">👥 Gestionar usuarios</button>
-    <button class="sb-btn orange consultor-only" onclick="abrirSolicitud()" style="display:none">📋 Nueva solicitud</button>
+    <button class="sb-btn orange ahorro-only" onclick="abrirSolicitud()" style="display:none">📋 Nueva solicitud</button>
     <button class="sb-btn accent terreno-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
     <button class="sb-btn" onclick="verSolicitudes()" style="">📋 Solicitudes</button>
   </div>
@@ -298,7 +298,7 @@ body.dark .pref-label{color:#e2e8f0}
       <p id="header-meta"></p>
     </div>
     <div id="header-right" id="header-right">
-      <button class="btn btn-primary admin-consultor-only" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
+      <button class="btn btn-primary admin-ahorro-only" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
       <button class="btn btn-ghost" onclick="showMasMenu()" id="btn-mas" style="display:none">⋯ Más</button>
     </div>
   </div>
@@ -323,7 +323,7 @@ body.dark .pref-label{color:#e2e8f0}
     <label>Buscar</label>
     <input type="text" id="f-buscar" placeholder="Buscar…" oninput="renderCerts()" style="width:160px">
     <button class="btn btn-primary admin-only" onclick="openModal_cert()" id="btn-agregar" style="display:none;margin-left:auto">＋ Agregar certificado</button>
-    <button class="btn btn-orange admin-consultor-only" onclick="moverGeneracionEmpresa()" id="btn-mover-gen" style="display:none;margin-left:4px" title="Mover todos los Posteriores a Iniciales">🔄 Mover Posteriores → Iniciales</button>
+    <button class="btn btn-orange admin-ahorro-only" onclick="moverGeneracionEmpresa()" id="btn-mover-gen" style="display:none;margin-left:4px" title="Mover todos los Posteriores a Iniciales">🔄 Mover Posteriores → Iniciales</button>
   </div>
   <div id="table-wrap">
     <div id="sol-view" style="display:none;padding:4px">
@@ -482,7 +482,8 @@ body.dark .pref-label{color:#e2e8f0}
     <label>Rol *</label>
     <select id="u-rol">
       <option value="admin">Admin</option>
-      <option value="consultor">Consultor</option>
+      <option value="ahorro">Ahorro</option>
+      <option value="ingreso">Ingreso</option>
       <option value="terreno">Terreno</option>
     </select>
     <div class="modal-btns">
@@ -633,7 +634,7 @@ const INST_MAP={};
 INST_MAP["{{ inst }}"]={tipo:"{{ tipo }}",cat:"{{ cat }}"};
 {% endfor %}
 
-const ROLES={admin:"Admin",consultor:"Consultor",terreno:"Terreno"};
+const ROLES={admin:"Admin",ahorro:"Ahorro",consultor:"Ahorro",terreno:"Terreno",ingreso:"Ingreso"};
 
 async function init(){
   const r = await fetch("/api/me");
@@ -664,13 +665,13 @@ function applyRoleUI(){
   document.querySelectorAll(".admin-only").forEach(el=>{
     el.style.display = (rol==="admin") ? "" : "none";
   });
-  document.querySelectorAll(".consultor-only").forEach(el=>{
-    el.style.display = (rol==="consultor") ? "" : "none";
+  document.querySelectorAll(".ahorro-only").forEach(el=>{
+    el.style.display = (rol==="ahorro" || rol==="consultor") ? "" : "none";
   });
   document.querySelectorAll(".terreno-only").forEach(el=>{
     el.style.display = (rol==="terreno") ? "" : "none";
   });
-  document.querySelectorAll(".admin-consultor-only").forEach(el=>{
+  document.querySelectorAll(".admin-ahorro-only").forEach(el=>{
     el.style.display = (rol==="terreno") ? "none" : "";
   });
   // Menú más
@@ -1069,7 +1070,7 @@ async function restablecerTipos(){
 async function openModal_usuarios(){
   const r=await fetch("/api/usuarios");
   const users=await r.json();
-  const BADGE={admin:"badge-admin",consultor:"badge-consultor",terreno:"badge-terreno"};
+  const BADGE={admin:"badge-admin",consultor:"badge-ahorro",terreno:"badge-terreno"};
   document.getElementById("usuarios-list").innerHTML=users.map(u=>`
     <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">
       <div>
@@ -1465,7 +1466,7 @@ function generarTips(stats, rol){
     if(pct === 100)
       tips.unshift("🎉 ¡Todos los certificados están obtenidos! Buen trabajo.");
   }
-  if(rol === "consultor"){
+  if(rol === "ahorro" || rol === "consultor"){
     if(pend > 0)
       tips.unshift(`⏳ Hay ${pend} solicitud${pend>1?"es":""} pendiente${pend>1?"s":""} de atender por Terreno.`);
     if(pct >= 80 && pct < 100)

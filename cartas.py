@@ -5,7 +5,7 @@ Integra con la app de Certificados de Cotizaciones
 import os, json, threading, uuid, tempfile, shutil
 from datetime import datetime
 from flask import (Blueprint, render_template, request, jsonify,
-                   send_file, session, current_app)
+                   send_file, session, current_app, make_response)
 from functools import wraps
 
 cartas_bp = Blueprint("cartas", __name__,
@@ -603,7 +603,9 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 def index():
     from app import get_current_user
     user = get_current_user()
-    return render_template("cartas/index.html", user=user)
+    resp = make_response(render_template("cartas/index.html", user=user))
+    resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    return resp
 
 @cartas_bp.route("/api/subir_excel", methods=["POST"])
 @cartas_login_required

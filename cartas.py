@@ -25,12 +25,22 @@ def set_job(job_id, data):
     _jobs[job_id] = data
 
 # ── Auth helper (reutiliza el de app.py) ──────────────────────────────────────
+def _get_user():
+    from flask import request as _r
+    from database import get_conn
+    token = _r.cookies.get("session_token")
+    if not token: return None
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT u.* FROM sesiones s JOIN usuarios u ON u.id=s.usuario_id WHERE s.token=?",
+            (token,)).fetchone()
+        return dict(row) if row else None
+
 def cartas_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        from app import get_current_user
-        from flask import redirect, url_for
-        user = get_current_user()
+        from flask import redirect
+        user = _get_user()
         if not user:
             return redirect("/login")
         return f(*args, **kwargs)
@@ -603,12 +613,21 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
 @cartas_bp.route("/", strict_slashes=False)
 def index():
-    from app import get_current_user
     from flask import request as _req
-    user = get_current_user()
+    from database import get_conn
+    # Leer sesión directamente
+    token = _req.cookies.get("session_token")
+    user = None
+    if token:
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT u.* FROM sesiones s JOIN usuarios u ON u.id=s.usuario_id WHERE s.token=?",
+                (token,)).fetchone()
+            if row:
+                user = dict(row)
     if not user:
-        cookies = list(_req.cookies.keys())
-        return jsonify({"error": "No autenticado", "cookies_presentes": cookies}), 401
+        from flask import redirect
+        return redirect("/login")
     resp = make_response(render_template("cartas/index.html", user=user))
     resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
     return resp

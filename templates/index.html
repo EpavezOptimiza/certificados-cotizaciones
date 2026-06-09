@@ -1929,39 +1929,8 @@ window.addEventListener("beforeunload", function(){
 </div>
 
 <script>
-let cartasCargadas = false;
 function abrirCartas() {
-  const panel = document.getElementById('cartas-panel');
-  panel.style.display = 'flex';
-  if (!cartasCargadas) {
-    cartasCargadas = true;
-    fetch('/cartas')
-      .then(r => r.text())
-      .then(html => {
-        // Extraer solo el body
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const body = doc.body.innerHTML;
-        const cont = document.getElementById('cartas-content');
-        cont.innerHTML = body;
-        // Ejecutar scripts del contenido cargado
-        cont.querySelectorAll('script').forEach(s => {
-          const ns = document.createElement('script');
-          ns.textContent = s.textContent;
-          document.body.appendChild(ns);
-        });
-        // Cargar estilos
-        doc.querySelectorAll('style').forEach(s => {
-          const ns = document.createElement('style');
-          ns.textContent = s.textContent;
-          document.head.appendChild(ns);
-        });
-      })
-      .catch(e => {
-        document.getElementById('cartas-content').innerHTML = 
-          '<div style="padding:40px;text-align:center;color:#64748b">Error cargando módulo: ' + e.message + '</div>';
-      });
-  }
+  window.location.href = '/cartas';
 }
 function cerrarCartas() {
   document.getElementById('cartas-panel').style.display = 'none';

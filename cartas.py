@@ -29,9 +29,10 @@ def cartas_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         from app import get_current_user
+        from flask import redirect, url_for
         user = get_current_user()
         if not user:
-            return jsonify({"error": "No autenticado"}), 401
+            return redirect("/login")
         return f(*args, **kwargs)
     return decorated
 

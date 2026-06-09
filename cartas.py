@@ -601,11 +601,14 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
 # ── Rutas ─────────────────────────────────────────────────────────────────────
 
-@cartas_bp.route("/")
-@cartas_login_required
+@cartas_bp.route("/", strict_slashes=False)
 def index():
     from app import get_current_user
+    from flask import request as _req
     user = get_current_user()
+    if not user:
+        cookies = list(_req.cookies.keys())
+        return jsonify({"error": "No autenticado", "cookies_presentes": cookies}), 401
     resp = make_response(render_template("cartas/index.html", user=user))
     resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
     return resp

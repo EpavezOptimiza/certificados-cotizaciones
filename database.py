@@ -86,6 +86,12 @@ def init_db():
             mostrar_stats INTEGER DEFAULT 1,
             mostrar_opti  INTEGER DEFAULT 1
         );
+        CREATE TABLE IF NOT EXISTS permisos_modulos (
+            usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            modulo      TEXT NOT NULL,
+            habilitado  INTEGER DEFAULT 1,
+            PRIMARY KEY (usuario_id, modulo)
+        );
         """)
         # Migrar columnas nuevas si no existen
         try:
@@ -141,6 +147,20 @@ def init_db():
             conn.execute("ALTER TABLE usuarios ADD COLUMN clave_cambiada INTEGER DEFAULT 0")
             # Admin ya tiene clave propia por defecto
             conn.execute("UPDATE usuarios SET clave_cambiada=1 WHERE rol='admin'")
+        except: pass
+        try:
+            conn.execute("UPDATE usuarios SET rol='ahorro' WHERE rol='consultor'")
+        except: pass
+        # Crear permisos por defecto para usuarios existentes
+        try:
+            usuarios = conn.execute("SELECT id, rol FROM usuarios").fetchall()
+            for u in usuarios:
+                for modulo in ['certificados', 'cartas']:
+                    try:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO permisos_modulos(usuario_id, modulo, habilitado) VALUES(?,?,?)",
+                            (u['id'], modulo, 1))
+                    except: pass
         except: pass
         # Migrar tabla logs si no existe (para instancias ya existentes)
         try:

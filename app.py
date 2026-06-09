@@ -127,6 +127,43 @@ def login():
         return redirect(url_for("index"))
     return render_template("login.html")
 
+@app.route("/api/permisos/<int:uid>")
+@admin_required
+def get_permisos(uid):
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT modulo, habilitado FROM permisos_modulos WHERE usuario_id=?", (uid,)
+        ).fetchall()
+    return jsonify({"permisos": {r["modulo"]: bool(r["habilitado"]) for r in rows}})
+
+@app.route("/api/permisos/<int:uid>", methods=["POST"])
+@admin_required
+def set_permisos(uid):
+    permisos = request.json.get("permisos", {})
+    with get_conn() as conn:
+        for modulo, habilitado in permisos.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO permisos_modulos(usuario_id, modulo, habilitado) VALUES(?,?,?)",
+                (uid, modulo, 1 if habilitado else 0))
+    return jsonify({"ok": True})
+
+@app.route("/api/mis_permisos")
+@api_login_required
+def mis_permisos():
+    user = get_current_user()
+    # Admin tiene acceso a todo
+    if user["rol"] == "admin":
+        return jsonify({"permisos": {"certificados": True, "cartas": True}})
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT modulo, habilitado FROM permisos_modulos WHERE usuario_id=?", (user["id"],)
+        ).fetchall()
+    permisos = {r["modulo"]: bool(r["habilitado"]) for r in rows}
+    # Si no tiene permisos configurados, dar acceso a certificados por defecto
+    if not permisos:
+        permisos = {"certificados": True, "cartas": False}
+    return jsonify({"permisos": permisos})
+
 @app.route("/api/usuarios_publicos")
 def usuarios_publicos():
     """Retorna lista de usuarios para el login estilo Netflix."""
@@ -335,15 +372,36 @@ def get_usuarios():
 @app.route("/api/usuarios", methods=["POST"])
 @admin_required
 def crear_usuario():
+    import unicodedata
     d = request.json
-    hashed = hash_password(d["password"])
+    nombre   = d.get("nombre","").strip()
+    password = d.get("password","")
+    email    = d.get("email","").strip()
+    rol      = d.get("rol","ahorro")
+    permisos = d.get("permisos", {"certificados": True, "cartas": False})
+    if not nombre or not password:
+        return jsonify({"error":"Faltan campos obligatorios"}), 400
+    # Autogenerar username desde el nombre
+    def slugify(s):
+        s = unicodedata.normalize('NFKD', s).encode('ascii','ignore').decode()
+        parts = s.lower().split()
+        return (parts[0] + '.' + parts[-1]) if len(parts) >= 2 else (parts[0] if parts else 'usuario')
+    hashed = hash_password(password)
     with get_conn() as conn:
+        username = slugify(nombre)
+        base = username; i = 1
+        while conn.execute("SELECT id FROM usuarios WHERE username=?", (username,)).fetchone():
+            username = f"{base}{i}"; i += 1
         try:
             cur = conn.execute(
                 "INSERT INTO usuarios(username,password,password_admin,nombre,email,rol) VALUES(?,?,?,?,?,?)",
-                (d["username"], hashed, hashed,
-                 d["nombre"], d.get("email",""), d["rol"]))
-            return jsonify({"id": cur.lastrowid}), 201
+                (username, hashed, hashed, nombre, email, rol))
+            uid = cur.lastrowid
+            for modulo, habilitado in permisos.items():
+                conn.execute(
+                    "INSERT OR REPLACE INTO permisos_modulos(usuario_id,modulo,habilitado) VALUES(?,?,?)",
+                    (uid, modulo, 1 if habilitado else 0))
+            return jsonify({"ok": True, "username": username, "id": uid}), 201
         except Exception as e:
             return jsonify({"error": str(e)}), 400
 

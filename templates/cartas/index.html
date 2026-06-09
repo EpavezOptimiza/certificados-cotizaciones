@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cartas Previsionales — Optimiza</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
+
+/* Nav */
+.nav{background:#1e3a5f;color:#fff;display:flex;align-items:center;padding:0 20px;height:52px;gap:16px}
+.nav-brand{font-weight:700;font-size:15px;letter-spacing:.3px}
+.nav-sep{opacity:.3}
+.nav-link{color:#cbd5e1;text-decoration:none;font-size:13px;padding:4px 8px;border-radius:4px}
+.nav-link:hover{background:rgba(255,255,255,.1);color:#fff}
+.nav-link.active{color:#fff;background:rgba(255,255,255,.15)}
+.nav-right{margin-left:auto;font-size:12px;color:#94a3b8}
+
+/* Tabs */
+.tabs{background:#fff;border-bottom:1px solid #e2e8f0;display:flex;padding:0 20px;gap:2px}
+.tab{padding:12px 16px;font-size:13px;font-weight:500;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;transition:.2s}
+.tab:hover{color:#1e3a5f}
+.tab.active{color:#2563eb;border-bottom-color:#2563eb}
+
+/* Layout */
+.layout{display:flex;height:calc(100vh - 100px)}
+.sidebar{width:340px;min-width:260px;background:#fff;border-right:1px solid #e2e8f0;display:flex;flex-direction:column;overflow:hidden}
+.main{flex:1;overflow-y:auto;padding:20px}
+
+/* Sidebar */
+.sidebar-header{padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px}
+.sidebar-title{font-weight:600;font-size:13px;color:#374151}
+.badge{background:#2563eb;color:#fff;font-size:11px;padding:2px 7px;border-radius:10px}
+.search-wrap{padding:10px 12px;border-bottom:1px solid #f1f5f9}
+.search-wrap input{width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;outline:none}
+.search-wrap input:focus{border-color:#2563eb}
+.worker-list{flex:1;overflow-y:auto}
+.worker-item{padding:10px 14px;border-bottom:1px solid #f8fafc;cursor:pointer;display:flex;align-items:flex-start;gap:10px;transition:.15s}
+.worker-item:hover{background:#f8fafc}
+.worker-item.selected{background:#eff6ff;border-left:3px solid #2563eb}
+.worker-item.completado{border-left:3px solid #16a34a}
+.worker-check{width:16px;height:16px;margin-top:2px;flex-shrink:0}
+.worker-info{flex:1;min-width:0}
+.worker-name{font-weight:600;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.worker-sub{font-size:11px;color:#64748b;margin-top:2px}
+.worker-status{font-size:11px;padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block}
+.status-pendiente{background:#fef9c3;color:#854d0e}
+.status-completado{background:#dcfce7;color:#166534}
+.status-procesando{background:#dbeafe;color:#1e40af}
+.status-error{background:#fee2e2;color:#991b1b}
+
+/* Cards */
+.card{background:#fff;border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card-title{font-weight:600;font-size:14px;color:#374151;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title-icon{font-size:16px}
+
+/* Form */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group.full{grid-column:1/-1}
+label{font-size:12px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.4px}
+input,select,textarea{padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;font-family:inherit;outline:none;width:100%;color:#1e293b;background:#fff}
+input:focus,select:focus,textarea:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+textarea{resize:vertical;min-height:70px}
+
+/* Periodos */
+.periodos-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.periodo-check{display:flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid #e2e8f0;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;transition:.15s;user-select:none}
+.periodo-check:hover{border-color:#2563eb;color:#2563eb}
+.periodo-check.checked{background:#2563eb;color:#fff;border-color:#2563eb}
+.periodo-check input{display:none}
+
+/* Botones */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:7px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:.2s;text-decoration:none}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-success{background:#16a34a;color:#fff}
+.btn-success:hover{background:#15803d}
+.btn-purple{background:#7c3aed;color:#fff}
+.btn-purple:hover{background:#6d28d9}
+.btn-outline{background:#fff;color:#374151;border:1px solid #e2e8f0}
+.btn-outline:hover{background:#f8fafc}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-danger:hover{background:#b91c1c}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Upload zone */
+.upload-zone{border:2px dashed #e2e8f0;border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:.2s}
+.upload-zone:hover,.upload-zone.drag{border-color:#2563eb;background:#eff6ff}
+.upload-zone-icon{font-size:32px;margin-bottom:8px}
+.upload-zone-text{font-size:13px;color:#64748b}
+.upload-zone-text strong{color:#2563eb}
+
+/* Vista previa carta */
+.carta-preview{font-family:'Times New Roman',serif;font-size:13px;line-height:1.7;padding:30px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;min-height:400px;white-space:pre-wrap}
+
+/* Bot panel */
+.bot-panel{background:#0f172a;border-radius:8px;padding:16px;color:#e2e8f0}
+.bot-log{font-family:monospace;font-size:12px;height:180px;overflow-y:auto;background:#1e293b;border-radius:4px;padding:10px;margin-top:10px;line-height:1.6}
+.bot-log-entry{color:#94a3b8}
+.bot-log-entry.ok{color:#4ade80}
+.bot-log-entry.error{color:#f87171}
+.bot-log-entry.info{color:#60a5fa}
+.bot-progress{display:flex;align-items:center;gap:12px;margin-top:10px}
+.bot-progress-bar{flex:1;height:6px;background:#334155;border-radius:3px;overflow:hidden}
+.bot-progress-fill{height:100%;background:#2563eb;border-radius:3px;transition:width .4s}
+
+/* Credenciales modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;display:none}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:12px;width:420px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal-header{background:#1e3a5f;color:#fff;padding:16px 20px;font-weight:600;font-size:15px}
+.modal-body{padding:20px;display:flex;flex-direction:column;gap:14px}
+.modal-footer{padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px}
+
+/* Tabla estado */
+.tabla-estado{width:100%;border-collapse:collapse;font-size:13px}
+.tabla-estado th{background:#f8fafc;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;color:#374151;border-bottom:2px solid #e2e8f0}
+.tabla-estado td{padding:10px 12px;border-bottom:1px solid #f1f5f9}
+.tabla-estado tr:hover td{background:#f8fafc}
+
+/* Alerts */
+.alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px}
+.alert-info{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+.alert-success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.alert-error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+
+/* Tabs content */
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* Spinner */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+
+/* Responsive */
+@media(max-width:768px){
+.layout{flex-direction:column}
+.sidebar{width:100%;height:220px}
+.form-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <span class="nav-brand">⚡ Optimiza</span>
+  <span class="nav-sep">|</span>
+  <a href="/" class="nav-link">Certificados</a>
+  <a href="/cartas" class="nav-link active">Cartas Previsionales</a>
+  <div class="nav-right">{{ user.nombre }} · {{ user.rol }}</div>
+</nav>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('visor')">📊 Visor Excel</div>
+  <div class="tab" onclick="switchTab('carta')">📝 Datos de la carta</div>
+  <div class="tab" onclick="switchTab('previred')">⚡ Movimiento PreviRed</div>
+  <div class="tab" onclick="switchTab('estado')">✅ Estado</div>
+</div>
+
+<!-- Layout -->
+<div class="layout">
+
+  <!-- Sidebar trabajadores -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Trabajadores</span>
+      <span class="badge" id="badge-total">0</span>
+      <label style="margin-left:auto;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:400">
+        <input type="checkbox" id="check-all" onchange="toggleAll(this)"> Todos
+      </label>
+    </div>
+    <div class="search-wrap">
+      <input type="text" id="search-worker" placeholder="Buscar trabajador o RUT..." oninput="filtrarWorkers()">
+    </div>
+    <div class="worker-list" id="worker-list">
+      <div style="padding:30px;text-align:center;color:#94a3b8;font-size:13px">
+        Sube un Excel para ver los trabajadores
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="main">
+
+    <!-- Tab: Visor Excel -->
+    <div class="tab-content active" id="tab-visor">
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">📂</span> Cargar Excel de Deudas</div>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('input-excel').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDrop(event)">
+          <div class="upload-zone-icon">📊</div>
+          <div class="upload-zone-text"><strong>Click para seleccionar</strong> o arrastra el Excel aquí</div>
+          <div class="upload-zone-text" style="font-size:11px;margin-top:4px">.xlsx — Base de deudas AFP/Isapre</div>
+        </div>
+        <input type="file" id="input-excel" accept=".xlsx,.xls" style="display:none" onchange="subirExcel(this.files[0])">
+        <div id="excel-status" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card" id="card-visor" style="display:none">
+        <div class="card-title"><span class="card-title-icon">📋</span> Datos cargados
+          <span id="visor-total" style="font-size:12px;color:#64748b;font-weight:400"></span>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <input type="text" id="visor-search" placeholder="Buscar..." style="width:200px;font-size:12px;padding:5px 8px"
+                   oninput="filtrarVisor()">
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tabla-estado" id="visor-table">
+            <thead id="visor-thead"></thead>
+            <tbody id="visor-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Carta -->
+    <div class="tab-content" id="tab-carta">
+      <div id="no-worker-msg" class="alert alert-info">
+        Selecciona un trabajador en la lista para editar su carta.
+      </div>
+      <div id="carta-form" style="display:none">
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">👤</span> <span id="carta-worker-name"></span></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Institución</label>
+              <select id="f-inst"></select>
+            </div>
+            <div class="form-group">
+              <label>Mes y año</label>
+              <input type="month" id="f-mes">
+            </div>
+            <div class="form-group">
+              <label>Sistema de Salud</label>
+              <select id="f-salud">
+                <option>FONASA</option><option>Colmena</option><option>Consalud</option>
+                <option>Cruz Blanca</option><option>Nueva Mas Vida</option><option>Esencial</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Causa PreviRed</label>
+              <select id="f-causa">
+                <option>Retiro (Cese trabajador)</option>
+                <option>Otros Movimientos (Ausentismo)</option>
+                <option>Licencia Médica</option>
+                <option>Periodo pagado en otra institución</option>
+                <option>Periodo pagado de forma correcta</option>
+                <option>Cotización voluntaria no descontada</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Fecha de cese</label>
+              <input type="text" id="f-fecha-cese" placeholder="DD/MM/AAAA">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">📅</span> Períodos de deuda</div>
+          <div class="periodos-grid" id="periodos-grid"></div>
+          <div class="form-group" style="margin-top:12px">
+            <label>Períodos adicionales (separados por coma)</label>
+            <input type="text" id="f-periodos-extra" placeholder="Ej: Mar-25, Abr-25"
+                   oninput="agregarPeriodosExtra()">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">✍️</span> Motivo de no pago</div>
+          <div class="btn-group" id="motivos-btns" style="margin-bottom:12px"></div>
+          <div class="form-group">
+            <textarea id="f-motivo" rows="3" placeholder="Motivo de no pago..."></textarea>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">🖊️</span> Firma</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Nombre</label>
+              <input type="text" id="firma-nombre">
+            </div>
+            <div class="form-group">
+              <label>RUT</label>
+              <input type="text" id="firma-rut">
+            </div>
+            <div class="form-group">
+              <label>Cargo</label>
+              <input type="text" id="firma-cargo">
+            </div>
+            <div class="form-group">
+              <label>Correo</label>
+              <input type="email" id="firma-correo">
+            </div>
+            <div class="form-group">
+              <label>Teléfono</label>
+              <input type="text" id="firma-tel">
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="verPreview()">👁 Vista previa</button>
+          <button class="btn btn-success" onclick="generarPDF()">📄 Guardar PDF</button>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="card" id="card-preview" style="display:none;margin-top:16px">
+        <div class="card-title"><span class="card-title-icon">👁</span> Vista previa
+          <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="document.getElementById('card-preview').style.display='none'">✕</button>
+        </div>
+        <div class="carta-preview" id="carta-preview-content"></div>
+      </div>
+    </div>
+
+    <!-- Tab: PreviRed -->
+    <div class="tab-content" id="tab-previred">
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">⚡</span> Movimiento PreviRed</div>
+        <div id="previred-workers-list" style="margin-bottom:16px">
+          <div class="alert alert-info">Selecciona trabajadores en la lista para procesar.</div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="abrirModal()">
+            ▶ Iniciar Bot PreviRed
+          </button>
+        </div>
+      </div>
+
+      <!-- Bot log -->
+      <div class="card" id="bot-panel" style="display:none">
+        <div class="card-title"><span class="card-title-icon">🤖</span> Estado del Bot</div>
+        <div class="bot-panel">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span id="bot-status-label" style="font-size:13px;font-weight:600">Iniciando...</span>
+            <span class="spinner" id="bot-spinner"></span>
+          </div>
+          <div class="bot-progress" id="bot-progress">
+            <span style="font-size:12px;min-width:80px" id="bot-prog-text">0/0</span>
+            <div class="bot-progress-bar"><div class="bot-progress-fill" id="bot-prog-fill" style="width:0%"></div></div>
+          </div>
+          <div class="bot-log" id="bot-log"></div>
+        </div>
+        <div id="bot-resultados" style="margin-top:14px;display:none">
+          <div class="card-title" style="margin-bottom:10px">📥 PDFs generados</div>
+          <div id="bot-pdfs-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Estado -->
+    <div class="tab-content" id="tab-estado">
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">✅</span> Estado de Trabajadores
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="marcarTodosEstado()">☑ Marcar todos</button>
+            <button class="btn btn-success btn-sm" onclick="marcarEnGestion()">✅ Marcar En gestión</button>
+          </div>
+        </div>
+        <table class="tabla-estado">
+          <thead>
+            <tr>
+              <th style="width:36px"><input type="checkbox" id="estado-check-all" onchange="toggleAllEstado(this)"></th>
+              <th>Trabajador</th><th>RUT</th><th>Institución</th><th>Períodos</th><th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="estado-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Modal credenciales PreviRed -->
+<div class="modal-overlay" id="modal-credenciales">
+  <div class="modal">
+    <div class="modal-header">🔐 Credenciales PreviRed</div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="font-size:12px">Tus credenciales no se guardan en el servidor.</div>
+      <div class="form-group">
+        <label>RUT (sin puntos ni guión)</label>
+        <input type="text" id="modal-rut" placeholder="20200699k">
+      </div>
+      <div class="form-group">
+        <label>Clave</label>
+        <input type="password" id="modal-clave">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="iniciarBot()">▶ Iniciar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Estado global ─────────────────────────────────────────────────────────────
+let trabajadores = [];  // [{rut_trabajador, nombre, periodos, ...}]
+let seleccionados = {}; // rut -> {periodos_sel, causa, salud, ...}
+let currentRut = null;
+let jobId = null;
+let jobPoll = null;
+let visorDatos = [];
+let visorCols = [];
+
+const MOTIVOS = [
+  'Trabajador finiquitado con fecha ',
+  'Periodo pagado en otra institucion: ',
+  'Trabajador con licencia medica desde ',
+  'Periodo pagado de forma correcta.',
+  'Cotizacion voluntaria no descontada.',
+  'Trabajador con ausentismo mes completo, sin remuneracion imponible.',
+];
+
+const MESES_MAP = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
+
+function perKey(p) {
+  try {
+    const parts = p.toLowerCase().split('-');
+    const m = MESES_MAP[parts[0].slice(0,3)] || 0;
+    const a = parts[1].length <= 2 ? 2000 + parseInt(parts[1]) : parseInt(parts[1]);
+    return a * 100 + m;
+  } catch { return 0; }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.tab')[['visor','carta','previred','estado'].indexOf(tab)].classList.add('active');
+  if (tab === 'estado') renderEstado();
+  if (tab === 'previred') renderPreviRedWorkers();
+}
+
+// ── Upload Excel ──────────────────────────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) subirExcel(f);
+}
+
+async function subirExcel(file) {
+  if (!file) return;
+  const statusEl = document.getElementById('excel-status');
+  statusEl.innerHTML = '<div class="alert alert-info">⏳ Procesando Excel...</div>';
+  const fd = new FormData();
+  fd.append('excel', file);
+  try {
+    const res = await fetch('/cartas/api/subir_excel', {method:'POST', body:fd});
+    const data = await res.json();
+    if (data.error) { statusEl.innerHTML = `<div class="alert alert-error">❌ ${data.error}</div>`; return; }
+    trabajadores = data.trabajadores;
+    statusEl.innerHTML = `<div class="alert alert-success">✅ ${data.total} trabajadores cargados</div>`;
+    renderSidebar();
+    renderVisor(trabajadores);
+    document.getElementById('card-visor').style.display = '';
+  } catch(e) {
+    statusEl.innerHTML = `<div class="alert alert-error">❌ Error: ${e.message}</div>`;
+  }
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const q = document.getElementById('search-worker').value.toLowerCase();
+  const lista = document.getElementById('worker-list');
+  const filtrados = trabajadores.filter(w =>
+    w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q));
+  document.getElementById('badge-total').textContent = trabajadores.length;
+
+  if (!filtrados.length) {
+    lista.innerHTML = '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">Sin resultados</div>';
+    return;
+  }
+
+  lista.innerHTML = filtrados.map(w => {
+    const sel = seleccionados[w.rut_trabajador];
+    const isSel = currentRut === w.rut_trabajador;
+    const isChecked = sel?.checked;
+    const statusClass = sel?.status === 'completado' ? 'completado' : '';
+    const statusBadge = sel?.status ? `<span class="worker-status status-${sel.status}">${sel.status}</span>` : '';
+    return `<div class="worker-item ${isSel?'selected':''} ${statusClass}"
+               onclick="selectWorker('${w.rut_trabajador}')">
+      <input class="worker-check" type="checkbox" ${isChecked?'checked':''}
+             onclick="event.stopPropagation();toggleWorker('${w.rut_trabajador}', this)">
+      <div class="worker-info">
+        <div class="worker-name">${w.nombre}</div>
+        <div class="worker-sub">${w.rut_trabajador} · ${w.institucion} · ${w.periodos?.length||0} períodos</div>
+        ${statusBadge}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filtrarWorkers() { renderSidebar(); }
+
+function toggleAll(cb) {
+  trabajadores.forEach(w => {
+    if (!seleccionados[w.rut_trabajador]) seleccionados[w.rut_trabajador] = initSel(w);
+    seleccionados[w.rut_trabajador].checked = cb.checked;
+  });
+  renderSidebar();
+}
+
+function toggleWorker(rut, cb) {
+  if (!seleccionados[rut]) seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
+  seleccionados[rut].checked = cb.checked;
+}
+
+function initSel(w) {
+  return {
+    checked: false,
+    periodos_sel: [...(w.periodos||[])],
+    periodos_extra: '',
+    causa: w.causa || 'Otros Movimientos (Ausentismo)',
+    salud: w.salud || 'FONASA',
+    fecha_cese: w.fecha_cese || '',
+    motivo: w.motivo || '',
+    status: null,
+  };
+}
+
+// ── Seleccionar trabajador ────────────────────────────────────────────────────
+function selectWorker(rut) {
+  currentRut = rut;
+  if (!seleccionados[rut]) {
+    seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
+  }
+  renderSidebar();
+  renderCartaForm();
+  switchTab('carta');
+}
+
+function renderCartaForm() {
+  const w = trabajadores.find(t => t.rut_trabajador === currentRut);
+  if (!w) return;
+  const sel = seleccionados[currentRut];
+
+  document.getElementById('no-worker-msg').style.display = 'none';
+  document.getElementById('carta-form').style.display = '';
+  document.getElementById('carta-worker-name').textContent =
+    `${w.nombre}  ·  RUT: ${w.rut_trabajador}  ·  ${w.razon_social||''}`;
+
+  // Instituciones
+  const instEl = document.getElementById('f-inst');
+  instEl.innerHTML = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital',
+    'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC']
+    .map(i => `<option ${w.institucion?.toLowerCase().includes(i.toLowerCase())?'selected':''}>${i}</option>`).join('');
+  if (w.institucion) instEl.value = w.institucion;
+
+  document.getElementById('f-mes').value = w.mes || new Date().toISOString().slice(0,7);
+  document.getElementById('f-salud').value = sel.salud;
+  document.getElementById('f-causa').value = sel.causa;
+  document.getElementById('f-fecha-cese').value = sel.fecha_cese;
+  document.getElementById('f-motivo').value = sel.motivo;
+  document.getElementById('f-periodos-extra').value = sel.periodos_extra || '';
+
+  renderPeriodos(w.periodos || [], sel.periodos_sel);
+  renderMotivos();
+}
+
+function renderPeriodos(todos, seleccionadosList) {
+  const grid = document.getElementById('periodos-grid');
+  grid.innerHTML = todos.map(p => {
+    const checked = seleccionadosList.includes(p);
+    return `<label class="periodo-check ${checked?'checked':''}" onclick="togglePeriodo('${p}', this)">
+      <input type="checkbox" ${checked?'checked':''}>
+      ${p}
+    </label>`;
+  }).join('');
+}
+
+function togglePeriodo(p, el) {
+  if (!currentRut) return;
+  const sel = seleccionados[currentRut];
+  const idx = sel.periodos_sel.indexOf(p);
+  if (idx >= 0) sel.periodos_sel.splice(idx, 1);
+  else sel.periodos_sel.push(p);
+  el.classList.toggle('checked');
+  guardarForm();
+}
+
+let peExtraTimeout = null;
+function agregarPeriodosExtra() {
+  clearTimeout(peExtraTimeout);
+  peExtraTimeout = setTimeout(() => {
+    if (!currentRut) return;
+    const val = document.getElementById('f-periodos-extra').value;
+    seleccionados[currentRut].periodos_extra = val;
+    // Agregar períodos válidos al grid
+    const extras = val.split(',').map(p=>p.trim()).filter(p=>/^[a-zA-Z]{3}-\d{2,4}$/.test(p));
+    const w = trabajadores.find(t=>t.rut_trabajador===currentRut);
+    const todosPer = [...new Set([...(w.periodos||[]), ...extras])].sort((a,b)=>perKey(a)-perKey(b));
+    renderPeriodos(todosPer, seleccionados[currentRut].periodos_sel);
+    guardarForm();
+  }, 600);
+}
+
+function renderMotivos() {
+  const cont = document.getElementById('motivos-btns');
+  cont.innerHTML = MOTIVOS.map(m => {
+    const short = m.length > 35 ? m.slice(0,35)+'...' : m;
+    return `<button class="btn btn-outline btn-sm" onclick="setMotivo('${m}')">${short}</button>`;
+  }).join('');
+}
+
+function setMotivo(m) {
+  document.getElementById('f-motivo').value = m;
+  guardarForm();
+}
+
+function guardarForm() {
+  if (!currentRut || !seleccionados[currentRut]) return;
+  const sel = seleccionados[currentRut];
+  sel.causa = document.getElementById('f-causa').value;
+  sel.salud = document.getElementById('f-salud').value;
+  sel.fecha_cese = document.getElementById('f-fecha-cese').value;
+  sel.motivo = document.getElementById('f-motivo').value;
+  sel.periodos_extra = document.getElementById('f-periodos-extra').value;
+}
+
+// ── Vista previa ──────────────────────────────────────────────────────────────
+function verPreview() {
+  guardarForm();
+  const w = trabajadores.find(t=>t.rut_trabajador===currentRut);
+  const sel = seleccionados[currentRut];
+  if (!w || !sel) return;
+
+  const extras = (sel.periodos_extra||'').split(',').map(p=>p.trim()).filter(Boolean);
+  const todos = [...new Set([...sel.periodos_sel, ...extras])].sort((a,b)=>perKey(a)-perKey(b));
+  const periodoTxt = todos.length === 0 ? '[PERIODO]' :
+    todos.length === 1 ? todos[0] : `${todos[0]} hasta ${todos[todos.length-1]}`;
+
+  const mes = document.getElementById('f-mes').value || '';
+  const [anio, mesN] = mes.split('-');
+  const MESES_ES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const fechaTxt = `Santiago, ${MESES_ES[parseInt(mesN)]||''} ${anio||''}`;
+  const inst = document.getElementById('f-inst').value;
+  const motivo = sel.motivo || '[MOTIVO]';
+  const fechaCese = sel.fecha_cese ? ' ' + sel.fecha_cese : '';
+
+  const preview = `${fechaTxt}
+
+Senores:
+${inst}.
+Presente. -
+
+Me dirijo a ustedes en representacion de la empresa ${w.razon_social||''}. Rut: ${w.rut_empresa||''}, a fin de informar a ustedes lo siguiente:
+
+NOMBRE: ${w.nombre.toUpperCase()}
+RUT: ${w.rut_trabajador}.
+TIPO DE PRODUCTO: ${w.tipo||''}.
+PERIODO DE DEUDA: ${periodoTxt}.
+MOTIVO DE NO PAGO: ${motivo}${fechaCese}
+
+
+Les saluda atentamente,
+
+_______________________________
+Nombre: ${document.getElementById('firma-nombre').value}
+Rut: ${document.getElementById('firma-rut').value}
+Cargo: ${document.getElementById('firma-cargo').value}
+Correo: ${document.getElementById('firma-correo').value}
+Tel: ${document.getElementById('firma-tel').value}`;
+
+  document.getElementById('carta-preview-content').textContent = preview;
+  document.getElementById('card-preview').style.display = '';
+  document.getElementById('card-preview').scrollIntoView({behavior:'smooth'});
+}
+
+// ── Generar PDF carta ─────────────────────────────────────────────────────────
+async function generarPDF() {
+  guardarForm();
+  const w = trabajadores.find(t=>t.rut_trabajador===currentRut);
+  const sel = seleccionados[currentRut];
+  if (!w || !sel) return;
+
+  const carta = {
+    ...w,
+    periodos_sel: sel.periodos_sel,
+    periodos_extra: sel.periodos_extra,
+    motivo: sel.motivo,
+    fecha_cese: sel.fecha_cese,
+    mes: document.getElementById('f-mes').value,
+    institucion: document.getElementById('f-inst').value,
+  };
+  const firma = {
+    nombre: document.getElementById('firma-nombre').value,
+    rut: document.getElementById('firma-rut').value,
+    cargo: document.getElementById('firma-cargo').value,
+    correo: document.getElementById('firma-correo').value,
+    tel: document.getElementById('firma-tel').value,
+  };
+
+  const btn = event.target;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generando...';
+
+  try {
+    const res = await fetch('/cartas/api/generar_carta', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({carta, firma})
+    });
+    const data = await res.json();
+    if (data.error) { alert('Error: ' + data.error); return; }
+    // Descargar
+    window.location.href = `/cartas/api/descargar/${data.filename}`;
+    sel.status = 'completado';
+    renderSidebar();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '📄 Guardar PDF';
+  }
+}
+
+// ── PreviRed ──────────────────────────────────────────────────────────────────
+function renderPreviRedWorkers() {
+  const cont = document.getElementById('previred-workers-list');
+  const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
+  if (!marcados.length) {
+    cont.innerHTML = '<div class="alert alert-info">Selecciona trabajadores en la lista lateral para procesar.</div>';
+    return;
+  }
+  cont.innerHTML = `<div class="alert alert-info">
+    ${marcados.length} trabajador(es) seleccionado(s): ${marcados.map(w=>w.nombre.split(' ')[0]).join(', ')}
+  </div>
+  <table class="tabla-estado">
+    <thead><tr><th>Trabajador</th><th>RUT</th><th>AFP</th><th>Causa</th><th>Períodos</th></tr></thead>
+    <tbody>${marcados.map(w => {
+      const sel = seleccionados[w.rut_trabajador] || {};
+      return `<tr>
+        <td>${w.nombre}</td><td>${w.rut_trabajador}</td>
+        <td>${w.institucion}</td><td>${sel.causa||''}</td>
+        <td>${(sel.periodos_sel||w.periodos||[]).join(', ')}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function abrirModal() {
+  const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
+  if (!marcados.length) { alert('Selecciona al menos un trabajador.'); return; }
+  document.getElementById('modal-credenciales').classList.add('show');
+}
+
+function cerrarModal() {
+  document.getElementById('modal-credenciales').classList.remove('show');
+}
+
+async function iniciarBot() {
+  const rut = document.getElementById('modal-rut').value.trim();
+  const clave = document.getElementById('modal-clave').value;
+  if (!rut || !clave) { alert('Ingresa RUT y clave.'); return; }
+
+  const workers = trabajadores
+    .filter(w => seleccionados[w.rut_trabajador]?.checked)
+    .map(w => ({
+      ...w,
+      ...seleccionados[w.rut_trabajador],
+      periodos_sel: seleccionados[w.rut_trabajador]?.periodos_sel || w.periodos || [],
+    }));
+
+  const firma = {
+    nombre: document.getElementById('firma-nombre').value,
+    rut: document.getElementById('firma-rut').value,
+    cargo: document.getElementById('firma-cargo').value,
+    correo: document.getElementById('firma-correo').value,
+    tel: document.getElementById('firma-tel').value,
+  };
+
+  cerrarModal();
+  document.getElementById('bot-panel').style.display = '';
+
+  const res = await fetch('/cartas/api/iniciar_bot', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({rut_login:rut, clave, workers, firma})
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  jobId = data.job_id;
+
+  // Polling
+  jobPoll = setInterval(pollBot, 2000);
+}
+
+async function pollBot() {
+  if (!jobId) return;
+  const res = await fetch(`/cartas/api/estado_bot/${jobId}`);
+  const data = await res.json();
+
+  // Log
+  const logEl = document.getElementById('bot-log');
+  logEl.innerHTML = data.log.map(l => {
+    const cls = l.startsWith('✅') ? 'ok' : l.startsWith('⚠') || l.startsWith('Error') ? 'error' : 'info';
+    return `<div class="bot-log-entry ${cls}">${l}</div>`;
+  }).join('');
+  logEl.scrollTop = logEl.scrollHeight;
+
+  // Status
+  if (data.status === 'done') {
+    clearInterval(jobPoll);
+    document.getElementById('bot-status-label').textContent = '✅ Completado';
+    document.getElementById('bot-spinner').style.display = 'none';
+    document.getElementById('bot-prog-fill').style.width = '100%';
+    mostrarPDFs(data.resultados);
+    // Actualizar estado
+    Object.keys(data.resultados).forEach(rut => {
+      if (seleccionados[rut]) seleccionados[rut].status = 'completado';
+    });
+    renderSidebar();
+  } else if (data.status === 'error') {
+    clearInterval(jobPoll);
+    document.getElementById('bot-status-label').textContent = '❌ Error: ' + (data.error||'');
+    document.getElementById('bot-spinner').style.display = 'none';
+  }
+}
+
+function mostrarPDFs(resultados) {
+  const cont = document.getElementById('bot-pdfs-list');
+  const pdfs = Object.entries(resultados).filter(([,v]) => v.endsWith('.pdf'));
+  if (!pdfs.length) { cont.innerHTML = '<div class="alert alert-info">Sin PDFs generados.</div>'; return; }
+  cont.innerHTML = pdfs.map(([rut, fname]) =>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="font-size:13px">📄 ${fname}</span>
+      <a href="/cartas/api/descargar/${fname}" class="btn btn-outline btn-sm">⬇ Descargar</a>
+    </div>`).join('');
+  document.getElementById('bot-resultados').style.display = '';
+}
+
+// ── Visor Excel ───────────────────────────────────────────────────────────────
+function renderVisor(datos) {
+  if (!datos.length) return;
+  visorDatos = datos;
+  const cols = Object.keys(datos[0]);
+  visorCols = cols;
+  const NOMBRES = {
+    rut_empresa:'Rut Empresa', razon_social:'Razón Social',
+    rut_trabajador:'Rut Trabajador', nombre:'Nombre',
+    tipo:'Tipo Producto', institucion:'Institución',
+    periodo:'Período', monto_nominal:'Monto Nominal',
+    monto_interes:'Monto Interés', fee:'Fee%',
+    fecha_cese:'Fecha Cese', analisis:'Análisis',
+    motivo:'Motivos Deuda', tipo_documento:'Tipo Documento',
+    estatus:'Estatus', observaciones:'Observaciones',
+  };
+
+  document.getElementById('visor-thead').innerHTML =
+    '<tr>' + cols.map(c => `<th>${NOMBRES[c]||c}</th>`).join('') + '</tr>';
+  document.getElementById('visor-total').textContent = `— ${datos.length} registros`;
+  renderVisorRows(datos);
+}
+
+function renderVisorRows(datos) {
+  document.getElementById('visor-tbody').innerHTML = datos.map(d =>
+    '<tr>' + visorCols.map(c => `<td>${d[c]||''}</td>`).join('') + '</tr>'
+  ).join('');
+}
+
+function filtrarVisor() {
+  const q = document.getElementById('visor-search').value.toLowerCase();
+  if (!q) { renderVisorRows(visorDatos); return; }
+  renderVisorRows(visorDatos.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(q))));
+}
+
+// ── Estado ────────────────────────────────────────────────────────────────────
+function renderEstado() {
+  const tbody = document.getElementById('estado-tbody');
+  tbody.innerHTML = trabajadores.map(w => {
+    const sel = seleccionados[w.rut_trabajador] || {};
+    return `<tr>
+      <td><input type="checkbox" class="estado-check" data-rut="${w.rut_trabajador}" ${sel.estadoCheck?'checked':''}></td>
+      <td>${w.nombre}</td><td>${w.rut_trabajador}</td>
+      <td>${w.institucion}</td>
+      <td>${(w.periodos||[]).slice(0,3).join(', ')}${w.periodos?.length>3?'...':''}</td>
+      <td><span class="worker-status status-${sel.status||'pendiente'}">${sel.status||'Pendiente'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleAllEstado(cb) {
+  document.querySelectorAll('.estado-check').forEach(el => el.checked = cb.checked);
+}
+
+function marcarTodosEstado() {
+  document.querySelectorAll('.estado-check').forEach(el => el.checked = true);
+}
+
+async function marcarEnGestion() {
+  const ruts = [...document.querySelectorAll('.estado-check:checked')].map(el => el.dataset.rut);
+  if (!ruts.length) { alert('Selecciona al menos un trabajador.'); return; }
+  ruts.forEach(rut => { if (seleccionados[rut]) seleccionados[rut].status = 'completado'; });
+  renderEstado();
+  renderSidebar();
+  alert(`${ruts.length} trabajador(es) marcados como "En gestión".`);
+}
+
+// Guardar form al cambiar inputs
+document.addEventListener('change', e => {
+  if (['f-causa','f-salud','f-fecha-cese','f-motivo'].includes(e.target.id)) guardarForm();
+});
+</script>
+
+</body>
+</html>

@@ -6,57 +6,175 @@
 <title>Certificados — Iniciar sesión</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.card{background:#ffffff;border-radius:12px;padding:40px;width:min(400px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.4)}
-.logo{text-align:center;margin-bottom:28px}
-.logo h1{font-size:22px;font-weight:700;color:#0f172a;margin-top:8px}
-.logo p{font-size:13px;color:#64748b;margin-top:4px}
-label{font-size:12px;color:#64748b;display:block;margin-bottom:4px;margin-top:14px}
-input{width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;color:#0f172a;outline:none;transition:border .15s}
-input:focus{border-color:#2563eb}
-.btn{width:100%;padding:11px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;margin-top:20px;transition:background .15s}
-.btn:hover{background:#1d4ed8}
-.error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;padding:10px 12px;font-size:13px;margin-top:12px;display:none}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0a0f;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+
+/* Fondo con gradiente animado */
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(124,58,237,.15) 0%,transparent 50%),radial-gradient(ellipse at 80% 20%,rgba(37,99,235,.1) 0%,transparent 50%),radial-gradient(ellipse at 50% 80%,rgba(16,185,129,.08) 0%,transparent 50%);z-index:0;pointer-events:none}
+
+.container{position:relative;z-index:1;text-align:center;padding:20px}
+
+.logo{margin-bottom:48px}
+.logo-icon{font-size:48px;margin-bottom:12px;display:block}
+.logo h1{font-size:28px;font-weight:700;color:#fff;letter-spacing:-.5px}
+.logo p{font-size:14px;color:#64748b;margin-top:6px}
+
+/* Grid de usuarios */
+.users-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:24px;margin-bottom:48px;max-width:700px}
+
+.user-card{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px;border-radius:12px;transition:all .2s;position:relative}
+.user-card:hover{transform:translateY(-6px)}
+.user-card:hover .user-avatar{box-shadow:0 0 0 4px var(--glow-color), 0 0 30px var(--glow-color)}
+.user-card:hover .user-name{color:#fff}
+
+.user-avatar{width:88px;height:88px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:#fff;position:relative;transition:all .2s;box-shadow:0 0 0 2px rgba(255,255,255,.1)}
+.user-name{font-size:14px;font-weight:500;color:#94a3b8;transition:color .2s;white-space:nowrap}
+.user-role-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* Colores por rol */
+.rol-admin    {--glow-color:#f59e0b;--badge-bg:rgba(245,158,11,.15);--badge-color:#f59e0b;--avatar-bg:linear-gradient(135deg,#d97706,#f59e0b)}
+.rol-terreno  {--glow-color:#7c3aed;--badge-bg:rgba(124,58,237,.15);--badge-color:#a78bfa;--avatar-bg:linear-gradient(135deg,#6d28d9,#7c3aed)}
+.rol-ahorro   {--glow-color:#10b981;--badge-bg:rgba(16,185,129,.15);--badge-color:#34d399;--avatar-bg:linear-gradient(135deg,#059669,#10b981)}
+.rol-consultor{--glow-color:#10b981;--badge-bg:rgba(16,185,129,.15);--badge-color:#34d399;--avatar-bg:linear-gradient(135deg,#059669,#10b981)}
+.rol-ingreso  {--glow-color:#ef4444;--badge-bg:rgba(239,68,68,.15);--badge-color:#f87171;--avatar-bg:linear-gradient(135deg,#dc2626,#ef4444)}
+
+.user-avatar{background:var(--avatar-bg)}
+.user-role-badge{background:var(--badge-bg);color:var(--badge-color)}
+
+/* Panel de contraseña */
+.pass-panel{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center}
+.pass-panel.show{display:flex}
+.pass-card{background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:36px;width:min(380px,90vw);text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.pass-avatar-big{width:96px;height:96px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:700;color:#fff;margin:0 auto 14px}
+.pass-name{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px}
+.pass-role{font-size:12px;margin-bottom:24px}
+.pass-input{width:100%;padding:12px 14px;background:#1e293b;border:1px solid #334155;border-radius:8px;font-size:15px;color:#fff;outline:none;text-align:center;letter-spacing:2px;transition:border .15s}
+.pass-input:focus{border-color:#2563eb}
+.pass-btn{width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-top:14px;transition:background .15s}
+.pass-btn:hover{background:#1d4ed8}
+.pass-cancel{margin-top:12px;color:#64748b;font-size:13px;cursor:pointer;background:none;border:none;width:100%}
+.pass-cancel:hover{color:#94a3b8}
+.error-msg{background:#450a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:6px;padding:10px;font-size:13px;margin-top:10px;display:none}
+
+.loading{color:#64748b;font-size:13px;margin-top:16px;display:none}
 </style>
 </head>
 <body>
-<div class="card">
+
+<div class="container">
   <div class="logo">
-    <div style="font-size:36px">📋</div>
+    <span class="logo-icon">📋</span>
     <h1>Certificados de Cotizaciones</h1>
-    <p>Inicia sesión para continuar</p>
+    <p>¿Quién eres?</p>
   </div>
-  <label>Usuario</label>
-  <input type="text" id="username" placeholder="Ingresa tu usuario" autocomplete="username">
-  <label>Contraseña</label>
-  <input type="password" id="password" placeholder="Ingresa tu contraseña" autocomplete="current-password">
-  <div class="error" id="error-msg"></div>
-  <button class="btn" onclick="login()">Entrar</button>
+
+  <div class="users-grid" id="users-grid">
+    <!-- Se carga dinámicamente -->
+    <div style="color:#64748b;font-size:13px">Cargando usuarios...</div>
+  </div>
 </div>
+
+<!-- Panel contraseña -->
+<div class="pass-panel" id="pass-panel">
+  <div class="pass-card">
+    <div class="pass-avatar-big" id="pass-avatar"></div>
+    <div class="pass-name" id="pass-name"></div>
+    <div class="pass-role user-role-badge" id="pass-role"></div>
+    <input type="password" class="pass-input" id="pass-input" placeholder="Contraseña" autocomplete="current-password">
+    <div class="error-msg" id="error-msg"></div>
+    <button class="pass-btn" onclick="doLogin()">Entrar</button>
+    <button class="pass-cancel" onclick="cerrarPanel()">← Volver</button>
+  </div>
+</div>
+
 <script>
-document.addEventListener("keydown", e => { if(e.key==="Enter") login(); });
-async function login(){
-  const username = document.getElementById("username").value.trim();
-  const password = document.getElementById("password").value;
-  const errEl    = document.getElementById("error-msg");
-  errEl.style.display = "none";
-  if(!username || !password){
-    errEl.textContent = "Ingresa usuario y contraseña.";
-    errEl.style.display = "block"; return;
-  }
-  const r = await fetch("/login", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({username, password})
-  });
-  const d = await r.json();
-  if(r.ok){
-    window.location.href = "/";
-  } else {
-    errEl.textContent = d.error || "Error al iniciar sesión.";
-    errEl.style.display = "block";
+const COLORES = ['#2563eb','#7c3aed','#db2777','#ea580c','#16a34a','#0891b2','#dc2626','#9333ea','#0284c7','#ca8a04'];
+let usuarioActual = null;
+
+const ROL_LABELS = {admin:'Admin', terreno:'Terreno', ahorro:'Ahorro', consultor:'Ahorro', ingreso:'Ingreso'};
+
+async function cargarUsuarios() {
+  try {
+    const r = await fetch('/api/usuarios_publicos');
+    const data = await r.json();
+    renderUsuarios(data.usuarios || []);
+  } catch(e) {
+    document.getElementById('users-grid').innerHTML =
+      '<div style="color:#ef4444;font-size:13px">Error cargando usuarios</div>';
   }
 }
+
+function renderUsuarios(usuarios) {
+  const grid = document.getElementById('users-grid');
+  if (!usuarios.length) {
+    grid.innerHTML = '<div style="color:#64748b">Sin usuarios</div>';
+    return;
+  }
+  grid.innerHTML = usuarios.map((u, i) => {
+    const inicial = (u.nombre || u.username || '?')[0].toUpperCase();
+    const rol = u.rol || 'terreno';
+    const rolLabel = ROL_LABELS[rol] || rol;
+    const color = COLORES[i % COLORES.length];
+    return `<div class="user-card rol-${rol}" onclick="seleccionarUsuario('${u.username}','${u.nombre||u.username}','${rol}','${inicial}',${i})">
+      <div class="user-avatar" style="background:var(--avatar-bg)">${inicial}</div>
+      <div class="user-name">${u.nombre || u.username}</div>
+      <div class="user-role-badge">${rolLabel}</div>
+    </div>`;
+  }).join('');
+}
+
+function seleccionarUsuario(username, nombre, rol, inicial, idx) {
+  usuarioActual = username;
+  const rolLabel = ROL_LABELS[rol] || rol;
+
+  const av = document.getElementById('pass-avatar');
+  av.textContent = inicial;
+  av.className = `pass-avatar-big rol-${rol}`;
+  av.style.background = `var(--avatar-bg)`;
+
+  document.getElementById('pass-name').textContent = nombre;
+  const roleEl = document.getElementById('pass-role');
+  roleEl.textContent = rolLabel;
+  roleEl.className = `pass-role user-role-badge rol-${rol}`;
+
+  document.getElementById('pass-input').value = '';
+  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('pass-panel').classList.add('show');
+  setTimeout(() => document.getElementById('pass-input').focus(), 100);
+}
+
+function cerrarPanel() {
+  document.getElementById('pass-panel').classList.remove('show');
+  usuarioActual = null;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && usuarioActual) doLogin();
+  if (e.key === 'Escape') cerrarPanel();
+});
+
+async function doLogin() {
+  const password = document.getElementById('pass-input').value;
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  if (!password) { errEl.textContent = 'Ingresa tu contraseña.'; errEl.style.display = 'block'; return; }
+
+  const r = await fetch('/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: usuarioActual, password})
+  });
+  const d = await r.json();
+  if (r.ok) {
+    window.location.href = '/';
+  } else {
+    errEl.textContent = d.error || 'Contraseña incorrecta.';
+    errEl.style.display = 'block';
+    document.getElementById('pass-input').value = '';
+    document.getElementById('pass-input').focus();
+  }
+}
+
+cargarUsuarios();
 </script>
 </body>
 </html>

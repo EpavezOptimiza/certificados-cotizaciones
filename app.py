@@ -15,11 +15,6 @@ DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "adjuntos"))
 ADJUNTOS = DATA_DIR
 os.makedirs(ADJUNTOS, exist_ok=True)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
-app.config["DATA_DIR"] = DATA_DIR
-
-# Módulo Cartas Previsionales
-from cartas import cartas_bp
-app.register_blueprint(cartas_bp)
 
 EXCEL_URL = "https://docs.google.com/spreadsheets/d/1xNA3CS_WX4KeOc4vRizCUC5rpNoTmCGmswpOjWK9VjI/gviz/tq?tqx=out:csv"
 _empresa_cache = None
@@ -126,6 +121,15 @@ def login():
     if get_current_user():
         return redirect(url_for("index"))
     return render_template("login.html")
+
+@app.route("/api/usuarios_publicos")
+def usuarios_publicos():
+    """Retorna lista de usuarios para el login estilo Netflix."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT username, nombre, rol FROM usuarios ORDER BY nombre"
+        ).fetchall()
+    return jsonify({"usuarios": [dict(r) for r in rows]})
 
 @app.route("/login", methods=["POST"])
 def do_login():
@@ -438,7 +442,7 @@ def editar_grupo(gid):
 @api_login_required
 def eliminar_grupo(gid):
     user = get_current_user()
-    if user["rol"] not in ("admin","consultor"):
+    if user["rol"] not in ("admin","ahorro"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         conn.execute("DELETE FROM grupos WHERE id=?", (gid,))
@@ -529,7 +533,7 @@ def editar_empresa(eid):
 @api_login_required
 def eliminar_empresa(eid):
     user = get_current_user()
-    if user["rol"] not in ("admin","consultor"):
+    if user["rol"] not in ("admin","ahorro"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         conn.execute("DELETE FROM empresas WHERE id=?", (eid,))
@@ -589,7 +593,7 @@ def eliminar_cert(cid):
 def upload_adjunto(cid):
     user = get_current_user()
     # Consultor y Admin también pueden subir adjuntos
-    if user["rol"] not in ("admin", "consultor", "terreno"):
+    if user["rol"] not in ("admin", "ahorro", "terreno"):
         return jsonify({"error": "Sin permisos"}), 403
     f = request.files.get("file")
     if not f: return jsonify({"error":"No file"}), 400
@@ -611,7 +615,7 @@ def ver_adjunto(fname):
 def mover_generacion_cert(cid):
     """Mueve un certificado Posterior a Inicial, eliminando el Inicial anterior de la misma institución."""
     user = get_current_user()
-    if user["rol"] not in ("admin", "consultor"):
+    if user["rol"] not in ("admin", "ahorro"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         cert = conn.execute("SELECT * FROM certificados WHERE id=?", (cid,)).fetchone()
@@ -635,7 +639,7 @@ def mover_generacion_cert(cid):
 def mover_generacion_empresa(eid):
     """Mueve TODOS los Posteriores de una empresa a Iniciales, eliminando los Iniciales anteriores."""
     user = get_current_user()
-    if user["rol"] not in ("admin", "consultor"):
+    if user["rol"] not in ("admin", "ahorro"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         posteriores = conn.execute(
@@ -660,7 +664,7 @@ def mover_generacion_empresa(eid):
 def get_solicitudes():
     user = get_current_user()
     with get_conn() as conn:
-        if user["rol"] == "consultor":
+        if user["rol"] == "ahorro":
             rows = conn.execute("""
                 SELECT s.*,
                        COALESCE(e.nombre, JSON_EXTRACT(s.empresa_excel,'$.nombre'), '—') as empresa_nombre,
@@ -692,7 +696,7 @@ def get_solicitudes():
 def crear_solicitud():
     try:
         user = get_current_user()
-        if user["rol"] not in ("admin","consultor"):
+        if user["rol"] not in ("admin","ahorro"):
             return jsonify({"error": "Sin permisos"}), 403
         d = request.json
 

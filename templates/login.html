@@ -3,73 +3,140 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Certificados — Iniciar sesión</title>
+<title>Optimiza — Iniciar sesión</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0a0f;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#080b12;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
 
-/* Fondo con gradiente animado */
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(124,58,237,.15) 0%,transparent 50%),radial-gradient(ellipse at 80% 20%,rgba(37,99,235,.1) 0%,transparent 50%),radial-gradient(ellipse at 50% 80%,rgba(16,185,129,.08) 0%,transparent 50%);z-index:0;pointer-events:none}
+/* Fondo con colores del logo Optimiza */
+body::before{content:'';position:fixed;inset:0;
+  background:
+    radial-gradient(ellipse at 15% 40%, rgba(45,212,191,.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 20%, rgba(192,38,211,.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 90%, rgba(45,212,191,.08) 0%, transparent 45%),
+    radial-gradient(ellipse at 70% 70%, rgba(192,38,211,.1) 0%, transparent 40%);
+  z-index:0;pointer-events:none;animation:pulse 8s ease-in-out infinite alternate}
 
-.container{position:relative;z-index:1;text-align:center;padding:20px}
+@keyframes pulse{
+  0%{opacity:.8}
+  100%{opacity:1}
+}
 
-.logo{margin-bottom:48px}
-.logo-icon{font-size:48px;margin-bottom:12px;display:block}
-.logo h1{font-size:28px;font-weight:700;color:#fff;letter-spacing:-.5px}
-.logo p{font-size:14px;color:#64748b;margin-top:6px}
+/* Partículas decorativas */
+body::after{content:'';position:fixed;inset:0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(45,212,191,.15) 1px, transparent 0);
+  background-size:40px 40px;z-index:0;pointer-events:none;opacity:.4}
 
-/* Grid de usuarios */
-.users-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:24px;margin-bottom:48px;max-width:700px}
+.container{position:relative;z-index:1;text-align:center;padding:20px;width:100%}
 
-.user-card{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px;border-radius:12px;transition:all .2s;position:relative}
-.user-card:hover{transform:translateY(-6px)}
-.user-card:hover .user-avatar{box-shadow:0 0 0 4px var(--glow-color), 0 0 30px var(--glow-color)}
+/* Logo */
+.logo{margin-bottom:44px}
+.logo img{height:60px;object-fit:contain;filter:drop-shadow(0 0 20px rgba(45,212,191,.3))}
+.logo p{font-size:14px;color:#64748b;margin-top:14px;letter-spacing:.3px}
+
+/* Grid usuarios */
+.users-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:28px;margin-bottom:44px;max-width:720px;margin-left:auto;margin-right:auto}
+
+.user-card{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px;border-radius:14px;transition:all .25s;position:relative}
+.user-card:hover{transform:translateY(-8px)}
+.user-card:hover .user-avatar{box-shadow:0 0 0 3px var(--glow-color), 0 0 40px var(--glow-color), 0 8px 30px rgba(0,0,0,.4)}
 .user-card:hover .user-name{color:#fff}
 
-.user-avatar{width:88px;height:88px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:#fff;position:relative;transition:all .2s;box-shadow:0 0 0 2px rgba(255,255,255,.1)}
-.user-name{font-size:14px;font-weight:500;color:#94a3b8;transition:color .2s;white-space:nowrap}
-.user-role-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+/* Avatar CIRCULAR */
+.user-avatar{
+  width:92px;height:92px;
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:36px;font-weight:700;color:#fff;
+  background:var(--avatar-bg);
+  box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 4px 20px rgba(0,0,0,.3);
+  transition:all .25s;
+  position:relative;
+}
+
+/* Marco de luz según rol */
+.user-avatar::after{
+  content:'';position:absolute;inset:-3px;
+  border-radius:50%;
+  background:transparent;
+  border:2px solid var(--glow-color);
+  opacity:.5;
+  transition:opacity .25s;
+}
+.user-card:hover .user-avatar::after{opacity:1}
+
+.user-name{font-size:13px;font-weight:500;color:#94a3b8;transition:color .2s;white-space:nowrap}
+.user-role-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;background:var(--badge-bg);color:var(--badge-color)}
 
 /* Colores por rol */
-.rol-admin    {--glow-color:#f59e0b;--badge-bg:rgba(245,158,11,.15);--badge-color:#f59e0b;--avatar-bg:linear-gradient(135deg,#d97706,#f59e0b)}
-.rol-terreno  {--glow-color:#7c3aed;--badge-bg:rgba(124,58,237,.15);--badge-color:#a78bfa;--avatar-bg:linear-gradient(135deg,#6d28d9,#7c3aed)}
-.rol-ahorro   {--glow-color:#10b981;--badge-bg:rgba(16,185,129,.15);--badge-color:#34d399;--avatar-bg:linear-gradient(135deg,#059669,#10b981)}
-.rol-consultor{--glow-color:#10b981;--badge-bg:rgba(16,185,129,.15);--badge-color:#34d399;--avatar-bg:linear-gradient(135deg,#059669,#10b981)}
-.rol-ingreso  {--glow-color:#ef4444;--badge-bg:rgba(239,68,68,.15);--badge-color:#f87171;--avatar-bg:linear-gradient(135deg,#dc2626,#ef4444)}
+.rol-admin    {--glow-color:#f59e0b;--badge-bg:rgba(245,158,11,.15);--badge-color:#fbbf24;--avatar-bg:linear-gradient(135deg,#d97706,#f59e0b)}
+.rol-terreno  {--glow-color:#a78bfa;--badge-bg:rgba(167,139,250,.15);--badge-color:#a78bfa;--avatar-bg:linear-gradient(135deg,#6d28d9,#8b5cf6)}
+.rol-ahorro   {--glow-color:#2dd4bf;--badge-bg:rgba(45,212,191,.15);--badge-color:#2dd4bf;--avatar-bg:linear-gradient(135deg,#0d9488,#2dd4bf)}
+.rol-consultor{--glow-color:#2dd4bf;--badge-bg:rgba(45,212,191,.15);--badge-color:#2dd4bf;--avatar-bg:linear-gradient(135deg,#0d9488,#2dd4bf)}
+.rol-ingreso  {--glow-color:#f87171;--badge-bg:rgba(248,113,113,.15);--badge-color:#f87171;--avatar-bg:linear-gradient(135deg,#b91c1c,#ef4444)}
 
-.user-avatar{background:var(--avatar-bg)}
-.user-role-badge{background:var(--badge-bg);color:var(--badge-color)}
-
-/* Panel de contraseña */
-.pass-panel{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center}
+/* Panel contraseña */
+.pass-panel{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.8);backdrop-filter:blur(12px);align-items:center;justify-content:center}
 .pass-panel.show{display:flex}
-.pass-card{background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:36px;width:min(380px,90vw);text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6)}
-.pass-avatar-big{width:96px;height:96px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:700;color:#fff;margin:0 auto 14px}
-.pass-name{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px}
-.pass-role{font-size:12px;margin-bottom:24px}
-.pass-input{width:100%;padding:12px 14px;background:#1e293b;border:1px solid #334155;border-radius:8px;font-size:15px;color:#fff;outline:none;text-align:center;letter-spacing:2px;transition:border .15s}
-.pass-input:focus{border-color:#2563eb}
-.pass-btn{width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-top:14px;transition:background .15s}
-.pass-btn:hover{background:#1d4ed8}
-.pass-cancel{margin-top:12px;color:#64748b;font-size:13px;cursor:pointer;background:none;border:none;width:100%}
-.pass-cancel:hover{color:#94a3b8}
-.error-msg{background:#450a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:6px;padding:10px;font-size:13px;margin-top:10px;display:none}
 
-.loading{color:#64748b;font-size:13px;margin-top:16px;display:none}
+.pass-card{
+  background:rgba(15,23,42,.95);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;padding:36px 32px;
+  width:min(380px,90vw);text-align:center;
+  box-shadow:0 0 0 1px rgba(45,212,191,.1), 0 30px 80px rgba(0,0,0,.7);
+}
+
+.pass-avatar-big{
+  width:100px;height:100px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:44px;font-weight:700;color:#fff;
+  margin:0 auto 16px;
+  box-shadow:0 0 0 3px var(--glow-color), 0 0 40px var(--glow-color);
+}
+
+.pass-name{font-size:22px;font-weight:700;color:#fff;margin-bottom:4px}
+.pass-role-badge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:inline-block;margin-bottom:24px;background:var(--badge-bg);color:var(--badge-color)}
+
+.pass-input{
+  width:100%;padding:13px 16px;
+  background:rgba(30,41,59,.8);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;font-size:16px;color:#fff;
+  outline:none;text-align:center;letter-spacing:3px;
+  transition:border .15s, box-shadow .15s;
+}
+.pass-input:focus{border-color:#2dd4bf;box-shadow:0 0 0 3px rgba(45,212,191,.15)}
+.pass-input::placeholder{letter-spacing:1px;font-size:14px;color:#475569}
+
+.pass-btn{
+  width:100%;padding:13px;
+  background:linear-gradient(135deg,#0d9488,#2dd4bf);
+  color:#fff;border:none;border-radius:10px;
+  font-size:15px;font-weight:600;cursor:pointer;
+  margin-top:14px;transition:opacity .15s, transform .15s;
+}
+.pass-btn:hover{opacity:.9;transform:translateY(-1px)}
+.pass-cancel{margin-top:14px;color:#475569;font-size:13px;cursor:pointer;background:none;border:none;width:100%;transition:color .15s}
+.pass-cancel:hover{color:#94a3b8}
+.error-msg{background:rgba(127,29,29,.5);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;font-size:13px;margin-top:12px;display:none}
 </style>
 </head>
 <body>
 
 <div class="container">
   <div class="logo">
-    <span class="logo-icon">📋</span>
-    <h1>Certificados de Cotizaciones</h1>
+    <img src="/static/logo_optimiza.png" alt="Optimiza Consulting"
+         onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'">
+    <div id="logo-fallback" style="display:none;font-size:24px;font-weight:700;color:#2dd4bf;letter-spacing:-.5px">
+      Optimi<span style="color:#c026d3">z</span>a <span style="color:#94a3b8;font-size:18px">Consulting</span>
+    </div>
     <p>¿Quién eres?</p>
   </div>
 
   <div class="users-grid" id="users-grid">
-    <!-- Se carga dinámicamente -->
-    <div style="color:#64748b;font-size:13px">Cargando usuarios...</div>
+    <div style="color:#475569;font-size:13px">Cargando...</div>
   </div>
 </div>
 
@@ -78,19 +145,17 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="pass-card">
     <div class="pass-avatar-big" id="pass-avatar"></div>
     <div class="pass-name" id="pass-name"></div>
-    <div class="pass-role user-role-badge" id="pass-role"></div>
-    <input type="password" class="pass-input" id="pass-input" placeholder="Contraseña" autocomplete="current-password">
+    <div class="pass-role-badge" id="pass-role"></div>
+    <input type="password" class="pass-input" id="pass-input" placeholder="Contraseña">
     <div class="error-msg" id="error-msg"></div>
-    <button class="pass-btn" onclick="doLogin()">Entrar</button>
+    <button class="pass-btn" onclick="doLogin()">Entrar →</button>
     <button class="pass-cancel" onclick="cerrarPanel()">← Volver</button>
   </div>
 </div>
 
 <script>
-const COLORES = ['#2563eb','#7c3aed','#db2777','#ea580c','#16a34a','#0891b2','#dc2626','#9333ea','#0284c7','#ca8a04'];
+const ROL_LABELS = {admin:'Admin',terreno:'Terreno',ahorro:'Ahorro',consultor:'Ahorro',ingreso:'Ingreso'};
 let usuarioActual = null;
-
-const ROL_LABELS = {admin:'Admin', terreno:'Terreno', ahorro:'Ahorro', consultor:'Ahorro', ingreso:'Ingreso'};
 
 async function cargarUsuarios() {
   try {
@@ -105,41 +170,36 @@ async function cargarUsuarios() {
 
 function renderUsuarios(usuarios) {
   const grid = document.getElementById('users-grid');
-  if (!usuarios.length) {
-    grid.innerHTML = '<div style="color:#64748b">Sin usuarios</div>';
-    return;
-  }
-  grid.innerHTML = usuarios.map((u, i) => {
+  if (!usuarios.length) { grid.innerHTML = '<div style="color:#475569">Sin usuarios registrados</div>'; return; }
+  grid.innerHTML = usuarios.map(u => {
     const inicial = (u.nombre || u.username || '?')[0].toUpperCase();
     const rol = u.rol || 'terreno';
     const rolLabel = ROL_LABELS[rol] || rol;
-    const color = COLORES[i % COLORES.length];
-    return `<div class="user-card rol-${rol}" onclick="seleccionarUsuario('${u.username}','${u.nombre||u.username}','${rol}','${inicial}',${i})">
-      <div class="user-avatar" style="background:var(--avatar-bg)">${inicial}</div>
-      <div class="user-name">${u.nombre || u.username}</div>
+    return `<div class="user-card rol-${rol}" onclick="seleccionarUsuario('${u.username}','${escHtml(u.nombre||u.username)}','${rol}','${inicial}')">
+      <div class="user-avatar">${inicial}</div>
+      <div class="user-name">${escHtml(u.nombre||u.username)}</div>
       <div class="user-role-badge">${rolLabel}</div>
     </div>`;
   }).join('');
 }
 
-function seleccionarUsuario(username, nombre, rol, inicial, idx) {
+function escHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function seleccionarUsuario(username, nombre, rol, inicial) {
   usuarioActual = username;
   const rolLabel = ROL_LABELS[rol] || rol;
-
   const av = document.getElementById('pass-avatar');
   av.textContent = inicial;
   av.className = `pass-avatar-big rol-${rol}`;
   av.style.background = `var(--avatar-bg)`;
-
   document.getElementById('pass-name').textContent = nombre;
-  const roleEl = document.getElementById('pass-role');
-  roleEl.textContent = rolLabel;
-  roleEl.className = `pass-role user-role-badge rol-${rol}`;
-
+  const rb = document.getElementById('pass-role');
+  rb.textContent = rolLabel;
+  rb.className = `pass-role-badge rol-${rol}`;
   document.getElementById('pass-input').value = '';
   document.getElementById('error-msg').style.display = 'none';
   document.getElementById('pass-panel').classList.add('show');
-  setTimeout(() => document.getElementById('pass-input').focus(), 100);
+  setTimeout(() => document.getElementById('pass-input').focus(), 150);
 }
 
 function cerrarPanel() {
@@ -157,16 +217,13 @@ async function doLogin() {
   const errEl = document.getElementById('error-msg');
   errEl.style.display = 'none';
   if (!password) { errEl.textContent = 'Ingresa tu contraseña.'; errEl.style.display = 'block'; return; }
-
   const r = await fetch('/login', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({username: usuarioActual, password})
   });
   const d = await r.json();
-  if (r.ok) {
-    window.location.href = '/';
-  } else {
+  if (r.ok) { window.location.href = '/'; }
+  else {
     errEl.textContent = d.error || 'Contraseña incorrecta.';
     errEl.style.display = 'block';
     document.getElementById('pass-input').value = '';

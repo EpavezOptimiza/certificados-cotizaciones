@@ -353,6 +353,52 @@ def guardar_preferencias():
              1 if d.get("mostrar_opti", True) else 0))
     return jsonify({"ok": True})
 
+@app.route("/admin/seed_banners")
+@admin_required
+def seed_banners():
+    """Asigna lema y cualidades random a usuarios que no los tienen. Usar una sola vez."""
+    import random
+    LEMAS = [
+        "Los detalles hacen la diferencia.",
+        "El orden es la base de todo.",
+        "Cada certificado cuenta.",
+        "Trabajo con propósito y precisión.",
+        "La constancia mueve montañas.",
+        "Hecho con cuidado, entregado a tiempo.",
+        "Siempre un paso adelante.",
+        "La excelencia es un hábito.",
+        "Comprometido con cada tarea.",
+        "Lo importante es hacerlo bien.",
+        "Primero entender, luego actuar.",
+        "Sin prisa, pero sin pausa.",
+        "La calidad no es un accidente.",
+        "Cada día es una oportunidad.",
+        "Resultados que hablan por sí solos.",
+    ]
+    CUALIDADES = [
+        "Proactivo,Organizado,Detallista",
+        "Rápido,Preciso,Confiable",
+        "Analítico,Metódico,Eficiente",
+        "Creativo,Resolutivo,Comprometido",
+        "Puntual,Ordenado,Responsable",
+        "Dinámico,Enfocado,Colaborador",
+        "Riguroso,Versátil,Persistente",
+        "Adaptable,Curioso,Proactivo",
+        "Estratégico,Claro,Directo",
+        "Empático,Confiable,Dedicado",
+    ]
+    with get_conn() as conn:
+        users = conn.execute("SELECT id, username, lema, cualidades FROM usuarios").fetchall()
+        updated = []
+        for u in users:
+            u = dict(u)
+            lema = u["lema"] or random.choice(LEMAS)
+            cualidades = u["cualidades"] or random.choice(CUALIDADES)
+            conn.execute("UPDATE usuarios SET lema=?, cualidades=? WHERE id=?",
+                         (lema, cualidades, u["id"]))
+            updated.append({"username": u["username"], "lema": lema, "cualidades": cualidades})
+    return jsonify({"ok": True, "actualizados": len(updated), "usuarios": updated})
+
 @app.route("/api/usuario_banner/<username>")
 def usuario_banner(username):
     """Datos públicos del banner de usuario para la pantalla de login."""

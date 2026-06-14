@@ -459,13 +459,17 @@ async function subirExcel(file) {
     const res = await fetch('/cartas/api/subir_excel', {method:'POST', body:fd});
     const data = await res.json();
     if (data.error) { statusEl.innerHTML = `<div class="alert alert-error">❌ ${data.error}</div>`; return; }
-    trabajadores = data.trabajadores;
+    trabajadores = Array.isArray(data.trabajadores) ? data.trabajadores : [];
+    if (!trabajadores.length) {
+      statusEl.innerHTML = `<div class="alert alert-error">❌ El Excel no contiene trabajadores válidos o el formato no es reconocido.</div>`;
+      return;
+    }
     statusEl.innerHTML = `<div class="alert alert-success">✅ ${data.total} trabajadores cargados</div>`;
     renderSidebar();
     renderVisor(trabajadores);
     document.getElementById('card-visor').style.display = '';
   } catch(e) {
-    statusEl.innerHTML = `<div class="alert alert-error">❌ Error: ${e.message}</div>`;
+    statusEl.innerHTML = `<div class="alert alert-error">❌ Error al procesar el archivo: ${e.message}</div>`;
   }
 }
 

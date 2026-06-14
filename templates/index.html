@@ -1991,10 +1991,11 @@ async function cargarDevicePrefs(){
 
 async function guardarDevicePrefs(){
   try{
-    await fetch('/api/device_prefs',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r = await fetch('/api/device_prefs',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({device_id:getDeviceId(),..._devicePrefs})});
-    showToast('✅ Apariencia del login guardada');
-  }catch{ showToast('❌ Error guardando preferencias'); }
+    if(r.ok) showToast('✅ Apariencia del login guardada');
+    else { const t=await r.text(); showToast('❌ Error '+r.status+': '+t.slice(0,60)); }
+  }catch(e){ showToast('❌ Error de red: '+e.message); }
 }
 
 function initColorChips(){

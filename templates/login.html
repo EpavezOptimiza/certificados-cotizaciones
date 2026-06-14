@@ -4,152 +4,181 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Optimiza — Iniciar sesión</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#080b12;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+body{font-family:'Inter',system-ui,sans-serif;height:100vh;overflow:hidden;display:flex}
 
-/* Fondo con colores del logo Optimiza */
-body::before{content:'';position:fixed;inset:0;
-  background:
-    radial-gradient(ellipse at 15% 40%, rgba(45,212,191,.18) 0%, transparent 55%),
-    radial-gradient(ellipse at 85% 20%, rgba(192,38,211,.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 90%, rgba(45,212,191,.08) 0%, transparent 45%),
-    radial-gradient(ellipse at 70% 70%, rgba(192,38,211,.1) 0%, transparent 40%);
-  z-index:0;pointer-events:none;animation:pulse 8s ease-in-out infinite alternate}
-
-@keyframes pulse{
-  0%{opacity:.8}
-  100%{opacity:1}
-}
-
-/* Partículas decorativas */
-body::after{content:'';position:fixed;inset:0;
-  background-image:
-    radial-gradient(circle at 1px 1px, rgba(45,212,191,.15) 1px, transparent 0);
-  background-size:40px 40px;z-index:0;pointer-events:none;opacity:.4}
-
-.container{position:relative;z-index:1;text-align:center;padding:20px;width:100%}
-
-/* Logo */
-.logo{margin-bottom:44px}
-.logo img{height:60px;object-fit:contain;filter:drop-shadow(0 0 20px rgba(45,212,191,.3))}
-.logo p{font-size:14px;color:#64748b;margin-top:14px;letter-spacing:.3px}
-
-/* Grid usuarios */
-.users-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:28px;margin-bottom:44px;max-width:720px;margin-left:auto;margin-right:auto}
-
-.user-card{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px;border-radius:14px;transition:all .25s;position:relative}
-.user-card:hover{transform:translateY(-8px)}
-.user-card:hover .user-avatar{box-shadow:0 0 0 3px var(--glow-color), 0 0 40px var(--glow-color), 0 8px 30px rgba(0,0,0,.4)}
-.user-card:hover .user-name{color:#fff}
-
-/* Avatar CIRCULAR */
-.user-avatar{
-  width:92px;height:92px;
-  border-radius:50%;
+/* ── PANEL IZQUIERDO (visual / marca) ── */
+.side-left{
+  flex:0 0 52%;position:relative;overflow:hidden;
+  background:var(--bg-left,#0d1b2e);
   display:flex;align-items:center;justify-content:center;
-  font-size:36px;font-weight:700;color:#fff;
+}
+
+/* Orbes animados */
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55;animation:float 8s ease-in-out infinite alternate}
+.orb1{width:420px;height:420px;background:var(--orb1,#2563eb);top:-80px;left:-60px;animation-delay:0s}
+.orb2{width:360px;height:360px;background:var(--orb2,#6366f1);bottom:-60px;right:-40px;animation-delay:-3s}
+.orb3{width:240px;height:240px;background:var(--orb1,#2563eb);bottom:30%;left:30%;opacity:.3;animation-delay:-6s}
+
+@keyframes float{
+  0%{transform:translate(0,0) scale(1)}
+  100%{transform:translate(20px,-20px) scale(1.05)}
+}
+
+/* Grid de puntos */
+.side-left::after{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,.07) 1px,transparent 0);
+  background-size:32px 32px;pointer-events:none;
+}
+
+.brand{position:relative;z-index:1;text-align:center;color:#fff}
+.brand-logo{margin-bottom:24px}
+.brand-logo img{height:56px;filter:drop-shadow(0 0 24px rgba(99,102,241,.5))}
+.brand-hex{font-size:52px;line-height:1;color:#fff;margin-bottom:8px;filter:drop-shadow(0 0 20px rgba(99,102,241,.6))}
+.brand-name{font-size:28px;font-weight:800;letter-spacing:-1px;color:#fff;margin-bottom:6px}
+.brand-sub{font-size:14px;color:rgba(255,255,255,.5);letter-spacing:.5px}
+
+.brand-tagline{margin-top:40px;font-size:13px;color:rgba(255,255,255,.35);max-width:280px;line-height:1.7;text-align:center}
+
+/* ── PANEL DERECHO (login) ── */
+.side-right{
+  flex:1;background:#f8fafc;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;
+}
+.side-right::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 80% 20%,rgba(99,102,241,.06),transparent 60%),
+             radial-gradient(ellipse at 20% 80%,rgba(37,99,235,.04),transparent 60%);
+}
+
+.login-box{position:relative;z-index:1;width:min(380px,90%)}
+
+.login-title{font-size:26px;font-weight:800;color:#0f172a;margin-bottom:6px;letter-spacing:-.5px}
+.login-sub{font-size:14px;color:#64748b;margin-bottom:36px}
+
+/* Selector de usuario */
+.user-pick-label{font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+
+.user-list{display:flex;flex-direction:column;gap:8px;margin-bottom:24px;max-height:260px;overflow-y:auto;
+  scrollbar-width:thin;scrollbar-color:#e2e8f0 transparent}
+
+.user-item{
+  display:flex;align-items:center;gap:12px;padding:11px 14px;
+  border-radius:12px;border:1.5px solid #e2e8f0;
+  background:#fff;cursor:pointer;transition:all .15s;
+}
+.user-item:hover{border-color:var(--accent,#2563eb);background:rgba(37,99,235,.04);transform:translateX(2px)}
+.user-item.selected{border-color:var(--accent,#2563eb);background:rgba(37,99,235,.06);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+
+.ui-avatar{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
   background:var(--avatar-bg);
-  box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 4px 20px rgba(0,0,0,.3);
-  transition:all .25s;
-  position:relative;
 }
-
-/* Marco de luz según rol */
-.user-avatar::after{
-  content:'';position:absolute;inset:-3px;
-  border-radius:50%;
-  background:transparent;
-  border:2px solid var(--glow-color);
-  opacity:.5;
-  transition:opacity .25s;
-}
-.user-card:hover .user-avatar::after{opacity:1}
-
-.user-name{font-size:13px;font-weight:500;color:#94a3b8;transition:color .2s;white-space:nowrap}
-.user-role-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;background:var(--badge-bg);color:var(--badge-color)}
+.ui-info{flex:1;min-width:0}
+.ui-name{font-size:14px;font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ui-role{font-size:11px;color:#94a3b8;font-weight:500}
+.ui-check{opacity:0;transition:opacity .15s;color:var(--accent,#2563eb);font-size:18px}
+.user-item.selected .ui-check{opacity:1}
 
 /* Colores por rol */
-.rol-admin    {--glow-color:#f59e0b;--badge-bg:rgba(245,158,11,.15);--badge-color:#fbbf24;--avatar-bg:linear-gradient(135deg,#d97706,#f59e0b)}
-.rol-terreno  {--glow-color:#a78bfa;--badge-bg:rgba(167,139,250,.15);--badge-color:#a78bfa;--avatar-bg:linear-gradient(135deg,#6d28d9,#8b5cf6)}
-.rol-ahorro   {--glow-color:#2dd4bf;--badge-bg:rgba(45,212,191,.15);--badge-color:#2dd4bf;--avatar-bg:linear-gradient(135deg,#0d9488,#2dd4bf)}
-.rol-consultor{--glow-color:#2dd4bf;--badge-bg:rgba(45,212,191,.15);--badge-color:#2dd4bf;--avatar-bg:linear-gradient(135deg,#0d9488,#2dd4bf)}
-.rol-ingreso  {--glow-color:#f87171;--badge-bg:rgba(248,113,113,.15);--badge-color:#f87171;--avatar-bg:linear-gradient(135deg,#b91c1c,#ef4444)}
+.rol-admin    {--avatar-bg:linear-gradient(135deg,#d97706,#f59e0b)}
+.rol-terreno  {--avatar-bg:linear-gradient(135deg,#6d28d9,#8b5cf6)}
+.rol-ahorro,
+.rol-consultor{--avatar-bg:linear-gradient(135deg,#0d9488,#2dd4bf)}
+.rol-ingreso  {--avatar-bg:linear-gradient(135deg,#b91c1c,#ef4444)}
 
-/* Panel contraseña */
-.pass-panel{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.8);backdrop-filter:blur(12px);align-items:center;justify-content:center}
-.pass-panel.show{display:flex}
-
-.pass-card{
-  background:rgba(15,23,42,.95);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:20px;padding:36px 32px;
-  width:min(380px,90vw);text-align:center;
-  box-shadow:0 0 0 1px rgba(45,212,191,.1), 0 30px 80px rgba(0,0,0,.7);
+/* Campo contraseña */
+.pass-wrap{position:relative;margin-bottom:16px}
+.pass-wrap label{font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:8px}
+.pass-wrap input{
+  width:100%;padding:13px 42px 13px 14px;
+  border:1.5px solid #e2e8f0;border-radius:10px;
+  font-size:15px;color:#0f172a;background:#fff;
+  outline:none;transition:border .15s,box-shadow .15s;font-family:inherit;
 }
+.pass-wrap input:focus{border-color:var(--accent,#2563eb);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.pass-wrap input::placeholder{color:#cbd5e1}
+.pass-toggle{position:absolute;right:12px;bottom:13px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:17px;padding:0}
+.pass-toggle:hover{color:#64748b}
 
-.pass-avatar-big{
-  width:100px;height:100px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-size:44px;font-weight:700;color:#fff;
-  margin:0 auto 16px;
-  box-shadow:0 0 0 3px var(--glow-color), 0 0 40px var(--glow-color);
-}
+.error-msg{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px;display:none}
 
-.pass-name{font-size:22px;font-weight:700;color:#fff;margin-bottom:4px}
-.pass-role-badge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:inline-block;margin-bottom:24px;background:var(--badge-bg);color:var(--badge-color)}
-
-.pass-input{
-  width:100%;padding:13px 16px;
-  background:rgba(30,41,59,.8);
-  border:1px solid rgba(255,255,255,.1);
-  border-radius:10px;font-size:16px;color:#fff;
-  outline:none;text-align:center;letter-spacing:3px;
-  transition:border .15s, box-shadow .15s;
-}
-.pass-input:focus{border-color:#2dd4bf;box-shadow:0 0 0 3px rgba(45,212,191,.15)}
-.pass-input::placeholder{letter-spacing:1px;font-size:14px;color:#475569}
-
-.pass-btn{
-  width:100%;padding:13px;
-  background:linear-gradient(135deg,#0d9488,#2dd4bf);
+/* Botón ingresar */
+.btn-login{
+  width:100%;padding:14px;
+  background:var(--btn,linear-gradient(135deg,#1d4ed8,#2563eb));
   color:#fff;border:none;border-radius:10px;
   font-size:15px;font-weight:600;cursor:pointer;
-  margin-top:14px;transition:opacity .15s, transform .15s;
+  transition:opacity .15s,transform .1s;
+  font-family:inherit;letter-spacing:.2px;
 }
-.pass-btn:hover{opacity:.9;transform:translateY(-1px)}
-.pass-cancel{margin-top:14px;color:#475569;font-size:13px;cursor:pointer;background:none;border:none;width:100%;transition:color .15s}
-.pass-cancel:hover{color:#94a3b8}
-.error-msg{background:rgba(127,29,29,.5);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;font-size:13px;margin-top:12px;display:none}
+.btn-login:hover:not(:disabled){opacity:.92;transform:translateY(-1px)}
+.btn-login:disabled{opacity:.5;cursor:not-allowed}
+
+.login-footer{margin-top:20px;text-align:center;font-size:12px;color:#94a3b8}
+
+/* Panel contraseña animado (visible solo si usuario seleccionado) */
+.pass-section{max-height:0;overflow:hidden;transition:max-height .3s ease,opacity .3s ease;opacity:0}
+.pass-section.visible{max-height:200px;opacity:1}
 </style>
 </head>
 <body>
 
-<div class="container">
-  <div class="logo">
-    <img src="/static/logo_optimiza.png" alt="Optimiza Consulting"
-         onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'">
-    <div id="logo-fallback" style="display:none;font-size:24px;font-weight:700;color:#2dd4bf;letter-spacing:-.5px">
-      Optimi<span style="color:#c026d3">z</span>a <span style="color:#94a3b8;font-size:18px">Consulting</span>
+<!-- Panel izquierdo -->
+<div class="side-left" id="sideLeft">
+  <div class="orb orb1" id="orb1"></div>
+  <div class="orb orb2" id="orb2"></div>
+  <div class="orb orb3"></div>
+  <div class="brand">
+    <div class="brand-logo">
+      <img src="/static/logo_optimiza.png" alt="Optimiza"
+           onerror="this.style.display='none';document.getElementById('brand-hex').style.display='block'">
+      <div id="brand-hex" class="brand-hex" style="display:none">⬡</div>
     </div>
-    <p>¿Quién eres?</p>
-  </div>
-
-  <div class="users-grid" id="users-grid">
-    <div style="color:#475569;font-size:13px">Cargando...</div>
+    <div class="brand-name">Optimiza</div>
+    <div class="brand-sub">Certificados de Cotizaciones</div>
+    <div class="brand-tagline">Gestión previsional eficiente,<br>rápida y sin complicaciones.</div>
   </div>
 </div>
 
-<!-- Panel contraseña -->
-<div class="pass-panel" id="pass-panel">
-  <div class="pass-card">
-    <div class="pass-avatar-big" id="pass-avatar"></div>
-    <div class="pass-name" id="pass-name"></div>
-    <div class="pass-role-badge" id="pass-role"></div>
-    <input type="password" class="pass-input" id="pass-input" placeholder="Contraseña">
-    <div class="error-msg" id="error-msg"></div>
-    <button class="pass-btn" onclick="doLogin()">Entrar →</button>
-    <button class="pass-cancel" onclick="cerrarPanel()">← Volver</button>
+<!-- Panel derecho -->
+<div class="side-right">
+  <div class="login-box">
+    <div class="login-title">Bienvenido</div>
+    <div class="login-sub">Selecciona tu cuenta para continuar</div>
+
+    <div class="user-pick-label">Usuarios</div>
+    <div class="user-list" id="user-list">
+      <div style="color:#94a3b8;font-size:13px;padding:8px">Cargando...</div>
+    </div>
+
+    <div class="pass-section" id="pass-section">
+      <div class="pass-wrap">
+        <label>Contraseña</label>
+        <input type="password" id="pass-input" placeholder="Ingresa tu contraseña" autocomplete="current-password">
+        <button class="pass-toggle" type="button" onclick="togglePass()" title="Mostrar/ocultar">👁</button>
+      </div>
+      <div class="error-msg" id="error-msg"></div>
+      <button class="btn-login" id="btn-login" onclick="doLogin()">Ingresar →</button>
+    </div>
+
+    <div style="display:none" id="pass-standalone">
+      <div class="pass-wrap" style="margin-top:8px">
+        <label>Contraseña</label>
+        <input type="password" id="pass-input2" placeholder="Ingresa tu contraseña" autocomplete="current-password">
+        <button class="pass-toggle" type="button" onclick="togglePass2()" title="Mostrar/ocultar">👁</button>
+      </div>
+      <div class="error-msg" id="error-msg2"></div>
+      <button class="btn-login" id="btn-login2" onclick="doLogin()">Ingresar →</button>
+    </div>
+
+    <div class="login-footer">Optimiza Consulting &copy; 2025</div>
   </div>
 </div>
 
@@ -157,80 +186,152 @@ body::after{content:'';position:fixed;inset:0;
 const ROL_LABELS = {admin:'Admin',terreno:'Terreno',ahorro:'Ahorro',consultor:'Ahorro',ingreso:'Ingreso'};
 let usuarioActual = null;
 
+// ── Preferencias de dispositivo ──
+const DEVICE_ID_KEY = 'optimiza_device_id';
+function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(DEVICE_ID_KEY, id);
+    // También en cookie para persistencia si localStorage se limpia
+    document.cookie = `device_id=${id};max-age=${86400*365};path=/`;
+  }
+  return id;
+}
+
+const DEFAULTS = {login_style:'orbos',color_bg:'#0d1b2e',color_orb1:'#2563eb',color_orb2:'#6366f1',color_btn:'#2563eb',color_icon:'#1d4ed8'};
+
+async function loadDevicePrefs() {
+  const deviceId = getDeviceId();
+  try {
+    const r = await fetch('/api/device_prefs?device_id=' + encodeURIComponent(deviceId));
+    const d = await r.json();
+    if (d.ok && d.prefs) applyPrefs(d.prefs);
+    else applyPrefs(DEFAULTS);
+  } catch { applyPrefs(DEFAULTS); }
+}
+
+function applyPrefs(p) {
+  const root = document.documentElement;
+  const bg = p.color_bg || DEFAULTS.color_bg;
+  const orb1 = p.color_orb1 || DEFAULTS.color_orb1;
+  const orb2 = p.color_orb2 || DEFAULTS.color_orb2;
+  const btn = p.color_btn || DEFAULTS.color_btn;
+
+  document.getElementById('sideLeft').style.background = bg;
+  document.getElementById('orb1').style.background = orb1;
+  document.getElementById('orb2').style.background = orb2;
+  document.documentElement.style.setProperty('--accent', btn);
+  document.documentElement.style.setProperty('--btn', `linear-gradient(135deg,${darken(btn)},${btn})`);
+}
+
+function darken(hex) {
+  // Simple darken: shift hue slightly darker for gradient
+  try {
+    const r = parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+    return `rgb(${Math.max(0,r-30)},${Math.max(0,g-30)},${Math.max(0,b-30)})`;
+  } catch { return hex; }
+}
+
+// ── Usuarios ──
 async function cargarUsuarios() {
   try {
     const r = await fetch('/api/usuarios_publicos');
     const data = await r.json();
     renderUsuarios(data.usuarios || []);
-  } catch(e) {
-    document.getElementById('users-grid').innerHTML =
-      '<div style="color:#ef4444;font-size:13px">Error cargando usuarios</div>';
+  } catch {
+    document.getElementById('user-list').innerHTML = '<div style="color:#ef4444;font-size:13px">Error cargando usuarios</div>';
   }
 }
 
 function renderUsuarios(usuarios) {
-  const grid = document.getElementById('users-grid');
-  if (!usuarios.length) { grid.innerHTML = '<div style="color:#475569">Sin usuarios registrados</div>'; return; }
-  grid.innerHTML = usuarios.map(u => {
+  const list = document.getElementById('user-list');
+  if (!usuarios.length) { list.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px">Sin usuarios registrados</div>'; return; }
+  list.innerHTML = usuarios.map(u => {
     const inicial = (u.nombre || u.username || '?')[0].toUpperCase();
     const rol = u.rol || 'terreno';
     const rolLabel = ROL_LABELS[rol] || rol;
-    return `<div class="user-card rol-${rol}" onclick="seleccionarUsuario('${u.username}','${escHtml(u.nombre||u.username)}','${rol}','${inicial}')">
-      <div class="user-avatar">${inicial}</div>
-      <div class="user-name">${escHtml(u.nombre||u.username)}</div>
-      <div class="user-role-badge">${rolLabel}</div>
+    return `<div class="user-item rol-${rol}" id="ui-${escId(u.username)}"
+        onclick="seleccionar('${esc(u.username)}','${esc(u.nombre||u.username)}','${esc(rol)}')">
+      <div class="ui-avatar">${inicial}</div>
+      <div class="ui-info">
+        <div class="ui-name">${escHtml(u.nombre||u.username)}</div>
+        <div class="ui-role">${rolLabel}</div>
+      </div>
+      <div class="ui-check">✓</div>
     </div>`;
   }).join('');
 }
 
-function escHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function esc(s){ return (s||'').replace(/'/g,"\\'"); }
+function escId(s){ return (s||'').replace(/[^a-zA-Z0-9_-]/g,'_'); }
+function escHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function seleccionarUsuario(username, nombre, rol, inicial) {
+function seleccionar(username, nombre, rol) {
   usuarioActual = username;
-  const rolLabel = ROL_LABELS[rol] || rol;
-  const av = document.getElementById('pass-avatar');
-  av.textContent = inicial;
-  av.className = `pass-avatar-big rol-${rol}`;
-  av.style.background = `var(--avatar-bg)`;
-  document.getElementById('pass-name').textContent = nombre;
-  const rb = document.getElementById('pass-role');
-  rb.textContent = rolLabel;
-  rb.className = `pass-role-badge rol-${rol}`;
+  document.querySelectorAll('.user-item').forEach(el => el.classList.remove('selected'));
+  const el = document.getElementById('ui-' + escId(username));
+  if (el) el.classList.add('selected');
+
+  const sec = document.getElementById('pass-section');
+  sec.classList.add('visible');
+  hideError();
   document.getElementById('pass-input').value = '';
-  document.getElementById('error-msg').style.display = 'none';
-  document.getElementById('pass-panel').classList.add('show');
-  setTimeout(() => document.getElementById('pass-input').focus(), 150);
+  setTimeout(() => document.getElementById('pass-input').focus(), 350);
 }
 
-function cerrarPanel() {
-  document.getElementById('pass-panel').classList.remove('show');
-  usuarioActual = null;
+function togglePass() {
+  const inp = document.getElementById('pass-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function hideError() {
+  const e = document.getElementById('error-msg');
+  if (e) e.style.display = 'none';
+}
+
+function showError(msg) {
+  const e = document.getElementById('error-msg');
+  e.textContent = msg;
+  e.style.display = 'block';
 }
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && usuarioActual) doLogin();
-  if (e.key === 'Escape') cerrarPanel();
 });
 
 async function doLogin() {
-  const password = document.getElementById('pass-input').value;
-  const errEl = document.getElementById('error-msg');
-  errEl.style.display = 'none';
-  if (!password) { errEl.textContent = 'Ingresa tu contraseña.'; errEl.style.display = 'block'; return; }
-  const r = await fetch('/login', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({username: usuarioActual, password})
-  });
-  const d = await r.json();
-  if (r.ok) { window.location.href = '/'; }
-  else {
-    errEl.textContent = d.error || 'Contraseña incorrecta.';
-    errEl.style.display = 'block';
-    document.getElementById('pass-input').value = '';
-    document.getElementById('pass-input').focus();
+  const passInput = document.getElementById('pass-input');
+  const password = passInput.value;
+  hideError();
+  if (!password) { showError('Ingresa tu contraseña.'); return; }
+
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true;
+  btn.textContent = 'Verificando...';
+
+  try {
+    const r = await fetch('/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username: usuarioActual, password})
+    });
+    const d = await r.json();
+    if (r.ok) { window.location.href = '/'; }
+    else {
+      showError(d.error || 'Contraseña incorrecta.');
+      passInput.value = '';
+      passInput.focus();
+      btn.disabled = false;
+      btn.textContent = 'Ingresar →';
+    }
+  } catch {
+    showError('Error de conexión. Intenta nuevamente.');
+    btn.disabled = false;
+    btn.textContent = 'Ingresar →';
   }
 }
 
+loadDevicePrefs();
 cargarUsuarios();
 </script>
 </body>

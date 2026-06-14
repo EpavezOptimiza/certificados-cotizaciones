@@ -337,6 +337,41 @@ def guardar_preferencias():
              1 if d.get("mostrar_opti", True) else 0))
     return jsonify({"ok": True})
 
+@app.route("/api/device_prefs", methods=["GET"])
+def get_device_prefs():
+    device_id = request.args.get("device_id", "").strip()
+    if not device_id:
+        return jsonify({"ok": False}), 400
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM device_preferences WHERE device_id=?", (device_id,)).fetchone()
+    if row:
+        return jsonify({"ok": True, "prefs": dict(row)})
+    return jsonify({"ok": False})
+
+@app.route("/api/device_prefs", methods=["POST"])
+@api_login_required
+def save_device_prefs():
+    d = request.json
+    device_id = d.get("device_id", "").strip()
+    if not device_id:
+        return jsonify({"error": "device_id requerido"}), 400
+    with get_conn() as conn:
+        conn.execute("""INSERT INTO device_preferences(device_id,login_style,color_bg,color_orb1,color_orb2,color_btn,color_icon,actualizado)
+            VALUES(?,?,?,?,?,?,?,?)
+            ON CONFLICT(device_id) DO UPDATE SET
+                login_style=excluded.login_style,
+                color_bg=excluded.color_bg,
+                color_orb1=excluded.color_orb1,
+                color_orb2=excluded.color_orb2,
+                color_btn=excluded.color_btn,
+                color_icon=excluded.color_icon,
+                actualizado=excluded.actualizado""",
+            (device_id, d.get("login_style","orbos"),
+             d.get("color_bg","#0d1b2e"), d.get("color_orb1","#2563eb"),
+             d.get("color_orb2","#6366f1"), d.get("color_btn","#2563eb"),
+             d.get("color_icon","#1d4ed8"), datetime.now().isoformat()))
+    return jsonify({"ok": True})
+
 @app.route("/api/opti_stats")
 @api_login_required
 def opti_stats():

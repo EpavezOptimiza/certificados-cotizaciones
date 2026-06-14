@@ -117,6 +117,27 @@ canvas#style-canvas{position:absolute;inset:0;width:100%;height:100%}
 .login-footer{margin-top:20px;text-align:center;font-size:12px;color:#94a3b8}
 .pass-section{max-height:0;overflow:hidden;transition:max-height .3s ease,opacity .3s ease;opacity:0}
 .pass-section.visible{max-height:200px;opacity:1}
+
+/* ── BANNER DE USUARIO ── */
+#radar-bg{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity .6s;overflow:hidden}
+.brand{transition:opacity .4s ease}
+.brand.hidden{opacity:0;pointer-events:none}
+#user-banner{position:absolute;inset:0;z-index:4;opacity:0;pointer-events:none;transition:opacity .5s ease;display:flex;flex-direction:column;justify-content:flex-end;padding:44px 48px 48px}
+#user-banner.visible{opacity:1;pointer-events:auto}
+.banner-grad{position:absolute;bottom:0;left:0;right:0;height:75%;background:linear-gradient(transparent,rgba(0,0,0,.5));pointer-events:none;z-index:1}
+.banner-content{position:relative;z-index:2}
+.banner-back{position:absolute;top:20px;left:20px;z-index:6;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.75);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;letter-spacing:.2px}
+.banner-back:hover{background:rgba(255,255,255,.2);color:#fff}
+.banner-ribbon-wrap{position:absolute;top:0;right:0;width:150px;height:150px;overflow:hidden;z-index:5}
+.banner-ribbon-inner{position:absolute;top:4px;right:-46px;width:192px;height:46px;transform:rotate(45deg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-shadow:0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.3)}
+.banner-avatar-wrap{position:relative;width:72px;height:72px;margin-bottom:18px}
+.banner-avatar{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:#fff}
+.banner-avatar-ring{position:absolute;inset:-4px;border-radius:50%;border:1.5px solid rgba(255,255,255,.25)}
+.banner-name{font-size:26px;font-weight:700;color:#fff;letter-spacing:-.5px;margin-bottom:8px;line-height:1.1}
+.banner-role-chip{display:inline-flex;align-items:center;gap:5px;margin-bottom:14px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500}
+.banner-lema{font-size:12px;color:rgba(255,255,255,.55);font-style:italic;margin-bottom:16px;max-width:290px;line-height:1.6}
+.banner-chips{display:flex;flex-wrap:wrap;gap:6px}
+.banner-chip{padding:4px 11px;border-radius:20px;font-size:10px;font-weight:500}
 </style>
 </head>
 <body>
@@ -137,13 +158,16 @@ canvas#style-canvas{position:absolute;inset:0;width:100%;height:100%}
   <div id="hex-layer"></div>
   <canvas id="style-canvas" style="display:none"></canvas>
 
+  <!-- Radar bg (banner) -->
+  <div id="radar-bg"><div id="radar-center"></div></div>
+
   <!-- Orbos (visibles en estilo orbos) -->
   <div class="orb orb1" id="orb1"></div>
   <div class="orb orb2" id="orb2"></div>
   <div class="orb orb3" id="orb3"></div>
 
   <!-- Marca -->
-  <div class="brand">
+  <div class="brand" id="brand-content">
     <div class="brand-logo">
       <img src="/static/logo_optimiza.png" alt="Optimiza"
            onerror="this.style.display='none';document.getElementById('brand-hex').style.display='block'">
@@ -152,6 +176,31 @@ canvas#style-canvas{position:absolute;inset:0;width:100%;height:100%}
     <div class="brand-name">Optimiza</div>
     <div class="brand-sub">Certificados de Cotizaciones</div>
     <div class="brand-tagline">Gestión previsional eficiente,<br>rápida y sin complicaciones.</div>
+  </div>
+
+  <!-- Banner de usuario (aparece al seleccionar) -->
+  <div id="user-banner">
+    <div class="banner-ribbon-wrap" id="banner-ribbon" style="display:none">
+      <div class="banner-ribbon-inner" id="banner-ribbon-inner">
+        <span id="ribbon-rank-name" style="font-size:7px;font-weight:500;color:rgba(255,255,255,.7);letter-spacing:.8px;text-transform:uppercase"></span>
+        <div style="display:flex;align-items:center;gap:3px">
+          <span id="ribbon-icon" style="font-size:12px"></span>
+          <span id="ribbon-years" style="font-size:9px;font-weight:500;color:#fff"></span>
+        </div>
+      </div>
+    </div>
+    <button class="banner-back" onclick="hideBanner()">← Volver</button>
+    <div class="banner-grad"></div>
+    <div class="banner-content">
+      <div class="banner-avatar-wrap">
+        <div class="banner-avatar" id="banner-avatar"></div>
+        <div class="banner-avatar-ring" id="banner-avatar-ring"></div>
+      </div>
+      <div class="banner-name" id="banner-name"></div>
+      <div class="banner-role-chip" id="banner-role-chip"></div>
+      <div class="banner-lema" id="banner-lema" style="display:none"></div>
+      <div class="banner-chips" id="banner-chips"></div>
+    </div>
   </div>
 </div>
 
@@ -512,6 +561,104 @@ function esc(s){ return (s||'').replace(/'/g,"\\'"); }
 function escId(s){ return (s||'').replace(/[^a-zA-Z0-9_-]/g,'_'); }
 function escHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+function getRoleColors(rol) {
+  const map = {
+    admin:    {bg1:'#d97706',bg2:'#f59e0b',radar:'245,158,11', chipBg:'rgba(245,158,11,.15)',chipColor:'#fbbf24',chipBorder:'rgba(245,158,11,.3)'},
+    terreno:  {bg1:'#6d28d9',bg2:'#8b5cf6',radar:'139,92,246', chipBg:'rgba(139,92,246,.15)',chipColor:'#a78bfa',chipBorder:'rgba(139,92,246,.3)'},
+    ahorro:   {bg1:'#0d9488',bg2:'#2dd4bf',radar:'45,212,191', chipBg:'rgba(45,212,191,.15)',chipColor:'#2dd4bf',chipBorder:'rgba(45,212,191,.3)'},
+    consultor:{bg1:'#0d9488',bg2:'#2dd4bf',radar:'45,212,191', chipBg:'rgba(45,212,191,.15)',chipColor:'#2dd4bf',chipBorder:'rgba(45,212,191,.3)'},
+    ingreso:  {bg1:'#b91c1c',bg2:'#ef4444',radar:'239,68,68',  chipBg:'rgba(239,68,68,.15)', chipColor:'#f87171',chipBorder:'rgba(239,68,68,.3)'},
+  };
+  return map[rol] || map.terreno;
+}
+
+function getRank(años) {
+  if (años <= 0) return null;
+  const ranks = [
+    null,
+    {name:'Bronce',  icon:'🥉', color:'linear-gradient(180deg,#d4a574 0%,#cd7f32 40%,#7c4a1e 100%)', glow:'rgba(205,127,50,.35)'},
+    {name:'Plata',   icon:'🥈', color:'linear-gradient(180deg,#e8e8e8 0%,#a8a8a8 40%,#6b6b6b 100%)', glow:'rgba(168,168,168,.35)'},
+    {name:'Oro',     icon:'🥇', color:'linear-gradient(180deg,#fde68a 0%,#f59e0b 40%,#92400e 100%)', glow:'rgba(245,158,11,.4)'},
+    {name:'Zafiro',  icon:'💎', color:'linear-gradient(180deg,#93c5fd 0%,#2563eb 40%,#1e3a8a 100%)', glow:'rgba(37,99,235,.45)'},
+    {name:'Esmeralda',icon:'💚',color:'linear-gradient(180deg,#6ee7b7 0%,#059669 40%,#064e3b 100%)', glow:'rgba(5,150,105,.4)'},
+  ];
+  if (años < ranks.length) return ranks[años];
+  return {name:'Leyenda', icon:'👑', color:'linear-gradient(180deg,#f9a8d4 0%,#e879f9 35%,#7c3aed 100%)', glow:'rgba(232,121,249,.5)'};
+}
+
+async function showBanner(username, nombre, rol) {
+  const colors = getRoleColors(rol);
+  const inicial = (nombre || username || '?')[0].toUpperCase();
+
+  // Radar desde la posición del avatar (abajo-izquierda del contenido)
+  const rc = document.getElementById('radar-center');
+  const rr = colors.radar;
+  rc.style.cssText = `position:absolute;bottom:108px;left:84px;width:2px;height:2px;border-radius:50%;
+    box-shadow:0 0 0 80px rgba(${rr},.16),0 0 0 170px rgba(${rr},.11),0 0 0 280px rgba(${rr},.08),
+               0 0 0 420px rgba(${rr},.055),0 0 0 590px rgba(${rr},.035),0 0 0 800px rgba(${rr},.02)`;
+
+  // Avatar
+  const av = document.getElementById('banner-avatar');
+  av.textContent = inicial;
+  av.style.background = `linear-gradient(135deg,${colors.bg1},${colors.bg2})`;
+
+  // Nombre
+  document.getElementById('banner-name').textContent = nombre || username;
+
+  // Chip de rol
+  const chip = document.getElementById('banner-role-chip');
+  chip.style.cssText = `display:inline-flex;align-items:center;gap:5px;margin-bottom:14px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}`;
+  chip.innerHTML = `<span style="width:5px;height:5px;border-radius:50%;background:${colors.chipColor};display:inline-block"></span> ${ROL_LABELS[rol] || rol}`;
+
+  // Mostrar banner, ocultar brand
+  document.getElementById('radar-bg').style.opacity = '1';
+  document.getElementById('brand-content').classList.add('hidden');
+  document.getElementById('user-banner').classList.add('visible');
+
+  // Fetch datos extras
+  try {
+    const r = await fetch('/api/usuario_banner/' + encodeURIComponent(username));
+    const d = await r.json();
+    if (d.ok) {
+      const lemaEl = document.getElementById('banner-lema');
+      if (d.lema) { lemaEl.textContent = '"' + d.lema + '"'; lemaEl.style.display = 'block'; }
+      else { lemaEl.style.display = 'none'; }
+
+      const chipsEl = document.getElementById('banner-chips');
+      const cualidades = (d.cualidades || '').split(',').map(c => c.trim()).filter(Boolean);
+      chipsEl.innerHTML = cualidades.map(c =>
+        `<span class="banner-chip" style="background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}">${c}</span>`
+      ).join('');
+
+      const rank = getRank(d.años || 0);
+      const ribbonWrap = document.getElementById('banner-ribbon');
+      if (rank) {
+        const inner = document.getElementById('banner-ribbon-inner');
+        inner.style.background = rank.color;
+        inner.style.boxShadow = `0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.3),0 0 22px ${rank.glow}`;
+        document.getElementById('ribbon-rank-name').textContent = rank.name.toUpperCase();
+        document.getElementById('ribbon-icon').textContent = rank.icon;
+        const yrs = d.años || 0;
+        document.getElementById('ribbon-years').textContent = yrs + ' año' + (yrs !== 1 ? 's' : '');
+        ribbonWrap.style.display = 'block';
+      } else {
+        ribbonWrap.style.display = 'none';
+      }
+    }
+  } catch {}
+}
+
+function hideBanner() {
+  document.getElementById('user-banner').classList.remove('visible');
+  document.getElementById('brand-content').classList.remove('hidden');
+  document.getElementById('radar-bg').style.opacity = '0';
+  usuarioActual = null;
+  document.querySelectorAll('.user-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById('pass-section').classList.remove('visible');
+  document.getElementById('banner-ribbon').style.display = 'none';
+  document.getElementById('banner-chips').innerHTML = '';
+}
+
 function seleccionar(username, nombre, rol) {
   usuarioActual = username;
   document.querySelectorAll('.user-item').forEach(el => el.classList.remove('selected'));
@@ -522,6 +669,7 @@ function seleccionar(username, nombre, rol) {
   document.getElementById('error-msg').style.display = 'none';
   document.getElementById('pass-input').value = '';
   setTimeout(() => document.getElementById('pass-input').focus(), 350);
+  showBanner(username, nombre, rol);
 }
 
 function togglePass() {

@@ -337,6 +337,27 @@ def guardar_preferencias():
              1 if d.get("mostrar_opti", True) else 0))
     return jsonify({"ok": True})
 
+@app.route("/api/usuario_banner/<username>")
+def usuario_banner(username):
+    """Datos públicos del banner de usuario para la pantalla de login."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT nombre, rol, lema, cualidades, fecha_ingreso FROM usuarios WHERE username=?",
+            (username,)).fetchone()
+    if not row:
+        return jsonify({"ok": False}), 404
+    d = dict(row)
+    años = 0
+    if d.get("fecha_ingreso"):
+        try:
+            from datetime import date as ddate
+            ingreso = ddate.fromisoformat(d["fecha_ingreso"])
+            años = (ddate.today() - ingreso).days // 365
+        except: pass
+    d["años"] = años
+    d["ok"] = True
+    return jsonify(d)
+
 @app.route("/api/device_prefs", methods=["GET"])
 def get_device_prefs():
     device_id = request.args.get("device_id", "").strip()

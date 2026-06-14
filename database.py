@@ -86,6 +86,16 @@ def init_db():
             mostrar_stats INTEGER DEFAULT 1,
             mostrar_opti  INTEGER DEFAULT 1
         );
+        CREATE TABLE IF NOT EXISTS device_preferences (
+            device_id    TEXT PRIMARY KEY,
+            login_style  TEXT DEFAULT 'orbos',
+            color_bg     TEXT DEFAULT '#0d1b2e',
+            color_orb1   TEXT DEFAULT '#2563eb',
+            color_orb2   TEXT DEFAULT '#6366f1',
+            color_btn    TEXT DEFAULT '#2563eb',
+            color_icon   TEXT DEFAULT '#1d4ed8',
+            actualizado  TEXT DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS permisos_modulos (
             usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
             modulo      TEXT NOT NULL,
@@ -150,6 +160,15 @@ def init_db():
         except: pass
         try:
             conn.execute("UPDATE usuarios SET rol='ahorro' WHERE rol='consultor'")
+        except: pass
+        try:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN lema TEXT DEFAULT ''")
+        except: pass
+        try:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN cualidades TEXT DEFAULT ''")
+        except: pass
+        try:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN fecha_ingreso TEXT DEFAULT ''")
         except: pass
         # Crear permisos por defecto para usuarios existentes
         try:

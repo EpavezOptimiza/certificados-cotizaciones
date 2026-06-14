@@ -1981,21 +1981,36 @@ const LOGIN_STYLES = [
   {id:'lluvia',     icon:'🌧', name:'Lluvia',       desc:'Partículas cayendo en cascada'},
 ];
 
+const LS_PREFS_KEY = 'optimiza_login_prefs';
+
 async function cargarDevicePrefs(){
+  // 1. Intentar cargar desde BD
   try{
     const r = await fetch('/api/device_prefs?device_id='+encodeURIComponent(getDeviceId()));
     const d = await r.json();
-    if(d.ok && d.prefs) _devicePrefs = {..._devicePrefs, ...d.prefs};
+    if(d.ok && d.prefs){
+      _devicePrefs = {..._devicePrefs, ...d.prefs};
+      localStorage.setItem(LS_PREFS_KEY, JSON.stringify(_devicePrefs)); // sincronizar cache
+      return;
+    }
+  }catch{}
+  // 2. Fallback: usar cache de localStorage
+  try{
+    const cached = JSON.parse(localStorage.getItem(LS_PREFS_KEY)||'null');
+    if(cached) _devicePrefs = {..._devicePrefs, ...cached};
   }catch{}
 }
 
 async function guardarDevicePrefs(){
+  // Guardar siempre en localStorage primero (instantáneo)
+  localStorage.setItem(LS_PREFS_KEY, JSON.stringify(_devicePrefs));
+  // Luego intentar guardar en BD
   try{
     const r = await fetch('/api/device_prefs',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({device_id:getDeviceId(),..._devicePrefs})});
     if(r.ok) showToast('✅ Apariencia del login guardada');
     else { const t=await r.text(); showToast('❌ Error '+r.status+': '+t.slice(0,60)); }
-  }catch(e){ showToast('❌ Error de red: '+e.message); }
+  }catch(e){ showToast('⚠️ Guardado local OK, error de red: '+e.message); }
 }
 
 function initColorChips(){

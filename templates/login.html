@@ -201,14 +201,24 @@ function getDeviceId() {
 
 const DEFAULTS = {login_style:'orbos',color_bg:'#0d1b2e',color_orb1:'#2563eb',color_orb2:'#6366f1',color_btn:'#2563eb',color_icon:'#1d4ed8'};
 
+const LS_PREFS_KEY = 'optimiza_login_prefs';
+
 async function loadDevicePrefs() {
-  const deviceId = getDeviceId();
+  // 1. Aplicar cache de localStorage inmediatamente (sin esperar red)
   try {
-    const r = await fetch('/api/device_prefs?device_id=' + encodeURIComponent(deviceId));
+    const cached = JSON.parse(localStorage.getItem(LS_PREFS_KEY) || 'null');
+    if (cached) applyPrefs(cached);
+  } catch {}
+
+  // 2. Luego sincronizar desde BD y actualizar si hay datos más recientes
+  try {
+    const r = await fetch('/api/device_prefs?device_id=' + encodeURIComponent(getDeviceId()));
     const d = await r.json();
-    if (d.ok && d.prefs) applyPrefs(d.prefs);
-    else applyPrefs(DEFAULTS);
-  } catch { applyPrefs(DEFAULTS); }
+    if (d.ok && d.prefs) {
+      applyPrefs(d.prefs);
+      localStorage.setItem(LS_PREFS_KEY, JSON.stringify(d.prefs));
+    }
+  } catch {}
 }
 
 function applyPrefs(p) {

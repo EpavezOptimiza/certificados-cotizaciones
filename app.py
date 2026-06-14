@@ -349,7 +349,6 @@ def get_device_prefs():
     return jsonify({"ok": False})
 
 @app.route("/api/device_prefs", methods=["POST"])
-@api_login_required
 def save_device_prefs():
     d = request.json
     device_id = d.get("device_id", "").strip()

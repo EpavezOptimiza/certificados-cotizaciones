@@ -201,6 +201,10 @@ def do_login():
         token = secrets.token_hex(32)
         conn.execute("INSERT INTO sesiones(token,usuario_id,creada) VALUES(?,?,?)",
                      (token, user["id"], datetime.now().isoformat()))
+        # Registrar fecha de primer ingreso si aún no tiene
+        if not dict(user).get("fecha_ingreso"):
+            conn.execute("UPDATE usuarios SET fecha_ingreso=? WHERE id=?",
+                         (datetime.now().date().isoformat(), user["id"]))
     resp = make_response(jsonify({"ok": True, "rol": user["rol"], "clave_cambiada": bool(dict(user).get("clave_cambiada", 0))}))
     resp.set_cookie("session_token", token, max_age=86400*30, httponly=True)
     return resp

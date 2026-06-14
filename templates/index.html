@@ -1896,17 +1896,7 @@ function abrirPreferencias(){
 
 init();
 
-// Cerrar sesión solo al cerrar pestaña/navegador, no al navegar dentro de la app
-window.addEventListener("beforeunload", function(){
-  if(!window._navigatingInApp) navigator.sendBeacon("/logout_beacon");
-});
-document.addEventListener("click", function(e){
-  const a = e.target.closest("a[href]");
-  if(a && a.hostname === location.hostname) window._navigatingInApp = true;
-});
-// También marcar navegación programática (window.location.href)
-const _origAssign = Object.getOwnPropertyDescriptor(window.location.__proto__, 'href').set;
-try{Object.defineProperty(window.location,'href',{set(v){window._navigatingInApp=true;_origAssign.call(window.location,v);}})}catch(e){}
+// Sesión expira por cookie (30 días). El logout explícito usa /logout.
 </script>
 
 <!-- Opti Bot -->

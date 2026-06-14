@@ -1434,7 +1434,10 @@ function verReporte(tipo){
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function escHtml(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function toast(msg, dur=3000){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";t.style.maxWidth="500px";t.style.whiteSpace="pre-wrap";setTimeout(()=>t.style.display="none",dur);}
-document.querySelectorAll(".modal-bg").forEach(bg=>bg.addEventListener("click",e=>{if(e.target===bg)bg.classList.remove("open");}));
+document.querySelectorAll(".modal-bg").forEach(bg=>{
+  bg.addEventListener("click",e=>{if(e.target===bg)bg.classList.remove("open");});
+  bg.addEventListener("dblclick",e=>{e.stopPropagation();});
+});
 document.getElementById("btn-agregar").onclick=openModal_cert;
 document.querySelector("[onclick=\"openModal('modalUsuarios')\"]")&&(document.querySelector("[onclick=\"openModal('modalUsuarios')\"]").onclick=openModal_usuarios);
 

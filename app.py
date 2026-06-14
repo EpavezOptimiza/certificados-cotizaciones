@@ -166,12 +166,24 @@ def mis_permisos():
 
 @app.route("/api/usuarios_publicos")
 def usuarios_publicos():
-    """Retorna lista de usuarios para el login estilo Netflix."""
+    """Retorna lista de usuarios para el login estilo Netflix, incluyendo datos de banner."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT username, nombre, rol FROM usuarios ORDER BY nombre"
+            "SELECT username, nombre, rol, lema, cualidades, fecha_ingreso FROM usuarios ORDER BY nombre"
         ).fetchall()
-    return jsonify({"usuarios": [dict(r) for r in rows]})
+    result = []
+    for r in rows:
+        d = dict(r)
+        años = 0
+        if d.get("fecha_ingreso"):
+            try:
+                from datetime import date as ddate
+                ingreso = ddate.fromisoformat(d["fecha_ingreso"])
+                años = (ddate.today() - ingreso).days // 365
+            except: pass
+        d["años"] = años
+        result.append(d)
+    return jsonify({"usuarios": result})
 
 @app.route("/login", methods=["POST"])
 def do_login():

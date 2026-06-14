@@ -230,6 +230,7 @@ canvas#style-canvas{position:absolute;inset:0;width:100%;height:100%}
 const ROL_LABELS = {admin:'Admin',terreno:'Terreno',ahorro:'Ahorro',consultor:'Ahorro',ingreso:'Ingreso'};
 let usuarioActual = null;
 let _canvasAnim = null;
+let _bannerCache = {}; // datos de banner por username
 
 // ── Device ID ──
 const DEVICE_ID_KEY = 'optimiza_device_id';
@@ -539,6 +540,8 @@ async function cargarUsuarios() {
 }
 
 function renderUsuarios(usuarios) {
+  // Cachear datos de banner al momento de cargar
+  usuarios.forEach(u => { _bannerCache[u.username] = u; });
   const list = document.getElementById('user-list');
   if (!usuarios.length) { list.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px">Sin usuarios registrados</div>'; return; }
   list.innerHTML = usuarios.map(u => {
@@ -586,16 +589,25 @@ function getRank(años) {
   return {name:'Leyenda', icon:'👑', color:'linear-gradient(180deg,#f9a8d4 0%,#e879f9 35%,#7c3aed 100%)', glow:'rgba(232,121,249,.5)'};
 }
 
-async function showBanner(username, nombre, rol) {
+function showBanner(username, nombre, rol) {
   const colors = getRoleColors(rol);
   const inicial = (nombre || username || '?')[0].toUpperCase();
+  const d = _bannerCache[username] || {};
 
-  // Radar desde la posición del avatar (abajo-izquierda del contenido)
-  const rc = document.getElementById('radar-center');
+  // Ocultar capas del estilo actual (lluvia, orbos, etc.)
+  hideAllLayers();
+
+  // Radar SVG desde esquina inferior izquierda
   const rr = colors.radar;
-  rc.style.cssText = `position:absolute;bottom:108px;left:84px;width:2px;height:2px;border-radius:50%;
-    box-shadow:0 0 0 80px rgba(${rr},.16),0 0 0 170px rgba(${rr},.11),0 0 0 280px rgba(${rr},.08),
-               0 0 0 420px rgba(${rr},.055),0 0 0 590px rgba(${rr},.035),0 0 0 800px rgba(${rr},.02)`;
+  document.getElementById('radar-bg').innerHTML = `
+    <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible" viewBox="0 0 600 900" preserveAspectRatio="xMinYMax slice" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="80" cy="860" r="90"  fill="rgba(${rr},.13)" stroke="rgba(${rr},.3)" stroke-width="1"/>
+      <circle cx="80" cy="860" r="190" fill="rgba(${rr},.07)" stroke="rgba(${rr},.18)" stroke-width=".8"/>
+      <circle cx="80" cy="860" r="320" fill="rgba(${rr},.04)" stroke="rgba(${rr},.12)" stroke-width=".7"/>
+      <circle cx="80" cy="860" r="480" fill="rgba(${rr},.02)" stroke="rgba(${rr},.08)" stroke-width=".6"/>
+      <circle cx="80" cy="860" r="670" fill="rgba(${rr},.01)" stroke="rgba(${rr},.05)" stroke-width=".5"/>
+    </svg>`;
+  document.getElementById('radar-bg').style.opacity = '1';
 
   // Avatar
   const av = document.getElementById('banner-avatar');
@@ -610,42 +622,37 @@ async function showBanner(username, nombre, rol) {
   chip.style.cssText = `display:inline-flex;align-items:center;gap:5px;margin-bottom:14px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}`;
   chip.innerHTML = `<span style="width:5px;height:5px;border-radius:50%;background:${colors.chipColor};display:inline-block"></span> ${ROL_LABELS[rol] || rol}`;
 
+  // Lema (inmediato desde cache)
+  const lemaEl = document.getElementById('banner-lema');
+  if (d.lema) { lemaEl.textContent = '“' + d.lema + '”'; lemaEl.style.display = 'block'; }
+  else { lemaEl.style.display = 'none'; }
+
+  // Cualidades chips (inmediato desde cache)
+  const chipsEl = document.getElementById('banner-chips');
+  const cualidades = (d.cualidades || '').split(',').map(c => c.trim()).filter(Boolean);
+  chipsEl.innerHTML = cualidades.map(c =>
+    `<span class="banner-chip" style="background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}">${c}</span>`
+  ).join('');
+
+  // Ribbon de rango
+  const rank = getRank(d.años || 0);
+  const ribbonWrap = document.getElementById('banner-ribbon');
+  if (rank) {
+    const inner = document.getElementById('banner-ribbon-inner');
+    inner.style.background = rank.color;
+    inner.style.boxShadow = `0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.3),0 0 22px ${rank.glow}`;
+    document.getElementById('ribbon-rank-name').textContent = rank.name.toUpperCase();
+    document.getElementById('ribbon-icon').textContent = rank.icon;
+    const yrs = d.años || 0;
+    document.getElementById('ribbon-years').textContent = yrs + ' año' + (yrs !== 1 ? 's' : '');
+    ribbonWrap.style.display = 'block';
+  } else {
+    ribbonWrap.style.display = 'none';
+  }
+
   // Mostrar banner, ocultar brand
-  document.getElementById('radar-bg').style.opacity = '1';
   document.getElementById('brand-content').classList.add('hidden');
   document.getElementById('user-banner').classList.add('visible');
-
-  // Fetch datos extras
-  try {
-    const r = await fetch('/api/usuario_banner/' + encodeURIComponent(username));
-    const d = await r.json();
-    if (d.ok) {
-      const lemaEl = document.getElementById('banner-lema');
-      if (d.lema) { lemaEl.textContent = '"' + d.lema + '"'; lemaEl.style.display = 'block'; }
-      else { lemaEl.style.display = 'none'; }
-
-      const chipsEl = document.getElementById('banner-chips');
-      const cualidades = (d.cualidades || '').split(',').map(c => c.trim()).filter(Boolean);
-      chipsEl.innerHTML = cualidades.map(c =>
-        `<span class="banner-chip" style="background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}">${c}</span>`
-      ).join('');
-
-      const rank = getRank(d.años || 0);
-      const ribbonWrap = document.getElementById('banner-ribbon');
-      if (rank) {
-        const inner = document.getElementById('banner-ribbon-inner');
-        inner.style.background = rank.color;
-        inner.style.boxShadow = `0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.3),0 0 22px ${rank.glow}`;
-        document.getElementById('ribbon-rank-name').textContent = rank.name.toUpperCase();
-        document.getElementById('ribbon-icon').textContent = rank.icon;
-        const yrs = d.años || 0;
-        document.getElementById('ribbon-years').textContent = yrs + ' año' + (yrs !== 1 ? 's' : '');
-        ribbonWrap.style.display = 'block';
-      } else {
-        ribbonWrap.style.display = 'none';
-      }
-    }
-  } catch {}
 }
 
 function hideBanner() {
@@ -657,6 +664,9 @@ function hideBanner() {
   document.getElementById('pass-section').classList.remove('visible');
   document.getElementById('banner-ribbon').style.display = 'none';
   document.getElementById('banner-chips').innerHTML = '';
+  // Restaurar estilo visual del panel izquierdo
+  const cached = JSON.parse(localStorage.getItem(LS_PREFS_KEY) || 'null') || DEFAULTS;
+  applyPrefs(cached);
 }
 
 function seleccionar(username, nombre, rol) {

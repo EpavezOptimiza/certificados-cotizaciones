@@ -640,48 +640,18 @@ body.dark .pref-label{color:#e2e8f0}
 
     <!-- Sección apariencia del login -->
     <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0">
-      <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px">🎨 Apariencia del Login <span style="font-weight:400;color:#cbd5e1">(este equipo)</span></div>
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">🎨 Apariencia del Login <span style="font-weight:400;color:#cbd5e1">(este equipo)</span></div>
+      <div style="font-size:11px;color:#cbd5e1;margin-bottom:14px">Elige una paleta de colores y un estilo visual.</div>
 
-      <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:500">Color de fondo</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="pref-palette-bg">
-        <div class="color-chip" data-key="color_bg" data-val="#0d1b2e" style="background:#0d1b2e" title="Azul marino"></div>
-        <div class="color-chip" data-key="color_bg" data-val="#0f1117" style="background:#0f1117" title="Negro"></div>
-        <div class="color-chip" data-key="color_bg" data-val="#0d2137" style="background:#0d2137" title="Azul profundo"></div>
-        <div class="color-chip" data-key="color_bg" data-val="#1a0d2e" style="background:#1a0d2e" title="Morado oscuro"></div>
-        <div class="color-chip" data-key="color_bg" data-val="#0d1f14" style="background:#0d1f14" title="Verde oscuro"></div>
-        <div class="color-chip" data-key="color_bg" data-val="#1f1208" style="background:#1f1208" title="Café oscuro"></div>
-      </div>
+      <!-- Paletas -->
+      <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">Paleta de colores</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px" id="pref-palettes"></div>
 
-      <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:500">Color de orbe 1</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="pref-palette-orb1">
-        <div class="color-chip" data-key="color_orb1" data-val="#2563eb" style="background:#2563eb" title="Azul"></div>
-        <div class="color-chip" data-key="color_orb1" data-val="#6366f1" style="background:#6366f1" title="Índigo"></div>
-        <div class="color-chip" data-key="color_orb1" data-val="#0d9488" style="background:#0d9488" title="Teal"></div>
-        <div class="color-chip" data-key="color_orb1" data-val="#7c3aed" style="background:#7c3aed" title="Violeta"></div>
-        <div class="color-chip" data-key="color_orb1" data-val="#0891b2" style="background:#0891b2" title="Cyan"></div>
-        <div class="color-chip" data-key="color_orb1" data-val="#dc2626" style="background:#dc2626" title="Rojo"></div>
-      </div>
+      <!-- Estilos -->
+      <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">Estilo de diseño</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:6px" id="pref-styles"></div>
 
-      <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:500">Color de orbe 2</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="pref-palette-orb2">
-        <div class="color-chip" data-key="color_orb2" data-val="#6366f1" style="background:#6366f1" title="Índigo"></div>
-        <div class="color-chip" data-key="color_orb2" data-val="#8b5cf6" style="background:#8b5cf6" title="Púrpura"></div>
-        <div class="color-chip" data-key="color_orb2" data-val="#2dd4bf" style="background:#2dd4bf" title="Teal claro"></div>
-        <div class="color-chip" data-key="color_orb2" data-val="#c026d3" style="background:#c026d3" title="Fucsia"></div>
-        <div class="color-chip" data-key="color_orb2" data-val="#f59e0b" style="background:#f59e0b" title="Ámbar"></div>
-        <div class="color-chip" data-key="color_orb2" data-val="#f87171" style="background:#f87171" title="Rojo claro"></div>
-      </div>
-
-      <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:500">Color de botón</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px" id="pref-palette-btn">
-        <div class="color-chip" data-key="color_btn" data-val="#2563eb" style="background:#2563eb" title="Azul"></div>
-        <div class="color-chip" data-key="color_btn" data-val="#6366f1" style="background:#6366f1" title="Índigo"></div>
-        <div class="color-chip" data-key="color_btn" data-val="#0d9488" style="background:#0d9488" title="Teal"></div>
-        <div class="color-chip" data-key="color_btn" data-val="#7c3aed" style="background:#7c3aed" title="Violeta"></div>
-        <div class="color-chip" data-key="color_btn" data-val="#0891b2" style="background:#0891b2" title="Cyan"></div>
-        <div class="color-chip" data-key="color_btn" data-val="#16a34a" style="background:#16a34a" title="Verde"></div>
-      </div>
-      <div style="font-size:11px;color:#cbd5e1;margin-top:6px">Los cambios se aplican al próximo inicio de sesión en este equipo.</div>
+      <div style="font-size:11px;color:#cbd5e1;margin-top:8px">Los cambios se aplican al próximo inicio de sesión en este equipo.</div>
     </div>
 
     <div class="modal-btns">
@@ -690,9 +660,19 @@ body.dark .pref-label{color:#e2e8f0}
   </div>
 </div>
 <style>
-.color-chip{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform .15s,border-color .15s;flex-shrink:0}
-.color-chip:hover{transform:scale(1.15)}
-.color-chip.active{border-color:#fff;box-shadow:0 0 0 2px #64748b}
+.palette-card{border-radius:10px;border:2px solid #e2e8f0;padding:8px;cursor:pointer;transition:all .15s;background:#fff;text-align:center}
+.palette-card:hover{border-color:#94a3b8;transform:translateY(-1px)}
+.palette-card.active{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.palette-swatches{display:flex;gap:3px;justify-content:center;margin-bottom:5px}
+.palette-swatch{width:14px;height:14px;border-radius:50%}
+.palette-name{font-size:10px;font-weight:600;color:#475569}
+.palette-icon{font-size:16px;margin-bottom:2px}
+.style-card{border-radius:10px;border:2px solid #e2e8f0;padding:10px 8px;cursor:pointer;transition:all .15s;background:#fff;display:flex;align-items:center;gap:8px}
+.style-card:hover{border-color:#94a3b8;transform:translateY(-1px)}
+.style-card.active{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.style-icon{font-size:20px;flex-shrink:0}
+.style-info .style-name{font-size:11px;font-weight:700;color:#0f172a}
+.style-info .style-desc{font-size:10px;color:#94a3b8}
 </style>
 
 <!-- Modal cambio de clave -->
@@ -1945,6 +1925,30 @@ function getDeviceId(){
 }
 let _devicePrefs = {color_bg:'#0d1b2e',color_orb1:'#2563eb',color_orb2:'#6366f1',color_btn:'#2563eb',color_icon:'#1d4ed8',login_style:'orbos'};
 
+const LOGIN_PALETTES = [
+  {id:'oceano',   icon:'🌊', name:'Océano',    bg:'#0d1b2e', orb1:'#2563eb', orb2:'#6366f1', btn:'#2563eb'},
+  {id:'galaxia',  icon:'🌌', name:'Galaxia',   bg:'#1a0d2e', orb1:'#7c3aed', orb2:'#c026d3', btn:'#7c3aed'},
+  {id:'aurora',   icon:'🌿', name:'Aurora',    bg:'#0d1f14', orb1:'#059669', orb2:'#2dd4bf', btn:'#059669'},
+  {id:'fuego',    icon:'🔥', name:'Fuego',     bg:'#1f0a08', orb1:'#dc2626', orb2:'#f59e0b', btn:'#dc2626'},
+  {id:'artico',   icon:'❄️', name:'Ártico',    bg:'#0a1628', orb1:'#0891b2', orb2:'#2dd4bf', btn:'#0891b2'},
+  {id:'atardecer',icon:'🌅', name:'Atardecer', bg:'#1a0e08', orb1:'#f97316', orb2:'#f59e0b', btn:'#f97316'},
+  {id:'cosmos',   icon:'✨', name:'Cosmos',    bg:'#080b12', orb1:'#6366f1', orb2:'#8b5cf6', btn:'#6366f1'},
+  {id:'neon',     icon:'⚡', name:'Neón',      bg:'#050d1a', orb1:'#06b6d4', orb2:'#a855f7', btn:'#06b6d4'},
+];
+
+const LOGIN_STYLES = [
+  {id:'orbos',      icon:'⬤', name:'Orbos',        desc:'Esferas flotantes animadas'},
+  {id:'geometrico', icon:'◆', name:'Geométrico',   desc:'Formas y líneas abstractas'},
+  {id:'minimal',    icon:'▭', name:'Minimalista',  desc:'Limpio, sin distracciones'},
+  {id:'cristal',    icon:'💎', name:'Cristal',      desc:'Glassmorphism con reflejos'},
+  {id:'cosmos',     icon:'🌠', name:'Cosmos',       desc:'Estrellas y partículas'},
+  {id:'neon',       icon:'🔆', name:'Neón',         desc:'Luces brillantes y vibrantes'},
+  {id:'aurora',     icon:'🌈', name:'Aurora',       desc:'Gradientes suaves en movimiento'},
+  {id:'ondas',      icon:'〰', name:'Ondas',        desc:'Patrones ondulados fluidos'},
+  {id:'hexagonal',  icon:'⬡', name:'Hexagonal',    desc:'Grid hexagonal animado'},
+  {id:'lluvia',     icon:'🌧', name:'Lluvia',       desc:'Partículas cayendo en cascada'},
+];
+
 async function cargarDevicePrefs(){
   try{
     const r = await fetch('/api/device_prefs?device_id='+encodeURIComponent(getDeviceId()));
@@ -1962,23 +1966,62 @@ async function guardarDevicePrefs(){
 }
 
 function initColorChips(){
-  document.querySelectorAll('.color-chip').forEach(chip => {
-    chip.addEventListener('click', function(){
-      const key = this.dataset.key;
-      const val = this.dataset.val;
-      _devicePrefs[key] = val;
-      // marcar activo en su grupo
-      document.querySelectorAll(`.color-chip[data-key="${key}"]`).forEach(c=>c.classList.remove('active'));
-      this.classList.add('active');
-      guardarDevicePrefs();
-    });
-  });
+  // Render paletas
+  const palGrid = document.getElementById('pref-palettes');
+  if(palGrid){
+    palGrid.innerHTML = LOGIN_PALETTES.map(p=>`
+      <div class="palette-card" data-palette="${p.id}" onclick="selectPalette('${p.id}')">
+        <div class="palette-icon">${p.icon}</div>
+        <div class="palette-swatches">
+          <div class="palette-swatch" style="background:${p.bg}"></div>
+          <div class="palette-swatch" style="background:${p.orb1}"></div>
+          <div class="palette-swatch" style="background:${p.orb2}"></div>
+        </div>
+        <div class="palette-name">${p.name}</div>
+      </div>`).join('');
+  }
+  // Render estilos
+  const styleGrid = document.getElementById('pref-styles');
+  if(styleGrid){
+    styleGrid.innerHTML = LOGIN_STYLES.map(s=>`
+      <div class="style-card" data-style="${s.id}" onclick="selectStyle('${s.id}')">
+        <div class="style-icon">${s.icon}</div>
+        <div class="style-info">
+          <div class="style-name">${s.name}</div>
+          <div class="style-desc">${s.desc}</div>
+        </div>
+      </div>`).join('');
+  }
+}
+
+function selectPalette(id){
+  const p = LOGIN_PALETTES.find(x=>x.id===id);
+  if(!p) return;
+  _devicePrefs.color_bg  = p.bg;
+  _devicePrefs.color_orb1= p.orb1;
+  _devicePrefs.color_orb2= p.orb2;
+  _devicePrefs.color_btn = p.btn;
+  _devicePrefs.color_icon= p.btn;
+  syncChipSelection();
+  guardarDevicePrefs();
+}
+
+function selectStyle(id){
+  _devicePrefs.login_style = id;
+  syncChipSelection();
+  guardarDevicePrefs();
 }
 
 function syncChipSelection(){
-  document.querySelectorAll('.color-chip').forEach(chip=>{
-    const key = chip.dataset.key;
-    chip.classList.toggle('active', _devicePrefs[key] === chip.dataset.val);
+  // Detectar paleta activa
+  document.querySelectorAll('.palette-card').forEach(el=>{
+    const p = LOGIN_PALETTES.find(x=>x.id===el.dataset.palette);
+    const active = p && p.bg===_devicePrefs.color_bg && p.orb1===_devicePrefs.color_orb1 && p.orb2===_devicePrefs.color_orb2;
+    el.classList.toggle('active', !!active);
+  });
+  // Detectar estilo activo
+  document.querySelectorAll('.style-card').forEach(el=>{
+    el.classList.toggle('active', el.dataset.style===_devicePrefs.login_style);
   });
 }
 

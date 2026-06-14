@@ -528,6 +528,15 @@ body.dark .pref-label{color:#e2e8f0}
       <option value="ingreso">Ingreso</option>
       <option value="terreno">Terreno</option>
     </select>
+    <div style="border-top:1px solid #f1f5f9;margin:14px 0 10px;padding-top:14px">
+      <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Banner de presentación (login)</div>
+      <label>Lema o frase personal</label>
+      <input id="u-lema" placeholder="Ej: Los detalles hacen la diferencia." maxlength="120">
+      <label>Cualidades <span style="font-weight:400;color:#94a3b8;font-size:11px">(separadas por coma)</span></label>
+      <input id="u-cualidades" placeholder="Ej: Proactivo, Detallista, Rápido">
+      <label>Fecha de ingreso</label>
+      <input type="date" id="u-fecha-ingreso">
+    </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalNuevoUsuario')">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarUsuario()">Guardar</button>
@@ -1174,9 +1183,12 @@ async function restablecerTipos(){
 }
 
 // ── Usuarios ──────────────────────────────────────────────────────────────────
+let _usersData = {};
 async function openModal_usuarios(){
   const r=await fetch("/api/usuarios");
   const users=await r.json();
+  _usersData={};
+  users.forEach(u=>{ _usersData[u.id]=u; });
   const BADGE={admin:"badge-admin",consultor:"badge-ahorro",terreno:"badge-terreno"};
   document.getElementById("usuarios-list").innerHTML=users.map(u=>`
     <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">
@@ -1184,22 +1196,27 @@ async function openModal_usuarios(){
         <span style="font-weight:600;font-size:13px">${escHtml(u.nombre)}</span>
         <span class="badge ${BADGE[u.rol]||""}" style="margin-left:6px">${ROLES[u.rol]||u.rol}</span><br>
         <span style="font-size:11px;color:#64748b">${u.username}${u.email?" · "+u.email:""}</span>
+        ${u.lema?`<br><span style="font-size:11px;color:#94a3b8;font-style:italic">"${escHtml(u.lema)}"</span>`:""}
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editUsuario(${u.id},'${u.username}','${escHtml(u.nombre)}','${u.email}','${u.rol}')">✏</button>
+        <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editUsuario(${u.id})">✏</button>
         <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="eliminarUsuario(${u.id})">🗑</button>
       </div>
     </div>`).join("");
   openModal("modalUsuarios");
 }
-function editUsuario(id,username,nombre,email,rol){
+function editUsuario(id){
+  const u=_usersData[id]||{};
   editUsrId=id;
   document.getElementById("modalUsuarioTitle").textContent="Editar usuario";
-  document.getElementById("u-nombre").value=nombre;
-  document.getElementById("u-username").value=username;
+  document.getElementById("u-nombre").value=u.nombre||"";
+  document.getElementById("u-username").value=u.username||"";
   document.getElementById("u-password").value="";
-  document.getElementById("u-email").value=email;
-  document.getElementById("u-rol").value=rol;
+  document.getElementById("u-email").value=u.email||"";
+  document.getElementById("u-rol").value=u.rol||"ahorro";
+  document.getElementById("u-lema").value=u.lema||"";
+  document.getElementById("u-cualidades").value=u.cualidades||"";
+  document.getElementById("u-fecha-ingreso").value=u.fecha_ingreso||"";
   openModal("modalNuevoUsuario");
 }
 async function guardarUsuario(){
@@ -1208,9 +1225,12 @@ async function guardarUsuario(){
   const password=document.getElementById("u-password").value;
   const email=document.getElementById("u-email").value.trim();
   const rol=document.getElementById("u-rol").value;
+  const lema=document.getElementById("u-lema").value.trim();
+  const cualidades=document.getElementById("u-cualidades").value.trim();
+  const fecha_ingreso=document.getElementById("u-fecha-ingreso").value;
   if(!nombre||!username) return alert("Nombre y usuario son obligatorios.");
   if(!editUsrId&&!password) return alert("La contraseña es obligatoria para usuarios nuevos.");
-  const body={nombre,username,password,email,rol};
+  const body={nombre,username,password,email,rol,lema,cualidades,fecha_ingreso};
   if(editUsrId){
     await fetch(`/api/usuarios/${editUsrId}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     editUsrId=null;

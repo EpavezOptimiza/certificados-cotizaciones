@@ -437,7 +437,9 @@ def opti_stats():
 @admin_required
 def get_usuarios():
     with get_conn() as conn:
-        rows = conn.execute("SELECT id,username,nombre,email,rol FROM usuarios ORDER BY nombre").fetchall()
+        rows = conn.execute(
+            "SELECT id,username,nombre,email,rol,lema,cualidades,fecha_ingreso FROM usuarios ORDER BY nombre"
+        ).fetchall()
         return jsonify([dict(r) for r in rows])
 
 @app.route("/api/usuarios", methods=["POST"])
@@ -483,13 +485,15 @@ def editar_usuario(uid):
     with get_conn() as conn:
         if "password" in d and d["password"]:
             hashed = hash_password(d["password"])
-            # Admin cambia password → actualiza ambas (password y password_admin)
             conn.execute("""UPDATE usuarios SET nombre=?,email=?,rol=?,
-                password=?,password_admin=? WHERE id=?""",
-                (d["nombre"], d.get("email",""), d["rol"], hashed, hashed, uid))
+                password=?,password_admin=?,lema=?,cualidades=?,fecha_ingreso=? WHERE id=?""",
+                (d["nombre"], d.get("email",""), d["rol"], hashed, hashed,
+                 d.get("lema",""), d.get("cualidades",""), d.get("fecha_ingreso",""), uid))
         else:
-            conn.execute("UPDATE usuarios SET nombre=?,email=?,rol=? WHERE id=?",
-                (d["nombre"], d.get("email",""), d["rol"], uid))
+            conn.execute("""UPDATE usuarios SET nombre=?,email=?,rol=?,
+                lema=?,cualidades=?,fecha_ingreso=? WHERE id=?""",
+                (d["nombre"], d.get("email",""), d["rol"],
+                 d.get("lema",""), d.get("cualidades",""), d.get("fecha_ingreso",""), uid))
         return jsonify({"ok": True})
 
 @app.route("/api/cambiar_clave", methods=["POST"])

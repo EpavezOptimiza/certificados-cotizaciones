@@ -1227,6 +1227,161 @@ def reporte_grupo(gid):
         instituciones=[i[0] for i in INSTITUCIONES],
         icon=ICON, now=datetime.now().strftime("%d/%m/%Y %H:%M"))
 
+# ── PREVIRED ──────────────────────────────────────────────────
+
+def _seed_previred_empresas():
+    """Importa empresas desde Excel local si la tabla está vacía."""
+    import openpyxl, os as _os
+    EXCEL = _os.environ.get("PREVIRED_EXCEL", "")
+    if not EXCEL or not _os.path.exists(EXCEL):
+        return
+    with get_conn() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM previred_empresas").fetchone()[0]
+        if count > 0:
+            return
+        try:
+            wb = openpyxl.load_workbook(EXCEL)
+            ws = wb.active
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                rut = str(row[0]).strip() if row[0] else ""
+                grupo = str(row[1]).strip() if row[1] else ""
+                razon = str(row[2]).strip() if row[2] else ""
+                if rut and rut != "None":
+                    conn.execute(
+                        "INSERT OR IGNORE INTO previred_empresas(rut,grupo,razon_social) VALUES(?,?,?)",
+                        (rut, grupo, razon))
+        except Exception as e:
+            print(f"[previred] Error importando Excel: {e}")
+
+_seed_previred_empresas()
+
+@app.route("/previred")
+@login_required
+def previred():
+    return render_template("previred.html")
+
+@app.route("/api/previred/empresas")
+@api_login_required
+def previred_empresas_list():
+    q = request.args.get("q", "").strip().lower()
+    grupo = request.args.get("grupo", "").strip()
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 20))
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, rut, grupo, razon_social FROM previred_empresas WHERE activa=1 ORDER BY grupo, razon_social"
+        ).fetchall()
+    items = [dict(r) for r in rows]
+    if q:
+        items = [i for i in items if q in i["rut"].lower() or q in i["grupo"].lower() or q in i["razon_social"].lower()]
+    if grupo:
+        items = [i for i in items if i["grupo"] == grupo]
+    total = len(items)
+    grupos = sorted(set(i["grupo"] for i in [dict(r) for r in rows] if i["grupo"]))
+    start = (page - 1) * per_page
+    return jsonify({"items": items[start:start+per_page], "total": total, "grupos": grupos, "page": page})
+
+@app.route("/api/previred/empresas", methods=["POST"])
+@api_login_required
+def previred_empresa_crear():
+    d = request.json or {}
+    rut = d.get("rut", "").strip()
+    if not rut:
+        return jsonify({"error": "RUT requerido"}), 400
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO previred_empresas(rut, grupo, razon_social) VALUES(?,?,?)",
+            (rut, d.get("grupo","").strip(), d.get("razon_social","").strip()))
+    _exportar_previred_excel()
+    return jsonify({"ok": True})
+
+@app.route("/api/previred/empresas/<int:eid>", methods=["PUT"])
+@api_login_required
+def previred_empresa_editar(eid):
+    d = request.json or {}
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE previred_empresas SET rut=?, grupo=?, razon_social=? WHERE id=?",
+            (d.get("rut","").strip(), d.get("grupo","").strip(), d.get("razon_social","").strip(), eid))
+    _exportar_previred_excel()
+    return jsonify({"ok": True})
+
+@app.route("/api/previred/empresas/<int:eid>", methods=["DELETE"])
+@api_login_required
+def previred_empresa_eliminar(eid):
+    with get_conn() as conn:
+        conn.execute("UPDATE previred_empresas SET activa=0 WHERE id=?", (eid,))
+    _exportar_previred_excel()
+    return jsonify({"ok": True})
+
+@app.route("/api/previred/empresas/export")
+@api_login_required
+def previred_export():
+    import openpyxl, io
+    from flask import send_file
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT rut, grupo, razon_social FROM previred_empresas WHERE activa=1 ORDER BY grupo, razon_social"
+        ).fetchall()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Empresas"
+    ws.append(["1 RUT", "2 GRUPO", "5 RAZON SOCIAL"])
+    for r in rows:
+        ws.append([r["rut"], r["grupo"], r["razon_social"]])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name="DATOS_RAZONES_SOCIALES.xlsx")
+
+@app.route("/api/previred/empresas/import", methods=["POST"])
+@api_login_required
+def previred_import():
+    import openpyxl, io
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "Sin archivo"}), 400
+    reemplazar = request.form.get("reemplazar", "0") == "1"
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(f.read()))
+        ws = wb.active
+        rows = [(str(r[0]).strip(), str(r[1]).strip() if r[1] else "", str(r[2]).strip() if r[2] else "")
+                for r in ws.iter_rows(min_row=2, values_only=True) if r[0] and str(r[0]).strip() != "None"]
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    with get_conn() as conn:
+        if reemplazar:
+            conn.execute("UPDATE previred_empresas SET activa=0")
+        for rut, grupo, razon in rows:
+            existing = conn.execute("SELECT id FROM previred_empresas WHERE rut=?", (rut,)).fetchone()
+            if existing:
+                conn.execute("UPDATE previred_empresas SET grupo=?, razon_social=?, activa=1 WHERE rut=?",
+                             (grupo, razon, rut))
+            else:
+                conn.execute("INSERT INTO previred_empresas(rut,grupo,razon_social) VALUES(?,?,?)",
+                             (rut, grupo, razon))
+    _exportar_previred_excel()
+    return jsonify({"ok": True, "importadas": len(rows)})
+
+def _exportar_previred_excel():
+    """Escribe el Excel en el volumen persistente del servidor."""
+    import openpyxl, os as _os
+    DEST = _os.path.join(_os.path.dirname(DB_PATH), "DATOS_RAZONES_SOCIALES.xlsx")
+    try:
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT rut, grupo, razon_social FROM previred_empresas WHERE activa=1 ORDER BY grupo, razon_social"
+            ).fetchall()
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["1 RUT", "2 GRUPO", "5 RAZON SOCIAL"])
+        for r in rows:
+            ws.append([r["rut"], r["grupo"], r["razon_social"]])
+        wb.save(DEST)
+    except Exception as e:
+        print(f"[previred] Error exportando Excel: {e}")
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

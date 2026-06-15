@@ -170,6 +170,15 @@ def init_db():
         try:
             conn.execute("ALTER TABLE usuarios ADD COLUMN fecha_ingreso TEXT DEFAULT ''")
         except: pass
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS previred_empresas (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                rut          TEXT NOT NULL,
+                grupo        TEXT DEFAULT '',
+                razon_social TEXT DEFAULT '',
+                activa       INTEGER DEFAULT 1
+            )""")
+        except: pass
         # Crear permisos por defecto para usuarios existentes
         try:
             usuarios = conn.execute("SELECT id, rol FROM usuarios").fetchall()

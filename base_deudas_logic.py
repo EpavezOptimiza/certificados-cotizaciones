@@ -23,7 +23,7 @@ RE_RAZON_SOCIAL  = re.compile(
     re.IGNORECASE)
 RE_RAZON_PREFIJO = re.compile(r"^(?:cuya\s+raz[o6ó]n\s+social\s+es\s+)", re.IGNORECASE)
 RE_RAZON_HABITAT = re.compile(r"(?:Se\w{1,5}res?\s*[\n\r\s]*)(.+?)\s+Rut\s*:", re.IGNORECASE | re.DOTALL)
-RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA", re.IGNORECASE)
+RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA|REGISTRO\s+DE\s+NO\s+DEUDA", re.IGNORECASE)
 RE_PERIODO_STR   = re.compile(r"^(\d{2})/(\d{4})")
 RE_GRUPO_PDF     = re.compile(
     r"^(PLANILLAS COMPLEMENTARIAS|DECL\.?\s*Y NO PAGO\s*AUTOM\.?\s*\(?DNPA\)?)\s+"
@@ -118,6 +118,10 @@ def detectar_institucion(pdf_bytes: bytes, nombre_archivo: str = "") -> str:
             return f"AFP {afp}"
     return INSTITUCION_DEFAULT
 
+RE_RAZON_AFC = re.compile(
+    r"(?:empleador\s+)([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ0-9\s\.,]+?),?\s+RUT\s+(\d{1,2}\.\d{3}\.\d{3}-[\dKk])",
+    re.IGNORECASE)
+
 def detectar_no_deuda(pdf_bytes: bytes) -> tuple:
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         texto = " ".join((p.extract_text() or "") for p in pdf.pages[:2])
@@ -125,8 +129,14 @@ def detectar_no_deuda(pdf_bytes: bytes) -> tuple:
         return False, "", ""
     m_rut = RE_RUT_EMPRESA.search(texto)
     rut = re.sub(r"\s", "", m_rut.group(1)) if m_rut else ""
-    m_rs = RE_RAZON_SOCIAL.search(texto)
+    m_rs = RE_RAZON_SOCIAL.search(texto) or RE_RAZON_HABITAT.search(texto)
     razon = _limpiar_razon(m_rs.group(1)) if m_rs else ""
+    # Fallback AFC: "empleador NOMBRE, RUT XX.XXX.XXX-X"
+    if not razon or not rut:
+        m_afc = RE_RAZON_AFC.search(texto)
+        if m_afc:
+            if not razon: razon = m_afc.group(1).strip().rstrip(",")
+            if not rut:   rut   = m_afc.group(2)
     return True, rut, razon
 
 def extraer_datos_empresa(ws) -> tuple:

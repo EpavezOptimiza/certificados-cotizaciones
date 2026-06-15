@@ -82,6 +82,53 @@ MESES   = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
 
 init_db()
 
+# Poblar lema y cualidades random para usuarios que no los tienen
+def _seed_banners():
+    import random
+    LEMAS = [
+        "Los detalles hacen la diferencia.",
+        "El orden es la base de todo.",
+        "Cada certificado cuenta.",
+        "Trabajo con propósito y precisión.",
+        "La constancia mueve montañas.",
+        "Hecho con cuidado, entregado a tiempo.",
+        "Siempre un paso adelante.",
+        "La excelencia es un hábito.",
+        "Comprometido con cada tarea.",
+        "Lo importante es hacerlo bien.",
+        "Primero entender, luego actuar.",
+        "Sin prisa, pero sin pausa.",
+        "La calidad no es un accidente.",
+        "Cada día es una oportunidad.",
+        "Resultados que hablan por sí solos.",
+    ]
+    CUALIDADES = [
+        "Proactivo,Organizado,Detallista",
+        "Rápido,Preciso,Confiable",
+        "Analítico,Metódico,Eficiente",
+        "Creativo,Resolutivo,Comprometido",
+        "Puntual,Ordenado,Responsable",
+        "Dinámico,Enfocado,Colaborador",
+        "Riguroso,Versátil,Persistente",
+        "Adaptable,Curioso,Proactivo",
+        "Estratégico,Claro,Directo",
+        "Empático,Confiable,Dedicado",
+    ]
+    with get_conn() as conn:
+        users = conn.execute("SELECT id, lema, cualidades FROM usuarios").fetchall()
+        for u in users:
+            updates = {}
+            if not u["lema"]:
+                updates["lema"] = random.choice(LEMAS)
+            if not u["cualidades"]:
+                updates["cualidades"] = random.choice(CUALIDADES)
+            if updates:
+                fields = ", ".join(f"{k}=?" for k in updates)
+                conn.execute(f"UPDATE usuarios SET {fields} WHERE id=?",
+                             list(updates.values()) + [u["id"]])
+
+_seed_banners()
+
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 def get_current_user():
     token = request.cookies.get("session_token")

@@ -603,30 +603,30 @@ function showBanner(username, nombre, rol) {
   const radarEl = document.getElementById('radar-bg');
   radarEl.innerHTML = `
     <canvas id="banner-canvas" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
-    <div style="position:absolute;inset:0;z-index:2;pointer-events:none;padding:44px 44px 0">
-      <div style="font-size:11px;font-weight:700;color:#2dd4bf;letter-spacing:1.4px;margin-bottom:14px;text-transform:uppercase">Bienvenido al portal</div>
-      <div style="font-size:min(3.6vw,28px);font-weight:800;color:#fff;line-height:1.18;margin-bottom:2px">Transformamos gestión</div>
-      <div style="font-size:min(3.6vw,28px);font-weight:800;line-height:1.18;margin-bottom:16px">
+    <div style="position:absolute;inset:0;z-index:2;pointer-events:none;padding:48px 48px 0">
+      <div style="font-size:13px;font-weight:700;color:#2dd4bf;letter-spacing:1.6px;margin-bottom:18px;text-transform:uppercase">Bienvenido al portal</div>
+      <div style="font-size:min(5vw,42px);font-weight:800;color:#fff;line-height:1.15;margin-bottom:4px">Transformamos gestión</div>
+      <div style="font-size:min(5vw,42px);font-weight:800;line-height:1.15;margin-bottom:22px">
         <span style="background:linear-gradient(90deg,#2dd4bf,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">en</span>
         <span style="color:#fff"> resultados.</span>
       </div>
-      <div style="width:44px;height:2.5px;background:linear-gradient(90deg,#e879f9,#2dd4bf);border-radius:2px;margin-bottom:16px"></div>
-      <div style="font-size:12.5px;color:rgba(255,255,255,.42);line-height:1.65;margin-bottom:28px">Un espacio diseñado para conectarte,<br>informarte y seguir creciendo juntos.</div>
-      <div style="display:flex;gap:26px">
+      <div style="width:56px;height:3px;background:linear-gradient(90deg,#e879f9,#2dd4bf);border-radius:2px;margin-bottom:20px"></div>
+      <div style="font-size:15px;color:rgba(255,255,255,.48);line-height:1.7;margin-bottom:40px">Un espacio diseñado para conectarte,<br>informarte y seguir creciendo juntos.</div>
+      <div style="display:flex;gap:36px">
         <div>
-          <svg width="24" height="24" fill="none" stroke="#2dd4bf" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:7px"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="17" cy="9" r="2"/><path d="M21 21v-1a3 3 0 0 0-2-2.83"/></svg>
-          <div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:1px">Personas</div>
-          <div style="font-size:10px;color:rgba(255,255,255,.38)">Comprometidas</div>
+          <svg width="34" height="34" fill="none" stroke="#2dd4bf" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:10px"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="17" cy="9" r="2"/><path d="M21 21v-1a3 3 0 0 0-2-2.83"/></svg>
+          <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:2px">Personas</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.42)">Comprometidas</div>
         </div>
         <div>
-          <svg width="24" height="24" fill="none" stroke="#8b5cf6" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:7px"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="3" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="21" y2="12"/></svg>
-          <div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:1px">Procesos</div>
-          <div style="font-size:10px;color:rgba(255,255,255,.38)">Inteligentes</div>
+          <svg width="34" height="34" fill="none" stroke="#8b5cf6" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:10px"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="3" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="21" y2="12"/></svg>
+          <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:2px">Procesos</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.42)">Inteligentes</div>
         </div>
         <div>
-          <svg width="24" height="24" fill="none" stroke="#2dd4bf" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:7px"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
-          <div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:1px">Resultados</div>
-          <div style="font-size:10px;color:rgba(255,255,255,.38)">Medibles</div>
+          <svg width="34" height="34" fill="none" stroke="#2dd4bf" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:10px"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+          <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:2px">Resultados</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.42)">Medibles</div>
         </div>
       </div>
     </div>`;

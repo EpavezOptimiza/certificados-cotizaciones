@@ -2,7 +2,7 @@
 Certificados de Cotizaciones — Versión Web
 Flask + SQLite nativo | Despliegue Railway
 """
-import os, json, shutil, secrets, threading, uuid, time as _time
+import os, json, shutil, secrets, threading, uuid, time as _time, zipfile
 from datetime import datetime
 from functools import wraps
 from flask import (Flask, render_template, request, jsonify,
@@ -1452,7 +1452,7 @@ def previred_config_set():
 
 def _nueva_tarea() -> str:
     tid = uuid.uuid4().hex[:10]
-    _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None}
+    _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None, "zip": None}
     return tid
 
 def _log(tid: str, msg: str, tipo: str = "info"):
@@ -1470,11 +1470,22 @@ def previred_tarea(tid):
         return jsonify({"error": "Tarea no encontrada"}), 404
     since = int(request.args.get("since", 0))
     return jsonify({
-        "logs": t["logs"][since:],
-        "done": t["done"],
-        "error": t["error"],
+        "logs":    t["logs"][since:],
+        "done":    t["done"],
+        "error":   t["error"],
         "archivo": t["archivo"],
+        "zip":     bool(t.get("zip")),
     })
+
+@app.route("/api/previred/descargar-zip/<tid>")
+@api_login_required
+def previred_descargar_zip(tid):
+    t = _tareas.get(tid)
+    if not t or not t.get("zip") or not os.path.exists(t["zip"]):
+        return jsonify({"error": "ZIP no disponible"}), 404
+    return send_file(t["zip"], as_attachment=True,
+                     download_name=os.path.basename(t["zip"]),
+                     mimetype="application/zip")
 
 @app.route("/api/previred/descargar-excel/<tid>")
 @api_login_required
@@ -1549,9 +1560,19 @@ def previred_iniciar():
                 from previred_logic import descargar
                 carpeta_emp = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
                 os.makedirs(carpeta_emp, exist_ok=True)
-                _log(tid, f"Empresa: {rut_empresa} → carpeta {carpeta_emp}", "info")
+                _log(tid, f"Empresa: {rut_empresa}", "info")
                 descargar(rut_usr, cont_usr, rut_empresa, periodos,
                           carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t))
+                # Empaquetar PDFs descargados en ZIP
+                pdfs = [f for f in os.listdir(carpeta_emp) if f.endswith(".pdf")]
+                if pdfs:
+                    nombre_zip = f"Planillas_{rut_empresa.replace('.','').replace('-','')}_{_time.strftime('%Y%m%d_%H%M%S')}.zip"
+                    ruta_zip = os.path.join(_EXCELS_DIR, nombre_zip)
+                    with zipfile.ZipFile(ruta_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                        for f in pdfs:
+                            zf.write(os.path.join(carpeta_emp, f), f)
+                    _tareas[tid]["zip"] = ruta_zip
+                    _log(tid, f"ZIP listo con {len(pdfs)} PDF(s) — puedes descargarlo ahora", "ok")
 
             if tipo in ("convertir", "ambos"):
                 from pdf_excel_logic import generar_excel_bytes

@@ -225,7 +225,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <span id="estado-badge" class="badge-running" style="display:none">
             <div class="spinner"></div> Procesando...
           </span>
-          <button id="btn-excel" class="btn-dl-excel" onclick="descargarExcel()">⬇ Descargar Excel</button>
+          <button id="btn-zip"   class="btn-dl-excel" style="background:#1D9E75" onclick="descargarZip()">⬇ Bajar PDFs (ZIP)</button>
+          <button id="btn-excel" class="btn-dl-excel" onclick="descargarExcel()">⬇ Bajar Excel</button>
         </div>
       </div>
       <div class="log-body" id="log-body">
@@ -389,12 +390,17 @@ async function pollLogs(){
       _polling = null;
       document.getElementById('estado-badge').style.display = 'none';
       setBotones(true);
+      if(data.zip)     document.getElementById('btn-zip').classList.add('show');
       if(data.archivo) document.getElementById('btn-excel').classList.add('show');
       toast(data.error ? 'Proceso terminó con errores' : 'Proceso completado exitosamente');
     }
   } catch(e) {
     console.error(e);
   }
+}
+
+function descargarZip(){
+  if(_taskId) window.open(`/api/previred/descargar-zip/${_taskId}`);
 }
 
 function descargarExcel(){

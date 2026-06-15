@@ -1402,6 +1402,63 @@ def _exportar_previred_excel():
         print(f"[previred] Error exportando Excel: {e}")
 
 # ============================================================
+#  BASE DEUDAS AFP
+# ============================================================
+
+@app.route("/base-deudas")
+@login_required
+def base_deudas_page():
+    return render_template("base_deudas.html")
+
+@app.route("/api/base-deudas/procesar", methods=["POST"])
+@api_login_required
+def base_deudas_procesar():
+    from base_deudas_logic import procesar_lote
+
+    archivos = request.files.getlist("archivos")
+    if not archivos:
+        return jsonify({"error": "No se recibieron archivos"}), 400
+
+    # Separar PDFs y Excels, matchear por nombre
+    pdfs   = {f.filename: f.read() for f in archivos if f.filename.lower().endswith(".pdf")}
+    excels = {f.filename: f.read() for f in archivos if f.filename.lower().endswith(".xlsx")}
+
+    if not excels:
+        return jsonify({"error": "Debes subir al menos un Excel de Adobe (.xlsx)"}), 400
+
+    # Matchear: PDF base = Excel sin "_ADOBE"
+    pares = []
+    for excel_nombre, excel_bytes in excels.items():
+        stem = excel_nombre.replace("_ADOBE","").replace("_adobe","")
+        pdf_nombre  = stem if stem.lower().endswith(".pdf") else stem.rsplit(".",1)[0] + ".pdf"
+        pdf_bytes   = pdfs.get(pdf_nombre) or next(iter(pdfs.values()), b"")
+        real_pdf_nombre = pdf_nombre if pdf_nombre in pdfs else (list(pdfs.keys())[0] if pdfs else "")
+        pares.append({
+            "pdf_bytes":    pdf_bytes,
+            "pdf_nombre":   real_pdf_nombre or excel_nombre,
+            "excel_bytes":  excel_bytes,
+            "excel_nombre": excel_nombre,
+        })
+
+    if not pares:
+        return jsonify({"error": "No se pudo armar ningún par PDF+Excel"}), 400
+
+    logs = []
+    def _log(msg, tipo="info"):
+        logs.append({"msg": msg, "tipo": tipo})
+
+    try:
+        resultado_bytes = procesar_lote(pares, log=_log)
+    except Exception as e:
+        return jsonify({"error": str(e), "logs": logs}), 500
+
+    # Devolver Excel + logs como JSON con el Excel en base64
+    import base64
+    excel_b64 = base64.b64encode(resultado_bytes).decode()
+    return jsonify({"ok": True, "excel_b64": excel_b64, "logs": logs,
+                    "nombre": f"Resultados_AFP_{_time.strftime('%Y%m%d_%H%M%S')}.xlsx"})
+
+# ============================================================
 #  PREVIRED — AUTOMATIZACIÓN (descarga + conversión)
 # ============================================================
 

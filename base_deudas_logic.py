@@ -527,6 +527,119 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
             ws.cell(i, col, "")
 
 
+# ── Extracción directa desde PDF (sin Excel Adobe) ───────────────────────────
+
+def _extraer_filas_pdf(texto: str) -> list:
+    """Extrae filas de deuda directamente del texto del PDF AFP."""
+    grupos = []
+    grupo_actual = None
+    detalles_actuales = []
+
+    for linea in texto.splitlines():
+        linea = linea.strip()
+        if not linea:
+            continue
+
+        m_g = RE_GRUPO_PDF.match(linea)
+        if m_g:
+            if grupo_actual:
+                grupos.append((grupo_actual, detalles_actuales[:]))
+                detalles_actuales = []
+            grupo_actual = {
+                "rut": "", "nombre": "",
+                "monto_nom": _limpiar_num_pdf(m_g.group(3)),
+                "monto_act": _limpiar_num_pdf(m_g.group(4)),
+                "origen": _norm_origen(m_g.group(1)), "adm": None,
+                "periodo": _periodo(m_g.group(2)),
+                "estado": "", "abogado": "",
+            }
+            continue
+
+        m_d = RE_DETALLE_PDF.match(linea)
+        if m_d and grupo_actual:
+            detalles_actuales.append({
+                "rut": m_d.group(1), "nombre": "",
+                "monto_nom": _limpiar_num_pdf(m_d.group(2)),
+                "monto_act": _limpiar_num_pdf(m_d.group(3)),
+                "origen": grupo_actual["origen"], "adm": None,
+                "periodo": grupo_actual["periodo"],
+                "estado": "", "abogado": "",
+            })
+
+    if grupo_actual:
+        grupos.append((grupo_actual, detalles_actuales[:]))
+
+    filas = []
+    for grupo, detalles in grupos:
+        if detalles:
+            filas.extend(detalles)
+        else:
+            filas.append(grupo)
+    return filas
+
+
+def procesar_lote_solo_pdf(pdfs: list, log=None) -> bytes:
+    """
+    pdfs: lista de dicts {"pdf_bytes": bytes, "pdf_nombre": str}
+    Extrae datos del PDF AFP sin necesidad de Excel Adobe.
+    Devuelve bytes del Excel consolidado.
+    """
+    def _log(msg, tipo="info"):
+        if log: log(msg, tipo)
+
+    wb_res = openpyxl.load_workbook(TEMPLATE_PATH)
+
+    for item in pdfs:
+        pdf_bytes  = item["pdf_bytes"]
+        pdf_nombre = item["pdf_nombre"]
+
+        _log(f"── {pdf_nombre}", "info")
+
+        # Detección NO DEUDA
+        try:
+            es_no_deuda, rut_nd, razon_nd = detectar_no_deuda(pdf_bytes)
+        except Exception as e:
+            _log(f"  Error leyendo PDF: {e}", "error")
+            continue
+
+        if es_no_deuda:
+            _log(f"  Sin deuda — {razon_nd} ({rut_nd})", "ok")
+            _agregar_al_resultado(wb_res, [{
+                "rut": "", "nombre": "", "monto_nom": 0, "monto_act": 0,
+                "origen": "", "adm": "", "periodo": "", "estado": "SIN DEUDA", "abogado": "",
+            }], rut_nd, razon_nd, detectar_institucion(pdf_bytes, pdf_nombre))
+            continue
+
+        # Extraer texto completo
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            texto_completo = "\n".join((p.extract_text() or "") for p in pdf.pages)
+
+        # Empresa
+        m_rut = RE_RUT_EMPRESA.search(texto_completo)
+        rut_empresa = re.sub(r"\s", "", m_rut.group(1)) if m_rut else ""
+        m_rs = RE_RAZON_SOCIAL.search(texto_completo) or RE_RAZON_HABITAT.search(texto_completo)
+        razon_social = _limpiar_razon(m_rs.group(1)) if m_rs else ""
+        institucion  = detectar_institucion(pdf_bytes, pdf_nombre)
+        _log(f"  {razon_social} ({rut_empresa}) — {institucion}", "info")
+
+        # Extraer filas de deuda
+        filas = _extraer_filas_pdf(texto_completo)
+
+        if not filas:
+            _log("  No se encontraron filas de deuda estructuradas en el PDF", "warn")
+            _log("  Prueba subiendo también el Excel de Adobe para este archivo", "warn")
+            continue
+
+        _log(f"  {len(filas)} filas extraídas", "info")
+        _agregar_al_resultado(wb_res, filas, rut_empresa, razon_social, institucion)
+        _log(f"  Listo: {len(filas)} filas agregadas", "ok")
+
+    buf = io.BytesIO()
+    wb_res.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
 # ── API pública ───────────────────────────────────────────────────────────────
 
 def procesar_lote(pares: list, log=None) -> bytes:

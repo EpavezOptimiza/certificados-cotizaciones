@@ -37,41 +37,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .page-sub{font-size:12px;color:#64748b;margin-top:2px}
 .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;margin-bottom:16px}
 .card-title{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:14px;display:flex;align-items:center;gap:7px}
-/* Drop zone */
-.dropzone{border:2px dashed #cbd5e1;border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .15s;background:#f8fafc}
+.info-box{background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;font-size:12px;color:#713f12;margin-bottom:16px;line-height:1.5}
+.dropzone{border:2px dashed #cbd5e1;border-radius:10px;padding:36px;text-align:center;cursor:pointer;transition:all .15s;background:#f8fafc}
 .dropzone:hover,.dropzone.drag-over{border-color:#d97706;background:#fffbeb}
-.dropzone-icon{font-size:32px;margin-bottom:8px}
-.dropzone-text{font-size:13px;color:#64748b}
-.dropzone-hint{font-size:11px;color:#94a3b8;margin-top:4px}
+.dropzone-icon{font-size:36px;margin-bottom:10px}
+.dropzone-text{font-size:14px;font-weight:600;color:#374151}
+.dropzone-hint{font-size:11px;color:#94a3b8;margin-top:5px}
 #file-input{display:none}
-/* Archivos seleccionados */
 .file-list{display:flex;flex-direction:column;gap:6px;margin-top:14px}
-.file-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:12px}
-.file-pdf{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
-.file-excel{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.file-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;font-size:12px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
 .file-name{font-family:monospace;font-size:11px}
 .file-remove{background:none;border:none;cursor:pointer;color:#94a3b8;font-size:14px;padding:0 4px}
 .file-remove:hover{color:#dc2626}
-/* Instrucciones */
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
-.step{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;text-align:center}
-.step-num{width:26px;height:26px;border-radius:50%;background:#fef9c3;color:#854d0e;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
-.step-text{font-size:12px;color:#374151;margin-bottom:8px}
-.btn-adobe{display:inline-block;margin-top:8px;padding:5px 12px;background:#d97706;color:#fff;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;transition:opacity .15s}
-.btn-adobe:hover{opacity:.85}
-/* Botón procesar */
 .btn-procesar{width:100%;padding:14px;background:#d97706;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:8px}
 .btn-procesar:hover:not(:disabled){opacity:.88}
 .btn-procesar:disabled{opacity:.45;cursor:not-allowed}
-/* Log */
 .log-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-top:16px}
 .log-header{padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:12px;font-weight:600;color:#374151;display:flex;justify-content:space-between;align-items:center}
-.log-body{padding:4px 0;max-height:240px;overflow-y:auto}
+.log-body{padding:4px 0;max-height:280px;overflow-y:auto}
 .log-line{display:flex;gap:10px;padding:7px 16px;border-bottom:1px solid #f9fafb;font-size:12px}
 .log-dot{width:7px;height:7px;border-radius:50%;margin-top:3px;flex-shrink:0}
 .dot-ok{background:#16a34a}.dot-warn{background:#d97706}.dot-info{background:#185FA5}.dot-err{background:#dc2626}
 .log-text{color:#374151;flex:1}
-.log-empty{padding:20px;text-align:center;color:#94a3b8;font-size:13px}
 .btn-dl-res{display:none;padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer}
 .btn-dl-res.show{display:inline-block}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
@@ -123,39 +110,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="page-icon">📋</div>
       <div>
         <div class="page-title">Base Deudas</div>
-        <div class="page-sub">Sube los PDFs y sus Excels de Adobe — el portal consolida todo en un archivo</div>
+        <div class="page-sub">Sube los certificados AFP en PDF — el portal extrae los datos y genera el Excel consolidado</div>
       </div>
     </div>
 
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-text">Convierte el PDF a Excel con Adobe</div>
-        <a href="https://acrobat.adobe.com/link/acrobat/createpdf?x_api_client_id=adobe_com&x_api_client_location=createpdf"
-           target="_blank" class="btn-adobe">
-          Abrir Adobe ↗
-        </a>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-text">Sube aquí los <strong>PDFs</strong> y los <strong>Excels de Adobe</strong> juntos</div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-text">Descarga el <strong>Resultados AFP.xlsx</strong> consolidado</div>
-      </div>
+    <div class="info-box">
+      💡 <strong>Sin Adobe:</strong> El sistema lee directamente los PDFs AFP (Planvital, Capital, Cuprum, Habitat, Provida, Modelo, Uno). No necesitas convertir nada antes.
     </div>
 
     <div class="card">
-      <div class="card-title">📁 Archivos a procesar</div>
+      <div class="card-title">📄 Certificados AFP (PDF)</div>
       <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"
            ondragover="ev(event,'over')" ondragleave="ev(event,'leave')" ondrop="ev(event,'drop')">
         <div class="dropzone-icon">⬆</div>
-        <div class="dropzone-text">Haz clic o arrastra los archivos aquí</div>
-        <div class="dropzone-hint">PDFs (.pdf) + Excels de Adobe (.xlsx) — puedes subir varios a la vez</div>
+        <div class="dropzone-text">Haz clic o arrastra los PDFs aquí</div>
+        <div class="dropzone-hint">Puedes subir varios PDFs a la vez — uno por AFP</div>
       </div>
-      <input type="file" id="file-input" multiple accept=".pdf,.xlsx"
-             onchange="agregarArchivos(this.files)">
+      <input type="file" id="file-input" multiple accept=".pdf" onchange="agregarArchivos(this.files)">
       <div class="file-list" id="file-list"></div>
     </div>
 
@@ -177,8 +148,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 let _panelOpen = true;
-let _archivos  = [];  // {file, tipo:'pdf'|'excel'}
-let _resultado = null; // {excel_b64, nombre}
+let _archivos  = [];
+let _resultado = null;
 
 function togglePanel(){
   _panelOpen = !_panelOpen;
@@ -199,10 +170,9 @@ function ev(e, tipo){
 
 function agregarArchivos(files){
   for(const f of files){
-    const ext = f.name.split('.').pop().toLowerCase();
-    if(ext !== 'pdf' && ext !== 'xlsx') continue;
-    if(_archivos.find(a=>a.file.name===f.name)) continue;
-    _archivos.push({file:f, tipo: ext==='pdf'?'pdf':'excel'});
+    if(!f.name.toLowerCase().endsWith('.pdf')) continue;
+    if(_archivos.find(a=>a.name===f.name)) continue;
+    _archivos.push(f);
   }
   renderArchivos();
   document.getElementById('btn-procesar').disabled = _archivos.length === 0;
@@ -211,9 +181,9 @@ function agregarArchivos(files){
 function renderArchivos(){
   const el = document.getElementById('file-list');
   if(!_archivos.length){ el.innerHTML=''; return; }
-  el.innerHTML = _archivos.map((a,i)=>`
-    <div class="file-item ${a.tipo==='pdf'?'file-pdf':'file-excel'}">
-      <span>${a.tipo==='pdf'?'📄':'📊'} <span class="file-name">${a.file.name}</span></span>
+  el.innerHTML = _archivos.map((f,i)=>`
+    <div class="file-item">
+      <span>📄 <span class="file-name">${f.name}</span></span>
       <button class="file-remove" onclick="quitarArchivo(${i})">✕</button>
     </div>`).join('');
 }
@@ -225,9 +195,7 @@ function quitarArchivo(i){
 }
 
 async function procesar(){
-  if(!_archivos.length){ toast('Agrega archivos primero'); return; }
-  const excels = _archivos.filter(a=>a.tipo==='excel');
-  if(!excels.length){ toast('Necesitas al menos un Excel de Adobe (.xlsx)'); return; }
+  if(!_archivos.length){ toast('Agrega al menos un PDF'); return; }
 
   const btn = document.getElementById('btn-procesar');
   btn.disabled = true;
@@ -238,7 +206,7 @@ async function procesar(){
   _resultado = null;
 
   const fd = new FormData();
-  _archivos.forEach(a => fd.append('archivos', a.file));
+  _archivos.forEach(f => fd.append('archivos', f));
 
   try {
     const res  = await fetch('/api/base-deudas/procesar', {method:'POST', body:fd});
@@ -252,7 +220,7 @@ async function procesar(){
     } else {
       _resultado = {excel_b64: data.excel_b64, nombre: data.nombre};
       document.getElementById('btn-dl').classList.add('show');
-      toast('Procesado correctamente — descarga el resultado');
+      toast('Listo — descarga el resultado');
     }
   } catch(e){
     addLog(`Error de red: ${e}`, 'err');

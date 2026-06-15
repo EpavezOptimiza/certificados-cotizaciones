@@ -1410,11 +1410,36 @@ def _exportar_previred_excel():
 def base_deudas_page():
     return render_template("base_deudas.html")
 
+@app.route("/api/base-deudas/unificar", methods=["POST"])
+@api_login_required
+def base_deudas_unificar():
+    from pypdf import PdfWriter
+    import io
+
+    archivos = request.files.getlist("archivos")
+    pdfs = [f for f in archivos if f.filename.lower().endswith(".pdf")]
+    if not pdfs:
+        return jsonify({"error": "No se recibieron PDFs"}), 400
+
+    writer = PdfWriter()
+    for f in pdfs:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(f.read()))
+        for page in reader.pages:
+            writer.add_page(page)
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf",
+                     as_attachment=True, download_name="certificados_unificados.pdf")
+
+
 @app.route("/api/base-deudas/procesar", methods=["POST"])
 @api_login_required
 def base_deudas_procesar():
-    from base_deudas_logic import procesar_lote_solo_pdf, procesar_lote
-    import base64
+    from base_deudas_logic import procesar_lote
+    import base64, io
 
     archivos = request.files.getlist("archivos")
     if not archivos:
@@ -1423,65 +1448,31 @@ def base_deudas_procesar():
     pdfs   = {f.filename: f.read() for f in archivos if f.filename.lower().endswith(".pdf")}
     excels = {f.filename: f.read() for f in archivos if f.filename.lower().endswith(".xlsx")}
 
-    if not pdfs:
-        return jsonify({"error": "Debes subir al menos un PDF AFP"}), 400
+    if not excels:
+        return jsonify({"error": "Debes subir el Excel generado por Adobe"}), 400
+
+    # Armar pares: cada Excel se empareja con un PDF si hay (o con bytes vacíos)
+    any_pdf_bytes = next(iter(pdfs.values()), b"")
+    any_pdf_name  = next(iter(pdfs.keys()), "")
+    pares = []
+    for excel_nombre, excel_bytes in excels.items():
+        stem = excel_nombre.replace("_ADOBE","").replace("_adobe","")
+        pdf_nombre = stem if stem.lower().endswith(".pdf") else stem.rsplit(".",1)[0] + ".pdf"
+        pdf_bytes  = pdfs.get(pdf_nombre, any_pdf_bytes)
+        pdf_nombre = pdf_nombre if pdf_nombre in pdfs else any_pdf_name
+        pares.append({
+            "pdf_bytes": pdf_bytes, "pdf_nombre": pdf_nombre,
+            "excel_bytes": excel_bytes, "excel_nombre": excel_nombre,
+        })
 
     logs = []
     def _log(msg, tipo="info"):
         logs.append({"msg": msg, "tipo": tipo})
 
-    if excels:
-        # Modo híbrido: matchear PDF+Excel, y PDFs solos también
-        pares = []
-        pdfs_solos = dict(pdfs)
-        for excel_nombre, excel_bytes in excels.items():
-            stem = excel_nombre.replace("_ADOBE","").replace("_adobe","")
-            pdf_nombre = stem if stem.lower().endswith(".pdf") else stem.rsplit(".",1)[0] + ".pdf"
-            pdf_bytes  = pdfs.get(pdf_nombre)
-            if pdf_bytes:
-                pdfs_solos.pop(pdf_nombre, None)
-                pares.append({
-                    "pdf_bytes": pdf_bytes, "pdf_nombre": pdf_nombre,
-                    "excel_bytes": excel_bytes, "excel_nombre": excel_nombre,
-                })
-            else:
-                # Excel sin PDF matcheado: buscar cualquier PDF disponible
-                any_pdf = next(iter(pdfs.values()), b"")
-                pares.append({
-                    "pdf_bytes": any_pdf, "pdf_nombre": excel_nombre,
-                    "excel_bytes": excel_bytes, "excel_nombre": excel_nombre,
-                })
-        try:
-            resultado_bytes = procesar_lote(pares, log=_log)
-        except Exception as e:
-            return jsonify({"error": str(e), "logs": logs}), 500
-        # PDFs que sobraron sin Excel → procesar directo
-        if pdfs_solos:
-            from base_deudas_logic import procesar_lote_solo_pdf as _solo
-            import io, openpyxl
-            _log("── PDFs sin Excel Adobe → procesando directo", "info")
-            pdfs_list = [{"pdf_bytes": b, "pdf_nombre": n} for n, b in pdfs_solos.items()]
-            try:
-                extra_bytes = _solo(pdfs_list, log=_log)
-                # Merge sheets
-                wb_main  = openpyxl.load_workbook(io.BytesIO(resultado_bytes))
-                wb_extra = openpyxl.load_workbook(io.BytesIO(extra_bytes))
-                ws_main  = wb_main["Base AFP"]
-                ws_extra = wb_extra["Base AFP"]
-                for row in ws_extra.iter_rows(min_row=2, values_only=True):
-                    if any(v is not None for v in row):
-                        ws_main.append(list(row))
-                buf = io.BytesIO(); wb_main.save(buf); buf.seek(0)
-                resultado_bytes = buf.read()
-            except Exception as e:
-                _log(f"Error procesando PDFs extra: {e}", "warn")
-    else:
-        # Solo PDFs
-        pdfs_list = [{"pdf_bytes": b, "pdf_nombre": n} for n, b in pdfs.items()]
-        try:
-            resultado_bytes = procesar_lote_solo_pdf(pdfs_list, log=_log)
-        except Exception as e:
-            return jsonify({"error": str(e), "logs": logs}), 500
+    try:
+        resultado_bytes = procesar_lote(pares, log=_log)
+    except Exception as e:
+        return jsonify({"error": str(e), "logs": logs}), 500
 
     excel_b64 = base64.b64encode(resultado_bytes).decode()
     return jsonify({"ok": True, "excel_b64": excel_b64, "logs": logs,

@@ -1416,6 +1416,40 @@ for _d in [_PLANILLAS_DIR, _TEMP_DIR, _EXCELS_DIR]:
 
 _tareas: dict = {}
 
+# ── Configuración Previred (guardada en SQLite) ───────────────
+def _get_previred_config() -> dict:
+    conn = get_conn()
+    rows = conn.execute("SELECT clave, valor FROM previred_config").fetchall()
+    conn.close()
+    return {r["clave"]: r["valor"] for r in rows}
+
+def _set_previred_config(clave: str, valor: str):
+    conn = get_conn()
+    conn.execute("INSERT OR REPLACE INTO previred_config(clave, valor) VALUES(?,?)", (clave, valor))
+    conn.commit()
+    conn.close()
+
+@app.route("/api/previred/config", methods=["GET"])
+@api_login_required
+def previred_config_get():
+    cfg = _get_previred_config()
+    return jsonify({
+        "rut":  cfg.get("rut", ""),
+        "pass_guardado": bool(cfg.get("pass", "")),  # nunca devolver la clave
+    })
+
+@app.route("/api/previred/config", methods=["POST"])
+@api_login_required
+def previred_config_set():
+    d = request.json or {}
+    rut  = d.get("rut", "").strip()
+    pwd  = d.get("pwd", "").strip()
+    if rut:
+        _set_previred_config("rut", rut)
+    if pwd:
+        _set_previred_config("pass", pwd)
+    return jsonify({"ok": True})
+
 def _nueva_tarea() -> str:
     tid = uuid.uuid4().hex[:10]
     _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None}
@@ -1492,11 +1526,12 @@ def previred_iniciar():
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
                     return
-                rut_usr  = os.environ.get("PREVIRED_RUT", "")
-                cont_usr = os.environ.get("PREVIRED_PASS", "")
+                cfg      = _get_previred_config()
+                rut_usr  = os.environ.get("PREVIRED_RUT", "") or cfg.get("rut", "")
+                cont_usr = os.environ.get("PREVIRED_PASS", "") or cfg.get("pass", "")
                 if not rut_usr or not cont_usr:
-                    _log(tid, "Variables PREVIRED_RUT y PREVIRED_PASS no están configuradas en Railway", "err")
-                    _log(tid, "Ve a Railway → tu proyecto → Variables → agrega PREVIRED_RUT y PREVIRED_PASS", "warn")
+                    _log(tid, "Credenciales Previred no configuradas", "err")
+                    _log(tid, "Abre Configuración (⚙) en la página de Previred e ingresa tu RUT y contraseña", "warn")
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
                     return

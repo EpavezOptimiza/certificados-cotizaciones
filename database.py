@@ -179,6 +179,12 @@ def init_db():
                 activa       INTEGER DEFAULT 1
             )""")
         except: pass
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS previred_config (
+                clave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL DEFAULT ''
+            )""")
+        except: pass
         # Crear permisos por defecto para usuarios existentes
         try:
             usuarios = conn.execute("SELECT id, rol FROM usuarios").fetchall()

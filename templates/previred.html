@@ -88,6 +88,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-dl-excel.show{display:inline-flex}
 #toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
 #toast.show{opacity:1}
+/* Modal config */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:14px;padding:24px;width:380px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-title{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.modal-sub{font-size:12px;color:#64748b;margin-bottom:20px}
+.modal-field{margin-bottom:14px}
+.modal-field label{display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.modal-field input{width:100%;padding:9px 11px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit;outline:none}
+.modal-field input:focus{border-color:#1D9E75;box-shadow:0 0 0 3px rgba(29,158,117,.1)}
+.modal-row{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.btn-cancel{padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;font-size:13px;cursor:pointer;font-family:inherit}
+.btn-save{padding:8px 18px;border:none;border-radius:8px;background:#1D9E75;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.cred-status{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:16px}
+.cred-ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.cred-err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
 </style>
 </head>
 <body>
@@ -96,6 +112,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button class="toggle-btn" onclick="togglePanel()" id="toggle-btn">☰</button>
   <span class="nav-sep">›</span>
   <span class="nav-cur">Previred</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <div id="cred-indicator" style="font-size:11px;padding:4px 10px;border-radius:20px;display:none"></div>
+    <button onclick="abrirConfig()" style="padding:5px 13px;border-radius:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px">⚙ Credenciales</button>
+  </div>
 </div>
 
 <div class="layout">
@@ -211,6 +231,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="log-body" id="log-body">
         <div class="log-empty">Sin actividad reciente — presiona un botón para comenzar</div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal credenciales -->
+<div class="modal-bg" id="modal-config">
+  <div class="modal">
+    <div class="modal-title">⚙ Credenciales Previred</div>
+    <div class="modal-sub">Se guardan de forma segura en el servidor — solo tú las usas.</div>
+    <div id="cred-status-modal" class="cred-status" style="display:none"></div>
+    <div class="modal-field">
+      <label>RUT usuario (con puntos y guión)</label>
+      <input id="cfg-rut" type="text" placeholder="13.593.627-8">
+    </div>
+    <div class="modal-field">
+      <label>Contraseña Previred</label>
+      <input id="cfg-pass" type="password" placeholder="••••••••">
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px">Deja en blanco para mantener la contraseña actual</div>
+    </div>
+    <div class="modal-row">
+      <button class="btn-cancel" onclick="cerrarConfig()">Cancelar</button>
+      <button class="btn-save" onclick="guardarConfig()">Guardar credenciales</button>
     </div>
   </div>
 </div>
@@ -400,7 +442,72 @@ function toast(msg){
   setTimeout(()=>el.classList.remove('show'), 3200);
 }
 
+// ── Configuración credenciales ────────────────────────────
+async function cargarConfig(){
+  const res  = await fetch('/api/previred/config');
+  const data = await res.json();
+  const ind  = document.getElementById('cred-indicator');
+  const sm   = document.getElementById('cred-status-modal');
+  if(data.rut){
+    document.getElementById('cfg-rut').value = data.rut;
+    ind.style.display = 'block';
+    ind.style.background = data.pass_guardado ? 'rgba(16,185,129,.2)' : 'rgba(234,179,8,.2)';
+    ind.style.color = data.pass_guardado ? '#6ee7b7' : '#fde68a';
+    ind.textContent = data.pass_guardado ? '✓ Credenciales guardadas' : '⚠ Falta contraseña';
+    if(sm){
+      sm.style.display='flex';
+      sm.className='cred-status ' + (data.pass_guardado ? 'cred-ok' : 'cred-err');
+      sm.textContent = data.pass_guardado
+        ? `✓ RUT configurado: ${data.rut} — contraseña guardada`
+        : `RUT configurado: ${data.rut} — falta ingresar contraseña`;
+    }
+  } else {
+    ind.style.display = 'block';
+    ind.style.background = 'rgba(239,68,68,.2)';
+    ind.style.color = '#fca5a5';
+    ind.textContent = '⚠ Sin credenciales';
+    if(sm){
+      sm.style.display='flex';
+      sm.className='cred-status cred-err';
+      sm.textContent='Sin credenciales configuradas — ingresa tu RUT y contraseña';
+    }
+  }
+}
+
+function abrirConfig(){
+  document.getElementById('modal-config').classList.add('open');
+  cargarConfig();
+}
+
+function cerrarConfig(){
+  document.getElementById('modal-config').classList.remove('open');
+  document.getElementById('cfg-pass').value = '';
+}
+
+async function guardarConfig(){
+  const rut = document.getElementById('cfg-rut').value.trim();
+  const pwd = document.getElementById('cfg-pass').value.trim();
+  if(!rut){ toast('Ingresa tu RUT'); return; }
+  const res  = await fetch('/api/previred/config', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({rut, pwd})
+  });
+  const data = await res.json();
+  if(data.ok){
+    toast('Credenciales guardadas correctamente');
+    cerrarConfig();
+    cargarConfig();
+  }
+}
+
+// Cerrar modal al hacer click fuera
+document.getElementById('modal-config').addEventListener('click', function(e){
+  if(e.target === this) cerrarConfig();
+});
+
 cargarEmpresas();
+cargarConfig();
 </script>
 </body>
 </html>

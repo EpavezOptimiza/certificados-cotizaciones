@@ -1477,7 +1477,10 @@ def previred_iniciar():
     tid = _nueva_tarea()
 
     def run():
+        import traceback
         try:
+            _log(tid, f"Tarea iniciada — tipo: {tipo}", "info")
+
             if tipo in ("descargar", "ambos"):
                 if not rut_empresa:
                     _log(tid, "RUT de empresa requerido para descargar", "err")
@@ -1492,13 +1495,26 @@ def previred_iniciar():
                 rut_usr  = os.environ.get("PREVIRED_RUT", "")
                 cont_usr = os.environ.get("PREVIRED_PASS", "")
                 if not rut_usr or not cont_usr:
-                    _log(tid, "Credenciales Previred no configuradas en Railway (PREVIRED_RUT / PREVIRED_PASS)", "err")
+                    _log(tid, "Variables PREVIRED_RUT y PREVIRED_PASS no están configuradas en Railway", "err")
+                    _log(tid, "Ve a Railway → tu proyecto → Variables → agrega PREVIRED_RUT y PREVIRED_PASS", "warn")
+                    _tareas[tid]["error"] = True
+                    _tareas[tid]["done"]  = True
+                    return
+                _log(tid, "Verificando Chrome instalado...", "info")
+                try:
+                    import subprocess
+                    result = subprocess.run(["google-chrome", "--version"], capture_output=True, text=True, timeout=10)
+                    _log(tid, f"Chrome: {result.stdout.strip()}", "ok")
+                except Exception as ce:
+                    _log(tid, f"Chrome no disponible: {ce}", "err")
+                    _log(tid, "El servidor necesita el Dockerfile con Chrome — verifica que Railway usó builder=DOCKERFILE", "warn")
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
                     return
                 from previred_logic import descargar
                 carpeta_emp = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
                 os.makedirs(carpeta_emp, exist_ok=True)
+                _log(tid, f"Empresa: {rut_empresa} → carpeta {carpeta_emp}", "info")
                 descargar(rut_usr, cont_usr, rut_empresa, periodos,
                           carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t))
 
@@ -1508,15 +1524,20 @@ def previred_iniciar():
                     carpeta_src = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
                 else:
                     carpeta_src = _PLANILLAS_DIR
+                if not os.path.isdir(carpeta_src):
+                    _log(tid, f"Carpeta no existe: {carpeta_src}", "err")
+                    _tareas[tid]["error"] = True
+                    _tareas[tid]["done"]  = True
+                    return
                 rutas = sorted([
                     os.path.join(carpeta_src, f)
                     for f in os.listdir(carpeta_src) if f.endswith(".pdf")
                 ])
                 if not rutas:
-                    _log(tid, "No hay PDFs para convertir en la carpeta", "warn")
+                    _log(tid, "No hay PDFs en la carpeta para convertir", "warn")
                     _tareas[tid]["done"] = True
                     return
-                _log(tid, f"Convirtiendo {len(rutas)} PDFs...", "info")
+                _log(tid, f"Convirtiendo {len(rutas)} PDF(s)...", "info")
                 xls_bytes = generar_excel_bytes(
                     rutas, rut_empresa, razon_social,
                     log=lambda m, t: _log(tid, m, t)
@@ -1526,11 +1547,14 @@ def previred_iniciar():
                 with open(ruta_excel, "wb") as f:
                     f.write(xls_bytes)
                 _tareas[tid]["archivo"] = ruta_excel
-                _log(tid, f"Excel generado: {nombre_archivo}", "ok")
+                _log(tid, f"Excel listo: {nombre_archivo}", "ok")
 
             _tareas[tid]["done"] = True
+            _log(tid, "Proceso finalizado", "ok")
         except Exception as e:
-            _log(tid, f"Error: {e}", "err")
+            tb = traceback.format_exc()
+            _log(tid, f"Error inesperado: {e}", "err")
+            _log(tid, tb[:400], "err")
             _tareas[tid]["error"] = True
             _tareas[tid]["done"]  = True
 

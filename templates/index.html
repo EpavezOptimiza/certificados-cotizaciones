@@ -1196,7 +1196,12 @@ async function openModal_usuarios(){
         <span style="font-weight:600;font-size:13px">${escHtml(u.nombre)}</span>
         <span class="badge ${BADGE[u.rol]||""}" style="margin-left:6px">${ROLES[u.rol]||u.rol}</span><br>
         <span style="font-size:11px;color:#64748b">${u.username}${u.email?" · "+u.email:""}</span>
-        ${u.lema?`<br><span style="font-size:11px;color:#94a3b8;font-style:italic">"${escHtml(u.lema)}"</span>`:""}
+        <br><span style="font-size:11px;color:#94a3b8">
+          ${u.fecha_ingreso
+            ? `📅 Ingreso: ${u.fecha_ingreso} · ${u.años||0} año${(u.años||0)!==1?'s':''}`
+            : `<span style="color:#f59e0b">⚠ Sin fecha de ingreso</span>`}
+          ${u.lema?` · <em>"${escHtml(u.lema)}"</em>`:""}
+        </span>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px" onclick="editUsuario(${u.id})">✏</button>

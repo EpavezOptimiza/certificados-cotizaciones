@@ -10,13 +10,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .topnav{background:#0d1b2e;padding:0 16px;height:50px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-shrink:0}
 .toggle-btn{width:32px;height:32px;border-radius:6px;background:rgba(255,255,255,.08);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
 .toggle-btn:hover{background:rgba(255,255,255,.15)}
-.nav-sep{color:rgba(255,255,255,.25);font-size:12px}
 .nav-cur{color:#fff;font-weight:600;font-size:13px}
+.nav-sep{color:rgba(255,255,255,.25);font-size:12px}
 .layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - 50px)}
 .side-panel{width:0;overflow:hidden;transition:width .25s ease;background:#fff;border-right:1px solid #e2e8f0;flex-shrink:0;display:flex;flex-direction:column}
 .side-panel.open{width:256px}
 .panel-inner{width:256px;display:flex;flex-direction:column;height:100%}
-.panel-header{padding:16px;border-bottom:1px solid #f1f5f9;flex-shrink:0}
+.panel-header{padding:16px;border-bottom:1px solid #f1f5f9}
 .panel-brand{font-size:14px;font-weight:700;color:#0f172a}
 .panel-sub{font-size:11px;color:#64748b;margin-top:2px}
 .panel-section-label{font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;padding:12px 14px 5px}
@@ -31,7 +31,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .logout-link{font-size:12px;color:#94a3b8;text-decoration:none;display:flex;align-items:center;gap:5px}
 .logout-link:hover{color:#dc2626}
 .main-content{flex:1;overflow-y:auto;padding:24px}
-/* ── CONTENIDO ── */
 .page-header{display:flex;align-items:center;gap:12px;margin-bottom:22px}
 .page-icon{width:42px;height:42px;background:#d1fae5;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
 .page-title{font-size:19px;font-weight:700;color:#0f172a;letter-spacing:-.3px}
@@ -64,14 +63,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#d1fae5;border-radius:20px;font-size:11px;color:#065f46;font-weight:500}
 .actions-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
 .btn-action{padding:13px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;border:none;font-family:inherit;transition:opacity .15s}
-.btn-action:hover{opacity:.88}
+.btn-action:hover:not(:disabled){opacity:.88}
+.btn-action:disabled{opacity:.45;cursor:not-allowed}
 .btn-dl{background:#1D9E75;color:#fff}
 .btn-conv{background:#185FA5;color:#fff}
 .btn-both{background:#534AB7;color:#fff}
 .log-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
-.log-header{padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:12px;font-weight:600;color:#374151;display:flex;align-items:center;gap:6px}
-.log-body{padding:4px 0;max-height:200px;overflow-y:auto}
-.log-line{display:flex;align-items:flex-start;gap:10px;padding:8px 16px;border-bottom:1px solid #f9fafb;font-size:12px}
+.log-header{padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:12px;font-weight:600;color:#374151;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.log-body{padding:4px 0;max-height:260px;overflow-y:auto}
+.log-line{display:flex;align-items:flex-start;gap:10px;padding:7px 16px;border-bottom:1px solid #f9fafb;font-size:12px}
 .log-line:last-child{border-bottom:none}
 .log-dot{width:7px;height:7px;border-radius:50%;margin-top:3px;flex-shrink:0}
 .dot-ok{background:#1D9E75}
@@ -81,6 +81,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .log-text{color:#374151;flex:1}
 .log-time{color:#94a3b8;font-size:11px;white-space:nowrap}
 .log-empty{padding:20px;text-align:center;color:#94a3b8;font-size:13px}
+.badge-running{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#185FA5;font-weight:500}
+.spinner{width:10px;height:10px;border:2px solid #dbeafe;border-top-color:#185FA5;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.btn-dl-excel{display:none;padding:7px 14px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;align-items:center;gap:5px}
+.btn-dl-excel.show{display:inline-flex}
 #toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
 #toast.show{opacity:1}
 </style>
@@ -94,7 +99,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="layout">
-  <!-- Panel lateral -->
   <div class="side-panel open" id="side-panel">
     <div class="panel-inner">
       <div class="panel-header">
@@ -121,35 +125,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 
-  <!-- Contenido -->
   <div class="main-content">
     <div class="page-header">
       <div class="page-icon">⚙</div>
       <div>
         <div class="page-title">Automatización Previred</div>
-        <div class="page-sub">Descarga de planillas PDF y conversión a Excel</div>
+        <div class="page-sub">Descarga planillas PDF y convierte a Excel — todo desde el portal</div>
       </div>
     </div>
 
     <div class="grid2">
       <!-- Empresa -->
       <div class="card">
-        <div class="card-title"><span>🏢</span> Seleccionar empresa</div>
+        <div class="card-title"><span>🏢</span> Empresa</div>
         <div class="field">
-          <label>Buscar</label>
-          <input id="emp-buscar" placeholder="Nombre o grupo..." oninput="filtrarEmpresas()">
+          <label>Buscar empresa</label>
+          <input id="emp-buscar" placeholder="Nombre, RUT o grupo..." oninput="filtrarEmpresas()">
         </div>
         <div class="empresa-list" id="emp-list">
-          <div style="color:#94a3b8;font-size:13px;padding:8px">Cargando empresas...</div>
+          <div style="color:#94a3b8;font-size:13px;padding:8px">Cargando...</div>
+        </div>
+        <div id="emp-seleccionada" style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:7px;font-size:12px;color:#166534;display:none">
+          ✓ <strong id="emp-sel-nombre">—</strong>
+          <span id="emp-sel-rut" style="font-family:monospace;opacity:.7;margin-left:4px"></span>
         </div>
       </div>
 
       <!-- Períodos -->
       <div class="card">
-        <div class="card-title"><span>📅</span> Seleccionar períodos</div>
+        <div class="card-title"><span>📅</span> Períodos</div>
         <div class="field">
           <label>Año</label>
-          <div class="anio-row" id="anio-row">
+          <div class="anio-row">
             <div class="anio-btn" onclick="selAnio(this)">2022</div>
             <div class="anio-btn" onclick="selAnio(this)">2023</div>
             <div class="anio-btn sel" onclick="selAnio(this)">2024</div>
@@ -160,22 +167,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="field">
           <label>Meses</label>
           <div class="meses-grid">
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="01">Ene</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="02">Feb</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="03">Mar</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="04">Abr</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="05">May</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="06">Jun</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="07">Jul</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="08">Ago</div>
-            <div class="mes-btn" onclick="toggleMes(this)" data-mes="09">Sep</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="1">Ene</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="2">Feb</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="3">Mar</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="4">Abr</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="5">May</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="6">Jun</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="7">Jul</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="8">Ago</div>
+            <div class="mes-btn" onclick="toggleMes(this)" data-mes="9">Sep</div>
             <div class="mes-btn" onclick="toggleMes(this)" data-mes="10">Oct</div>
             <div class="mes-btn" onclick="toggleMes(this)" data-mes="11">Nov</div>
             <div class="mes-btn" onclick="toggleMes(this)" data-mes="12">Dic</div>
           </div>
         </div>
         <div class="field">
-          <label>Períodos seleccionados</label>
+          <label>Seleccionados</label>
           <div class="tags-wrap" id="tags-wrap">
             <span style="font-size:11px;color:#94a3b8">Sin períodos seleccionados</span>
           </div>
@@ -185,16 +192,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- Acciones -->
     <div class="actions-row">
-      <button class="btn-action btn-dl" onclick="accion('descargar')">⬇ Solo descargar PDFs</button>
-      <button class="btn-action btn-conv" onclick="accion('convertir')">📊 Solo convertir a Excel</button>
-      <button class="btn-action btn-both" onclick="accion('ambos')">▶ Descargar y convertir</button>
+      <button class="btn-action btn-dl"   id="btn-dl"   onclick="accion('descargar')">⬇ Solo descargar PDFs</button>
+      <button class="btn-action btn-conv" id="btn-conv" onclick="accion('convertir')">📊 Solo convertir a Excel</button>
+      <button class="btn-action btn-both" id="btn-both" onclick="accion('ambos')">▶ Descargar y convertir</button>
     </div>
 
-    <!-- Log -->
+    <!-- Log en vivo -->
     <div class="log-card">
-      <div class="log-header">📋 Registro de actividad</div>
+      <div class="log-header">
+        <span>📋 Registro de actividad</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="estado-badge" class="badge-running" style="display:none">
+            <div class="spinner"></div> Procesando...
+          </span>
+          <button id="btn-excel" class="btn-dl-excel" onclick="descargarExcel()">⬇ Descargar Excel</button>
+        </div>
+      </div>
       <div class="log-body" id="log-body">
-        <div class="log-empty">Sin actividad reciente</div>
+        <div class="log-empty">Sin actividad reciente — presiona un botón para comenzar</div>
       </div>
     </div>
   </div>
@@ -203,30 +218,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="toast"></div>
 
 <script>
-let _panelOpen=true;
-let _empresas=[], _empSel=null;
-let _anio='2024';
+let _panelOpen = true;
+let _empresas  = [], _empSel = null;
+let _anio      = '2024';
+let _taskId    = null, _polling = null, _logSince = 0;
 
 function togglePanel(){
-  _panelOpen=!_panelOpen;
-  document.getElementById('side-panel').classList.toggle('open',_panelOpen);
-  document.getElementById('toggle-btn').textContent=_panelOpen?'✕':'☰';
+  _panelOpen = !_panelOpen;
+  document.getElementById('side-panel').classList.toggle('open', _panelOpen);
+  document.getElementById('toggle-btn').textContent = _panelOpen ? '✕' : '☰';
 }
 
+// ── Empresas ──────────────────────────────────────────────
 async function cargarEmpresas(){
-  const res=await fetch('/api/previred/empresas?per_page=500');
-  const data=await res.json();
-  _empresas=data.items||[];
+  const res  = await fetch('/api/previred/empresas?per_page=500');
+  const data = await res.json();
+  _empresas  = data.items || [];
   renderEmpresas(_empresas);
 }
 
 function renderEmpresas(list){
-  const el=document.getElementById('emp-list');
-  if(!list.length){el.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:8px">Sin resultados</div>';return;}
-  el.innerHTML=list.slice(0,80).map(e=>`
-    <div class="emp-row" onclick="selEmp(this,'${esc(e.rut)}','${esc(e.razon_social)}','${esc(e.grupo)}')" data-rut="${esc(e.rut)}">
+  const el = document.getElementById('emp-list');
+  if(!list.length){
+    el.innerHTML='<div style="color:#94a3b8;font-size:13px;padding:8px">Sin resultados</div>';
+    return;
+  }
+  el.innerHTML = list.slice(0,100).map(e=>`
+    <div class="emp-row"
+         onclick="selEmp(this,'${esc(e.rut)}','${esc(e.razon_social||e.grupo)}','${esc(e.grupo)}')"
+         data-rut="${esc(e.rut)}">
       <div>
-        <div class="emp-name">${e.razon_social||e.grupo}</div>
+        <div class="emp-name">${e.razon_social||e.grupo||e.rut}</div>
         <div class="emp-rut">${e.rut} · ${e.grupo}</div>
       </div>
       <span class="check">✓</span>
@@ -234,8 +256,8 @@ function renderEmpresas(list){
 }
 
 function filtrarEmpresas(){
-  const q=document.getElementById('emp-buscar').value.toLowerCase();
-  if(!q){renderEmpresas(_empresas);return;}
+  const q = document.getElementById('emp-buscar').value.toLowerCase();
+  if(!q){ renderEmpresas(_empresas); return; }
   renderEmpresas(_empresas.filter(e=>
     (e.razon_social||'').toLowerCase().includes(q)||
     (e.grupo||'').toLowerCase().includes(q)||
@@ -243,16 +265,20 @@ function filtrarEmpresas(){
   ));
 }
 
-function selEmp(el,rut,razon,grupo){
+function selEmp(el, rut, razon, grupo){
   document.querySelectorAll('.emp-row').forEach(r=>r.classList.remove('selected'));
   el.classList.add('selected');
-  _empSel={rut,razon,grupo};
+  _empSel = {rut, razon, grupo};
+  document.getElementById('emp-seleccionada').style.display = 'block';
+  document.getElementById('emp-sel-nombre').textContent = razon;
+  document.getElementById('emp-sel-rut').textContent    = rut;
 }
 
+// ── Períodos ──────────────────────────────────────────────
 function selAnio(el){
   document.querySelectorAll('.anio-btn').forEach(b=>b.classList.remove('sel'));
   el.classList.add('sel');
-  _anio=el.textContent;
+  _anio = el.textContent.trim();
   updateTags();
 }
 
@@ -262,36 +288,117 @@ function toggleMes(el){
 }
 
 function updateTags(){
-  const meses=[...document.querySelectorAll('.mes-btn.sel')];
-  const wrap=document.getElementById('tags-wrap');
-  if(!meses.length){wrap.innerHTML='<span style="font-size:11px;color:#94a3b8">Sin períodos seleccionados</span>';return;}
-  wrap.innerHTML=meses.map(m=>`<span class="tag">${m.textContent} ${_anio}</span>`).join('');
+  const meses = [...document.querySelectorAll('.mes-btn.sel')];
+  const wrap  = document.getElementById('tags-wrap');
+  if(!meses.length){
+    wrap.innerHTML='<span style="font-size:11px;color:#94a3b8">Sin períodos seleccionados</span>';
+    return;
+  }
+  wrap.innerHTML = meses.map(m=>`<span class="tag">${m.textContent} ${_anio}</span>`).join('');
 }
 
-function accion(tipo){
-  if(!_empSel){toast('Selecciona una empresa primero');return;}
-  const meses=[...document.querySelectorAll('.mes-btn.sel')].map(m=>m.dataset.mes);
-  if(!meses.length){toast('Selecciona al menos un período');return;}
-  const labels={'descargar':'Descargar PDFs','convertir':'Convertir a Excel','ambos':'Descargar y convertir'};
-  addLog('info',`Iniciando: ${labels[tipo]} — ${_empSel.razon_social} (${meses.length} período${meses.length>1?'s':''})`);
-  toast(`Función en desarrollo — próximamente disponible en el portal`);
+// ── Acciones ──────────────────────────────────────────────
+async function accion(tipo){
+  if(tipo !== 'convertir' && !_empSel){
+    toast('Selecciona una empresa primero');
+    return;
+  }
+  const meses = [...document.querySelectorAll('.mes-btn.sel')].map(m=>parseInt(m.dataset.mes));
+  if(tipo !== 'convertir' && !meses.length){
+    toast('Selecciona al menos un período');
+    return;
+  }
+
+  const periodos = meses.map(mes => ({mes, anio: parseInt(_anio)}));
+
+  setBotones(false);
+  limpiarLog();
+
+  const res  = await fetch('/api/previred/iniciar', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      tipo,
+      rut_empresa:  _empSel ? _empSel.rut   : '',
+      razon_social: _empSel ? _empSel.razon  : '',
+      periodos,
+    })
+  });
+  const data = await res.json();
+  if(data.error){ toast(data.error); setBotones(true); return; }
+
+  _taskId   = data.task_id;
+  _logSince = 0;
+  document.getElementById('estado-badge').style.display = 'inline-flex';
+  document.getElementById('btn-excel').classList.remove('show');
+  _polling  = setInterval(pollLogs, 1200);
 }
 
-function addLog(tipo, msg){
-  const el=document.getElementById('log-body');
-  const empty=el.querySelector('.log-empty');
-  if(empty)empty.remove();
-  const now=new Date();
-  const h=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  const div=document.createElement('div');
-  div.className='log-line';
-  const dots={ok:'dot-ok',warn:'dot-warn',info:'dot-info',err:'dot-err'};
-  div.innerHTML=`<div class="log-dot ${dots[tipo]||'dot-info'}"></div><div class="log-text">${msg}</div><div class="log-time">${h}</div>`;
-  el.insertBefore(div,el.firstChild);
+async function pollLogs(){
+  if(!_taskId) return;
+  try {
+    const res  = await fetch(`/api/previred/tarea/${_taskId}?since=${_logSince}`);
+    const data = await res.json();
+    data.logs.forEach(l => addLogLine(l.msg, l.tipo, l.t));
+    _logSince += data.logs.length;
+
+    if(data.done){
+      clearInterval(_polling);
+      _polling = null;
+      document.getElementById('estado-badge').style.display = 'none';
+      setBotones(true);
+      if(data.archivo) document.getElementById('btn-excel').classList.add('show');
+      toast(data.error ? 'Proceso terminó con errores' : 'Proceso completado exitosamente');
+    }
+  } catch(e) {
+    console.error(e);
+  }
 }
 
-function esc(s){return String(s||'').replace(/'/g,"\\'")}
-function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3000)}
+function descargarExcel(){
+  if(_taskId) window.open(`/api/previred/descargar-excel/${_taskId}`);
+}
+
+// ── Log ───────────────────────────────────────────────────
+function limpiarLog(){
+  document.getElementById('log-body').innerHTML = '';
+}
+
+function addLogLine(msg, tipo, hora){
+  const el    = document.getElementById('log-body');
+  const empty = el.querySelector('.log-empty');
+  if(empty) empty.remove();
+  const dots  = {ok:'dot-ok', warn:'dot-warn', info:'dot-info', err:'dot-err'};
+  const div   = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `
+    <div class="log-dot ${dots[tipo]||'dot-info'}"></div>
+    <div class="log-text">${msg}</div>
+    <div class="log-time">${hora||''}</div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function setBotones(activo){
+  ['btn-dl','btn-conv','btn-both'].forEach(id=>{
+    document.getElementById(id).disabled = !activo;
+  });
+}
+
+function esc(s){
+  return String(s||'')
+    .replace(/&/g,'&amp;')
+    .replace(/'/g,'&#39;')
+    .replace(/"/g,'&quot;');
+}
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 3200);
+}
 
 cargarEmpresas();
 </script>

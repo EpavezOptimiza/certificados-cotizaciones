@@ -2,11 +2,12 @@
 Certificados de Cotizaciones — Versión Web
 Flask + SQLite nativo | Despliegue Railway
 """
-import os, json, shutil, secrets
+import os, json, shutil, secrets, threading, uuid, time as _time
 from datetime import datetime
 from functools import wraps
 from flask import (Flask, render_template, request, jsonify,
-                   send_from_directory, redirect, url_for, make_response)
+                   send_from_directory, redirect, url_for, make_response,
+                   send_file)
 from database import get_conn, init_db, hash_password
 
 app = Flask(__name__)
@@ -1399,6 +1400,143 @@ def _exportar_previred_excel():
         wb.save(DEST)
     except Exception as e:
         print(f"[previred] Error exportando Excel: {e}")
+
+# ============================================================
+#  PREVIRED — AUTOMATIZACIÓN (descarga + conversión)
+# ============================================================
+
+DB_PATH = os.environ.get("DB_PATH",
+          os.path.join(os.path.dirname(os.path.abspath(__file__)), "certificados.db"))
+_DATA_ROOT = os.path.dirname(DB_PATH)
+_PLANILLAS_DIR = os.path.join(_DATA_ROOT, "planillas")
+_TEMP_DIR      = os.path.join(_DATA_ROOT, "temp_previred")
+_EXCELS_DIR    = os.path.join(_DATA_ROOT, "excels")
+for _d in [_PLANILLAS_DIR, _TEMP_DIR, _EXCELS_DIR]:
+    os.makedirs(_d, exist_ok=True)
+
+_tareas: dict = {}
+
+def _nueva_tarea() -> str:
+    tid = uuid.uuid4().hex[:10]
+    _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None}
+    return tid
+
+def _log(tid: str, msg: str, tipo: str = "info"):
+    if tid in _tareas:
+        _tareas[tid]["logs"].append({
+            "msg": msg, "tipo": tipo,
+            "t": _time.strftime("%H:%M:%S")
+        })
+
+@app.route("/api/previred/tarea/<tid>")
+@api_login_required
+def previred_tarea(tid):
+    t = _tareas.get(tid)
+    if not t:
+        return jsonify({"error": "Tarea no encontrada"}), 404
+    since = int(request.args.get("since", 0))
+    return jsonify({
+        "logs": t["logs"][since:],
+        "done": t["done"],
+        "error": t["error"],
+        "archivo": t["archivo"],
+    })
+
+@app.route("/api/previred/descargar-excel/<tid>")
+@api_login_required
+def previred_descargar_excel(tid):
+    t = _tareas.get(tid)
+    if not t or not t.get("archivo") or not os.path.exists(t["archivo"]):
+        return jsonify({"error": "Archivo no disponible"}), 404
+    return send_file(t["archivo"], as_attachment=True,
+                     download_name="Planillas_Unificadas.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+@app.route("/api/previred/planillas")
+@api_login_required
+def previred_listar_planillas():
+    archivos = sorted([
+        f for f in os.listdir(_PLANILLAS_DIR) if f.endswith(".pdf")
+    ])
+    return jsonify({"archivos": archivos, "total": len(archivos)})
+
+@app.route("/api/previred/iniciar", methods=["POST"])
+@api_login_required
+def previred_iniciar():
+    d = request.json or {}
+    tipo = d.get("tipo")         # descargar | convertir | ambos
+    rut_empresa    = d.get("rut_empresa", "").strip()
+    razon_social   = d.get("razon_social", "").strip()
+    periodos_raw   = d.get("periodos", [])  # [{"mes":1,"anio":2024}, ...]
+
+    if tipo not in ("descargar", "convertir", "ambos"):
+        return jsonify({"error": "Tipo inválido"}), 400
+
+    periodos = [(int(p["mes"]), int(p["anio"])) for p in periodos_raw]
+
+    tid = _nueva_tarea()
+
+    def run():
+        try:
+            if tipo in ("descargar", "ambos"):
+                if not rut_empresa:
+                    _log(tid, "RUT de empresa requerido para descargar", "err")
+                    _tareas[tid]["error"] = True
+                    _tareas[tid]["done"]  = True
+                    return
+                if not periodos:
+                    _log(tid, "Selecciona al menos un período", "err")
+                    _tareas[tid]["error"] = True
+                    _tareas[tid]["done"]  = True
+                    return
+                rut_usr  = os.environ.get("PREVIRED_RUT", "")
+                cont_usr = os.environ.get("PREVIRED_PASS", "")
+                if not rut_usr or not cont_usr:
+                    _log(tid, "Credenciales Previred no configuradas en Railway (PREVIRED_RUT / PREVIRED_PASS)", "err")
+                    _tareas[tid]["error"] = True
+                    _tareas[tid]["done"]  = True
+                    return
+                from previred_logic import descargar
+                carpeta_emp = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
+                os.makedirs(carpeta_emp, exist_ok=True)
+                descargar(rut_usr, cont_usr, rut_empresa, periodos,
+                          carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t))
+
+            if tipo in ("convertir", "ambos"):
+                from pdf_excel_logic import generar_excel_bytes
+                if tipo == "ambos" and rut_empresa:
+                    carpeta_src = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
+                else:
+                    carpeta_src = _PLANILLAS_DIR
+                rutas = sorted([
+                    os.path.join(carpeta_src, f)
+                    for f in os.listdir(carpeta_src) if f.endswith(".pdf")
+                ])
+                if not rutas:
+                    _log(tid, "No hay PDFs para convertir en la carpeta", "warn")
+                    _tareas[tid]["done"] = True
+                    return
+                _log(tid, f"Convirtiendo {len(rutas)} PDFs...", "info")
+                xls_bytes = generar_excel_bytes(
+                    rutas, rut_empresa, razon_social,
+                    log=lambda m, t: _log(tid, m, t)
+                )
+                nombre_archivo = f"Planillas_{_time.strftime('%Y%m%d_%H%M%S')}.xlsx"
+                ruta_excel = os.path.join(_EXCELS_DIR, nombre_archivo)
+                with open(ruta_excel, "wb") as f:
+                    f.write(xls_bytes)
+                _tareas[tid]["archivo"] = ruta_excel
+                _log(tid, f"Excel generado: {nombre_archivo}", "ok")
+
+            _tareas[tid]["done"] = True
+        except Exception as e:
+            _log(tid, f"Error: {e}", "err")
+            _tareas[tid]["error"] = True
+            _tareas[tid]["done"]  = True
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"task_id": tid})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

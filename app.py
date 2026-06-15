@@ -1255,6 +1255,11 @@ def _seed_previred_empresas():
 
 _seed_previred_empresas()
 
+@app.route("/empresas")
+@login_required
+def empresas_page():
+    return render_template("empresas.html")
+
 @app.route("/previred")
 @login_required
 def previred():

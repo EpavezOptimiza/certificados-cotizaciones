@@ -589,25 +589,118 @@ function getRank(años) {
   return {name:'Leyenda', icon:'👑', color:'linear-gradient(180deg,#f9a8d4 0%,#e879f9 35%,#7c3aed 100%)', glow:'rgba(232,121,249,.5)'};
 }
 
+let _bannerAnimId = null;
+
 function showBanner(username, nombre, rol) {
   const colors = getRoleColors(rol);
   const inicial = (nombre || username || '?')[0].toUpperCase();
   const d = _bannerCache[username] || {};
 
-  // Ocultar capas del estilo actual (lluvia, orbos, etc.)
   hideAllLayers();
+  if (_bannerAnimId) { cancelAnimationFrame(_bannerAnimId); _bannerAnimId = null; }
 
-  // Radar SVG desde esquina inferior izquierda
-  const rr = colors.radar;
-  document.getElementById('radar-bg').innerHTML = `
-    <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible" viewBox="0 0 600 900" preserveAspectRatio="xMinYMax slice" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="80" cy="860" r="90"  fill="rgba(${rr},.13)" stroke="rgba(${rr},.3)" stroke-width="1"/>
-      <circle cx="80" cy="860" r="190" fill="rgba(${rr},.07)" stroke="rgba(${rr},.18)" stroke-width=".8"/>
-      <circle cx="80" cy="860" r="320" fill="rgba(${rr},.04)" stroke="rgba(${rr},.12)" stroke-width=".7"/>
-      <circle cx="80" cy="860" r="480" fill="rgba(${rr},.02)" stroke="rgba(${rr},.08)" stroke-width=".6"/>
-      <circle cx="80" cy="860" r="670" fill="rgba(${rr},.01)" stroke="rgba(${rr},.05)" stroke-width=".5"/>
-    </svg>`;
-  document.getElementById('radar-bg').style.opacity = '1';
+  // ── Fondo: canvas partículas + overlay marca ──
+  const radarEl = document.getElementById('radar-bg');
+  radarEl.innerHTML = `
+    <canvas id="banner-canvas" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+    <div style="position:absolute;inset:0;z-index:2;pointer-events:none;padding:44px 44px 0">
+      <div style="font-size:11px;font-weight:700;color:#2dd4bf;letter-spacing:1.4px;margin-bottom:14px;text-transform:uppercase">Bienvenido al portal</div>
+      <div style="font-size:min(3.6vw,28px);font-weight:800;color:#fff;line-height:1.18;margin-bottom:2px">Transformamos gestión</div>
+      <div style="font-size:min(3.6vw,28px);font-weight:800;line-height:1.18;margin-bottom:16px">
+        <span style="background:linear-gradient(90deg,#2dd4bf,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">en</span>
+        <span style="color:#fff"> resultados.</span>
+      </div>
+      <div style="width:44px;height:2.5px;background:linear-gradient(90deg,#e879f9,#2dd4bf);border-radius:2px;margin-bottom:16px"></div>
+      <div style="font-size:12.5px;color:rgba(255,255,255,.42);line-height:1.65;margin-bottom:28px">Un espacio diseñado para conectarte,<br>informarte y seguir creciendo juntos.</div>
+      <div style="display:flex;gap:26px">
+        <div>
+          <svg width="24" height="24" fill="none" stroke="#2dd4bf" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:7px"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="17" cy="9" r="2"/><path d="M21 21v-1a3 3 0 0 0-2-2.83"/></svg>
+          <div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:1px">Personas</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.38)">Comprometidas</div>
+        </div>
+        <div>
+          <svg width="24" height="24" fill="none" stroke="#8b5cf6" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:7px"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="3" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="21" y2="12"/></svg>
+          <div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:1px">Procesos</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.38)">Inteligentes</div>
+        </div>
+        <div>
+          <svg width="24" height="24" fill="none" stroke="#2dd4bf" stroke-width="1.4" stroke-linecap="round" viewBox="0 0 24 24" style="display:block;margin-bottom:7px"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+          <div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:1px">Resultados</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.38)">Medibles</div>
+        </div>
+      </div>
+    </div>`;
+  radarEl.style.opacity = '1';
+
+  // ── Canvas partículas ──
+  requestAnimationFrame(() => {
+    const cv = document.getElementById('banner-canvas');
+    if (!cv) return;
+    const W = cv.offsetWidth || 600, H = cv.offsetHeight || 900;
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    function wavePt(t) {
+      return { x: W*0.18 + t*W*1.1, y: H*0.96 - t*H*0.88 + Math.sin(t*Math.PI*1.3)*H*0.1 };
+    }
+    const pts = [];
+    for (let i=0;i<240;i++) {
+      const t=i/240, {x,y}=wavePt(t);
+      const sp=5+(1-t)*24+t*t*42;
+      pts.push({ox:x+(Math.random()-.5)*sp*2.4, oy:y+(Math.random()-.5)*sp*2.4,
+        vx:(Math.random()-.5)*.32,vy:(Math.random()-.5)*.32,
+        r:Math.random()*1.5+.4, isTeal:t<.45||Math.random()>.42,
+        alpha:.28+Math.random()*.55, pulse:Math.random()*Math.PI*2});
+    }
+    pts.forEach(p=>{p.x=p.ox;p.y=p.oy;});
+    const focals=[{x:W*.28,y:H*.85,r:5,isTeal:true,pulse:0},{x:W*.9,y:H*.15,r:4,isTeal:false,pulse:1.5}];
+    const all=[...pts,...focals];
+
+    function frame() {
+      ctx.fillStyle='#060c1a'; ctx.fillRect(0,0,W,H);
+      pts.forEach(p=>{
+        p.pulse+=.022;
+        p.x+=p.vx+Math.sin(p.pulse*.4)*.18;
+        p.y+=p.vy+Math.cos(p.pulse*.3)*.14;
+        if(Math.abs(p.x-p.ox)>30) p.vx*=-.92;
+        if(Math.abs(p.y-p.oy)>30) p.vy*=-.92;
+      });
+      focals.forEach(f=>f.pulse+=.025);
+      for(let i=0;i<all.length;i++){
+        for(let j=i+1;j<all.length;j++){
+          const dx=all[i].x-all[j].x,dy=all[i].y-all[j].y,dist=Math.sqrt(dx*dx+dy*dy);
+          if(dist<70){
+            const a=(1-dist/70)*.2;
+            const g=ctx.createLinearGradient(all[i].x,all[i].y,all[j].x,all[j].y);
+            g.addColorStop(0,all[i].isTeal?`rgba(45,212,191,${a})`:`rgba(139,92,246,${a})`);
+            g.addColorStop(1,all[j].isTeal?`rgba(45,212,191,${a})`:`rgba(139,92,246,${a})`);
+            ctx.beginPath();ctx.moveTo(all[i].x,all[i].y);ctx.lineTo(all[j].x,all[j].y);
+            ctx.strokeStyle=g;ctx.lineWidth=.55;ctx.stroke();
+          }
+        }
+      }
+      pts.forEach(p=>{
+        const pulse=(Math.sin(p.pulse)+1)/2;
+        const rgb=p.isTeal?'45,212,191':'139,92,246';
+        ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fillStyle=`rgba(${rgb},${p.alpha*(.65+pulse*.35)})`;ctx.fill();
+      });
+      focals.forEach(f=>{
+        const pulse=(Math.sin(f.pulse)+1)/2, rgb=f.isTeal?'45,212,191':'139,92,246';
+        [f.r*5,f.r*2.5,f.r*1.5,f.r].forEach((r,i)=>{
+          ctx.beginPath();ctx.arc(f.x,f.y,r,0,Math.PI*2);
+          ctx.fillStyle=`rgba(${rgb},${[.05,.12,.22,.88][i]*(0.7+pulse*.3)})`;ctx.fill();
+        });
+      });
+      const gl=ctx.createLinearGradient(0,0,W*.6,0);
+      gl.addColorStop(0,'rgba(6,12,26,.9)');gl.addColorStop(.65,'rgba(6,12,26,.5)');gl.addColorStop(1,'transparent');
+      ctx.fillStyle=gl;ctx.fillRect(0,0,W,H);
+      const gb=ctx.createLinearGradient(0,H*.5,0,H);
+      gb.addColorStop(0,'transparent');gb.addColorStop(1,'rgba(6,12,26,.9)');
+      ctx.fillStyle=gb;ctx.fillRect(0,0,W,H);
+      _bannerAnimId=requestAnimationFrame(frame);
+    }
+    frame();
+  });
 
   // Avatar
   const av = document.getElementById('banner-avatar');
@@ -656,9 +749,11 @@ function showBanner(username, nombre, rol) {
 }
 
 function hideBanner() {
+  if (_bannerAnimId) { cancelAnimationFrame(_bannerAnimId); _bannerAnimId = null; }
   document.getElementById('user-banner').classList.remove('visible');
   document.getElementById('brand-content').classList.remove('hidden');
   document.getElementById('radar-bg').style.opacity = '0';
+  document.getElementById('radar-bg').innerHTML = '';
   usuarioActual = null;
   document.querySelectorAll('.user-item').forEach(el => el.classList.remove('selected'));
   document.getElementById('pass-section').classList.remove('visible');

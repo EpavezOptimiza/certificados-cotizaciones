@@ -280,14 +280,18 @@ function exportar(){window.location='/api/previred/empresas/export'}
 
 async function importar(input){
   const file=input.files[0];if(!file)return;
-  const reemplazar=confirm('¿Reemplazar las empresas existentes?\n\nAceptar = reemplaza todo\nCancelar = solo agrega/actualiza');
-  const fd=new FormData();fd.append('file',file);fd.append('reemplazar',reemplazar?'1':'0');
-  toast('Importando...');
-  const res=await fetch('/api/previred/empresas/import',{method:'POST',body:fd});
-  const data=await res.json();
-  input.value='';
-  if(data.ok){cargar();toast(`${data.importadas} empresas importadas`)}
-  else toast(data.error||'Error al importar')
+  const fd=new FormData();fd.append('file',file);fd.append('reemplazar','1');
+  toast('Importando Excel...');
+  try {
+    const res=await fetch('/api/previred/empresas/import',{method:'POST',body:fd});
+    const data=await res.json();
+    input.value='';
+    if(data.ok){cargar();toast(`✓ ${data.importadas} empresas importadas correctamente`)}
+    else toast('Error: '+(data.error||'Error desconocido'))
+  } catch(e){
+    toast('Error de red: '+e.message);
+    input.value='';
+  }
 }
 
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800)}

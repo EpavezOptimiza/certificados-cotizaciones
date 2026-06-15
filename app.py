@@ -1349,13 +1349,22 @@ def previred_import():
         return jsonify({"error": "Sin archivo"}), 400
     reemplazar = request.form.get("reemplazar", "0") == "1"
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(f.read()))
+        data = f.read()
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
         ws = wb.active
-        rows = [(str(r[0]).strip(), str(r[1]).strip() if r[1] else "", str(r[2]).strip() if r[2] else "")
-                for r in ws.iter_rows(min_row=2, values_only=True) if r[0] and str(r[0]).strip() != "None"]
+        rows = []
+        for r in ws.iter_rows(min_row=2, values_only=True):
+            rut = str(r[0]).strip() if r[0] is not None else ""
+            grupo = str(r[1]).strip() if r[1] is not None else ""
+            razon = str(r[2]).strip() if r[2] is not None else ""
+            if rut and rut.lower() != "none":
+                rows.append((rut, grupo, razon))
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    with get_conn() as conn:
+        return jsonify({"error": f"Error leyendo Excel: {str(e)}"}), 400
+    if not rows:
+        return jsonify({"error": "El archivo no contiene datos válidos"}), 400
+    try:
+        conn = get_conn()
         if reemplazar:
             conn.execute("UPDATE previred_empresas SET activa=0")
         for rut, grupo, razon in rows:
@@ -1364,8 +1373,12 @@ def previred_import():
                 conn.execute("UPDATE previred_empresas SET grupo=?, razon_social=?, activa=1 WHERE rut=?",
                              (grupo, razon, rut))
             else:
-                conn.execute("INSERT INTO previred_empresas(rut,grupo,razon_social) VALUES(?,?,?)",
+                conn.execute("INSERT INTO previred_empresas(rut, grupo, razon_social) VALUES(?,?,?)",
                              (rut, grupo, razon))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return jsonify({"error": f"Error guardando: {str(e)}"}), 500
     _exportar_previred_excel()
     return jsonify({"ok": True, "importadas": len(rows)})
 

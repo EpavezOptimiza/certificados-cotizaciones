@@ -1548,12 +1548,15 @@ def previred_iniciar():
                     return
                 _log(tid, "Verificando Chrome instalado...", "info")
                 try:
-                    import subprocess
-                    result = subprocess.run(["google-chrome", "--version"], capture_output=True, text=True, timeout=10)
-                    _log(tid, f"Chrome: {result.stdout.strip()}", "ok")
+                    import shutil as _sh, subprocess
+                    chrome = _sh.which("chromium") or _sh.which("chromium-browser") or _sh.which("google-chrome")
+                    if not chrome:
+                        raise RuntimeError("No se encontró chromium ni google-chrome en el PATH")
+                    result = subprocess.run([chrome, "--version"], capture_output=True, text=True, timeout=10)
+                    _log(tid, f"Chrome listo: {result.stdout.strip()}", "ok")
                 except Exception as ce:
                     _log(tid, f"Chrome no disponible: {ce}", "err")
-                    _log(tid, "El servidor necesita el Dockerfile con Chrome — verifica que Railway usó builder=DOCKERFILE", "warn")
+                    _log(tid, "Railway necesita nixpacks.toml con chromium — verifica que el archivo existe en el repo", "warn")
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
                     return

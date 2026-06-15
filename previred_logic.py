@@ -6,7 +6,6 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 URL_LOGIN = "https://www.previred.com/wPortal/login/login.jsp"
 
@@ -22,8 +21,29 @@ def rut_a_btn_id(rut: str) -> str:
     return f"empresa#{num}#00#false"
 
 
+def _encontrar_chrome():
+    """Busca el binario de Chrome/Chromium instalado en el sistema."""
+    candidatos = ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]
+    for nombre in candidatos:
+        ruta = shutil.which(nombre)
+        if ruta:
+            return ruta
+    raise RuntimeError("No se encontró Chrome/Chromium instalado en el servidor")
+
+def _encontrar_chromedriver():
+    """Busca chromedriver instalado en el sistema."""
+    ruta = shutil.which("chromedriver")
+    if ruta:
+        return ruta
+    raise RuntimeError("No se encontró chromedriver instalado en el servidor")
+
+
 def iniciar_driver(carpeta_temp: str) -> webdriver.Chrome:
+    chrome_bin = _encontrar_chrome()
+    driver_bin = _encontrar_chromedriver()
+
     opciones = Options()
+    opciones.binary_location = chrome_bin
     opciones.add_argument("--headless=new")
     opciones.add_argument("--no-sandbox")
     opciones.add_argument("--disable-dev-shm-usage")
@@ -36,7 +56,7 @@ def iniciar_driver(carpeta_temp: str) -> webdriver.Chrome:
         "plugins.always_open_pdf_externally": True,
     }
     opciones.add_experimental_option("prefs", prefs)
-    servicio = Service(ChromeDriverManager().install())
+    servicio = Service(driver_bin)
     driver = webdriver.Chrome(service=servicio, options=opciones)
     # Habilitar descargas en modo headless
     driver.execute_cdp_cmd("Page.setDownloadBehavior", {

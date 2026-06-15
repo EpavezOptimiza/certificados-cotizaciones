@@ -589,165 +589,53 @@ function getRank(años) {
   return {name:'Leyenda', icon:'👑', color:'linear-gradient(180deg,#f9a8d4 0%,#e879f9 35%,#7c3aed 100%)', glow:'rgba(232,121,249,.5)'};
 }
 
-let _bannerAnimId = null;
-
 function showBanner(username, nombre, rol) {
   const colors = getRoleColors(rol);
   const inicial = (nombre || username || '?')[0].toUpperCase();
   const d = _bannerCache[username] || {};
 
+  // Ocultar capas del estilo actual (lluvia, orbos, etc.)
   hideAllLayers();
-  if (_bannerAnimId) { cancelAnimationFrame(_bannerAnimId); _bannerAnimId = null; }
 
-  // ── Fondo: canvas de partículas + overlay de marca ──
-  const radarEl = document.getElementById('radar-bg');
-  radarEl.innerHTML = `
-    <canvas id=”banner-canvas” style=”position:absolute;inset:0;width:100%;height:100%”></canvas>
-    <div id=”banner-brand-overlay” style=”position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden”>
-      <div style=”position:absolute;top:0;left:0;right:0;line-height:.88;pointer-events:none;overflow:hidden”>
-        <div style=”font-size:min(13vw,112px);font-weight:900;color:rgba(45,212,191,.06);letter-spacing:-3px;text-align:right;padding-right:6px;margin-top:-6px”>Optimiza</div>
-        <div style=”font-size:min(8.5vw,74px);font-weight:900;color:rgba(139,92,246,.055);letter-spacing:-2px;text-align:right;padding-right:6px”>Consulting</div>
-      </div>
-      <div style=”position:absolute;top:50%;left:44px;right:44px;transform:translateY(-54%)”>
-        <div style=”font-size:11px;font-weight:600;color:#2dd4bf;letter-spacing:1.2px;margin-bottom:14px;text-transform:uppercase”>Bienvenido al portal</div>
-        <div style=”font-size:min(4.2vw,30px);font-weight:800;color:#fff;line-height:1.2;margin-bottom:4px”>Transformamos gestión</div>
-        <div style=”font-size:min(4.2vw,30px);font-weight:800;line-height:1.2;margin-bottom:16px”>en <span style=”color:#2dd4bf”>resultados.</span></div>
-        <div style=”width:44px;height:2px;background:linear-gradient(90deg,#e879f9,#2dd4bf);margin-bottom:16px”></div>
-        <div style=”font-size:13px;color:rgba(255,255,255,.42);line-height:1.65;margin-bottom:28px”>Un espacio diseñado para conectarte,<br>informarte y seguir creciendo juntos.</div>
-        <div style=”display:flex;gap:28px”>
-          <div>
-            <svg width=”26” height=”26” fill=”none” stroke=”#2dd4bf” stroke-width=”1.5” stroke-linecap=”round” viewBox=”0 0 24 24” style=”margin-bottom:6px”><circle cx=”9” cy=”7” r=”3”/><path d=”M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2”/><circle cx=”17” cy=”9” r=”2”/><path d=”M21 21v-1a3 3 0 0 0-2-2.83”/></svg>
-            <div style=”font-size:12px;font-weight:700;color:#fff”>Personas</div>
-            <div style=”font-size:10px;color:rgba(255,255,255,.38)”>Comprometidas</div>
-          </div>
-          <div>
-            <svg width=”26” height=”26” fill=”none” stroke=”#8b5cf6” stroke-width=”1.5” stroke-linecap=”round” viewBox=”0 0 24 24” style=”margin-bottom:6px”><circle cx=”12” cy=”12” r=”9”/><circle cx=”12” cy=”12” r=”4”/><line x1=”12” y1=”3” x2=”12” y2=”6”/><line x1=”12” y1=”18” x2=”12” y2=”21”/><line x1=”3” y1=”12” x2=”6” y2=”12”/><line x1=”18” y1=”12” x2=”21” y2=”12”/></svg>
-            <div style=”font-size:12px;font-weight:700;color:#fff”>Procesos</div>
-            <div style=”font-size:10px;color:rgba(255,255,255,.38)”>Inteligentes</div>
-          </div>
-          <div>
-            <svg width=”26” height=”26” fill=”none” stroke=”#2dd4bf” stroke-width=”1.5” stroke-linecap=”round” viewBox=”0 0 24 24” style=”margin-bottom:6px”><rect x=”3” y=”12” width=”4” height=”9” rx=”1”/><rect x=”10” y=”7” width=”4” height=”14” rx=”1”/><rect x=”17” y=”3” width=”4” height=”18” rx=”1”/></svg>
-            <div style=”font-size:12px;font-weight:700;color:#fff”>Resultados</div>
-            <div style=”font-size:10px;color:rgba(255,255,255,.38)”>Medibles</div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  radarEl.style.opacity = '1';
+  // Radar SVG desde esquina inferior izquierda
+  const rr = colors.radar;
+  document.getElementById('radar-bg').innerHTML = `
+    <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible" viewBox="0 0 600 900" preserveAspectRatio="xMinYMax slice" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="80" cy="860" r="90"  fill="rgba(${rr},.13)" stroke="rgba(${rr},.3)" stroke-width="1"/>
+      <circle cx="80" cy="860" r="190" fill="rgba(${rr},.07)" stroke="rgba(${rr},.18)" stroke-width=".8"/>
+      <circle cx="80" cy="860" r="320" fill="rgba(${rr},.04)" stroke="rgba(${rr},.12)" stroke-width=".7"/>
+      <circle cx="80" cy="860" r="480" fill="rgba(${rr},.02)" stroke="rgba(${rr},.08)" stroke-width=".6"/>
+      <circle cx="80" cy="860" r="670" fill="rgba(${rr},.01)" stroke="rgba(${rr},.05)" stroke-width=".5"/>
+    </svg>`;
+  document.getElementById('radar-bg').style.opacity = '1';
 
-  // ── Canvas de partículas ──
-  requestAnimationFrame(() => {
-    const cv = document.getElementById('banner-canvas');
-    if (!cv) return;
-    const W = cv.offsetWidth || 600;
-    const H = cv.offsetHeight || 900;
-    cv.width = W; cv.height = H;
-    const ctx = cv.getContext('2d');
-
-    const nodes = Array.from({length:70}, () => {
-      const side = Math.random() > .35;
-      return {
-        x: side ? W*.3 + Math.random()*W*.8 : Math.random()*W,
-        y: Math.random()*H,
-        vx: (Math.random()-.5)*.4,
-        vy: (Math.random()-.5)*.4,
-        r: Math.random()*2.2+.8,
-        isTeal: Math.random()>.45,
-        alpha: Math.random()*.5+.25,
-        pulse: Math.random()*Math.PI*2
-      };
-    });
-    // Nodos ancla brillantes (focal points)
-    const anchors = [
-      {x:W*.78,y:H*.55,r:5,isTeal:true},
-      {x:W*.92,y:H*.35,r:3.5,isTeal:false},
-      {x:W*.65,y:H*.7,r:4,isTeal:true},
-    ];
-
-    function frame() {
-      ctx.clearRect(0,0,W,H);
-      ctx.fillStyle='#060d1c';
-      ctx.fillRect(0,0,W,H);
-
-      nodes.forEach(n => {
-        n.x+=n.vx; n.y+=n.vy; n.pulse+=.025;
-        if(n.x<-20||n.x>W+20) n.vx*=-1;
-        if(n.y<-20||n.y>H+20) n.vy*=-1;
-      });
-
-      const all = [...nodes, ...anchors];
-      // Líneas
-      for(let i=0;i<all.length;i++){
-        for(let j=i+1;j<all.length;j++){
-          const dx=all[i].x-all[j].x, dy=all[i].y-all[j].y;
-          const dist=Math.sqrt(dx*dx+dy*dy);
-          if(dist<130){
-            const a=(1-dist/130)*.15;
-            const gi=ctx.createLinearGradient(all[i].x,all[i].y,all[j].x,all[j].y);
-            gi.addColorStop(0,all[i].isTeal?`rgba(45,212,191,${a})`:`rgba(139,92,246,${a})`);
-            gi.addColorStop(1,all[j].isTeal?`rgba(45,212,191,${a})`:`rgba(139,92,246,${a})`);
-            ctx.beginPath();
-            ctx.moveTo(all[i].x,all[i].y);
-            ctx.lineTo(all[j].x,all[j].y);
-            ctx.strokeStyle=gi;
-            ctx.lineWidth=.6;
-            ctx.stroke();
-          }
-        }
-      }
-      // Partículas
-      all.forEach(n => {
-        const pulse = n.pulse ? (Math.sin(n.pulse)+1)/2 : 1;
-        const rgb = n.isTeal?'45,212,191':'139,92,246';
-        const a = n.alpha || .7;
-        if(n.r>3){
-          ctx.beginPath(); ctx.arc(n.x,n.y,n.r*3.5,0,Math.PI*2);
-          ctx.fillStyle=`rgba(${rgb},.07)`; ctx.fill();
-          ctx.beginPath(); ctx.arc(n.x,n.y,n.r*1.8,0,Math.PI*2);
-          ctx.fillStyle=`rgba(${rgb},.18)`; ctx.fill();
-        }
-        ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
-        ctx.fillStyle=`rgba(${rgb},${a*(.6+pulse*.4)})`; ctx.fill();
-      });
-
-      // Gradient overlay izquierda (para legibilidad del texto)
-      const gl = ctx.createLinearGradient(0,0,W*.55,0);
-      gl.addColorStop(0,'rgba(6,13,28,.92)');
-      gl.addColorStop(.6,'rgba(6,13,28,.55)');
-      gl.addColorStop(1,'transparent');
-      ctx.fillStyle=gl; ctx.fillRect(0,0,W,H);
-
-      // Gradient abajo (para info usuario)
-      const gb = ctx.createLinearGradient(0,H*.5,0,H);
-      gb.addColorStop(0,'transparent');
-      gb.addColorStop(1,'rgba(6,13,28,.9)');
-      ctx.fillStyle=gb; ctx.fillRect(0,0,W,H);
-
-      _bannerAnimId = requestAnimationFrame(frame);
-    }
-    frame();
-  });
-
-  // ── Info usuario ──
+  // Avatar
   const av = document.getElementById('banner-avatar');
   av.textContent = inicial;
   av.style.background = `linear-gradient(135deg,${colors.bg1},${colors.bg2})`;
+
+  // Nombre
   document.getElementById('banner-name').textContent = nombre || username;
+
+  // Chip de rol
   const chip = document.getElementById('banner-role-chip');
   chip.style.cssText = `display:inline-flex;align-items:center;gap:5px;margin-bottom:14px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}`;
-  chip.innerHTML = `<span style=”width:5px;height:5px;border-radius:50%;background:${colors.chipColor};display:inline-block”></span> ${ROL_LABELS[rol]||rol}`;
+  chip.innerHTML = `<span style="width:5px;height:5px;border-radius:50%;background:${colors.chipColor};display:inline-block"></span> ${ROL_LABELS[rol] || rol}`;
 
+  // Lema (inmediato desde cache)
   const lemaEl = document.getElementById('banner-lema');
-  if (d.lema) { lemaEl.textContent = '”'+d.lema+'”'; lemaEl.style.display='block'; }
-  else { lemaEl.style.display='none'; }
+  if (d.lema) { lemaEl.textContent = '“' + d.lema + '”'; lemaEl.style.display = 'block'; }
+  else { lemaEl.style.display = 'none'; }
 
+  // Cualidades chips (inmediato desde cache)
   const chipsEl = document.getElementById('banner-chips');
-  const cualidades = (d.cualidades||'').split(',').map(c=>c.trim()).filter(Boolean);
+  const cualidades = (d.cualidades || '').split(',').map(c => c.trim()).filter(Boolean);
   chipsEl.innerHTML = cualidades.map(c =>
-    `<span class=”banner-chip” style=”background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}”>${c}</span>`
+    `<span class="banner-chip" style="background:${colors.chipBg};color:${colors.chipColor};border:0.5px solid ${colors.chipBorder}">${c}</span>`
   ).join('');
 
-  const rank = getRank(d.años||0);
+  // Ribbon de rango
+  const rank = getRank(d.años || 0);
   const ribbonWrap = document.getElementById('banner-ribbon');
   if (rank) {
     const inner = document.getElementById('banner-ribbon-inner');
@@ -755,23 +643,22 @@ function showBanner(username, nombre, rol) {
     inner.style.boxShadow = `0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.3),0 0 22px ${rank.glow}`;
     document.getElementById('ribbon-rank-name').textContent = rank.name.toUpperCase();
     document.getElementById('ribbon-icon').textContent = rank.icon;
-    const yrs = d.años||0;
-    document.getElementById('ribbon-years').textContent = yrs+' año'+(yrs!==1?'s':'');
-    ribbonWrap.style.display='block';
+    const yrs = d.años || 0;
+    document.getElementById('ribbon-years').textContent = yrs + ' año' + (yrs !== 1 ? 's' : '');
+    ribbonWrap.style.display = 'block';
   } else {
-    ribbonWrap.style.display='none';
+    ribbonWrap.style.display = 'none';
   }
 
+  // Mostrar banner, ocultar brand
   document.getElementById('brand-content').classList.add('hidden');
   document.getElementById('user-banner').classList.add('visible');
 }
 
 function hideBanner() {
-  if (_bannerAnimId) { cancelAnimationFrame(_bannerAnimId); _bannerAnimId = null; }
   document.getElementById('user-banner').classList.remove('visible');
   document.getElementById('brand-content').classList.remove('hidden');
   document.getElementById('radar-bg').style.opacity = '0';
-  document.getElementById('radar-bg').innerHTML = '';
   usuarioActual = null;
   document.querySelectorAll('.user-item').forEach(el => el.classList.remove('selected'));
   document.getElementById('pass-section').classList.remove('visible');

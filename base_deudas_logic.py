@@ -118,8 +118,8 @@ def _periodo(s: str):
         mes, anio = int(m.group(1)), int(m.group(2))
         if 1 <= mes <= 12 and 1900 <= anio <= 2100:
             return date(anio, mes, 1)
-    # Formato AFP Habitat: MYYYY o MMYYYY sin separador (ej: 912019 = 9/2019)
-    m2 = re.match(r'^(\d{1,2})(\d{4})$', s)
+    # Formato AFP Habitat: M1YYYY o MM1YYYY (el "1" es el día, ej: 9/1/2019 → 912019)
+    m2 = re.match(r'^(\d{1,2})1(\d{4})$', s)
     if m2:
         mes, anio = int(m2.group(1)), int(m2.group(2))
         if 1 <= mes <= 12 and 1990 <= anio <= 2100:

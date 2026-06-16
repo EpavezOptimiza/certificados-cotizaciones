@@ -622,14 +622,25 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
         if not _es_grupo(origen_val) and isinstance(a,str) and _es_grupo(a) and not RUT_RE.match(a):
             split_pendiente = None
             periodo_g = ""; estado_g = ""
+            # Primero buscar período incrustado en el texto de col 1 (ej: Provida comprime todo en col 1)
+            _m_per = re.search(r'(\d{2}/\d{4})', a)
+            if _m_per:
+                periodo_g = _m_per.group(1)
+            # También buscar estado en col 1
+            _a_upper = a.upper()
+            if not estado_g:
+                for _kw in ["SIN GESTION","PREJUDICIAL","JUICIO","RESOLUCION","INGRESADA"]:
+                    if _kw in _a_upper:
+                        estado_g = _norm_estado(_kw); break
             for cc in range(1, ws.max_column+1):
                 val_g = ws.cell(r,cc).value
-                if isinstance(val_g,str) and re.match(r'^\d{2}/\d{4}$',val_g.strip()):
-                    periodo_g = val_g.strip()
-                elif cc!=1 and isinstance(val_g,str) and val_g.strip():
-                    upper_g = val_g.upper().strip()
-                    if any(x in upper_g for x in ["SIN GESTION","PREJUDICIAL","JUICIO","RESOLUCION","INGRESADA"]):
-                        estado_g = _norm_estado(upper_g)
+                if isinstance(val_g,str):
+                    if not periodo_g and re.match(r'^\d{2}/\d{4}$',val_g.strip()):
+                        periodo_g = val_g.strip()
+                    elif cc!=1 and val_g.strip():
+                        upper_g = val_g.upper().strip()
+                        if not estado_g and any(x in upper_g for x in ["SIN GESTION","PREJUDICIAL","JUICIO","RESOLUCION","INGRESADA"]):
+                            estado_g = _norm_estado(upper_g)
             grupo = {"origen":_norm_origen(a),"adm":None,
                      "periodo":_periodo(periodo_g) if periodo_g else "",
                      "estado":estado_g,"abogado":""}

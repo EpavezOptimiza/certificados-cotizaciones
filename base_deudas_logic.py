@@ -48,10 +48,13 @@ RE_RAZON_SOCIAL  = re.compile(
     re.IGNORECASE)
 RE_RAZON_PREFIJO = re.compile(r"^(?:cuya\s+raz[o6ó]n\s+social\s+es\s+)", re.IGNORECASE)
 RE_RAZON_HABITAT = re.compile(r"(?:Se\w{1,5}res?\s*[\n\r\s]*)(.+?)\s+Rut\s*:", re.IGNORECASE | re.DOTALL)
-RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA|REGISTRO\s+DE\s+NO\s+DEUDA", re.IGNORECASE)
+RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA|REGISTRO\s+DE\s+NO\s+DEUDA|NO\s+REGISTRA\s+DEUDA", re.IGNORECASE)
 RE_RUT_SIN_PUNTOS = re.compile(r"[Rr]ut\s+(\d{7,8}-[\dKk])\b")
 RE_RUT_EMPLEADOR  = re.compile(r"R\.?U\.?T\.?\s+[Ee]mpleador\s+(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.IGNORECASE)
 RE_RAZON_CERTIFICA = re.compile(r"certifica que[:\s]+([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ\s\.]+?),?\s+[Rr]ut\s", re.IGNORECASE)
+# Isapre-style: "la Empresa NOMBRE Rut : XX.XXX.XXX-X"
+RE_RUT_EMPRESA_ISAPRE  = re.compile(r"[Ee]mpresa\s+.+?\s+[Rr]ut\s*:\s*(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.DOTALL)
+RE_RAZON_EMPRESA_ISAPRE = re.compile(r"[Ee]mpresa\s+([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ0-9\s\.,]+?)\s+[Rr]ut\s*:", re.IGNORECASE)
 RE_PERIODO_STR   = re.compile(r"^(\d{2})/(\d{4})")
 
 def _normalizar_rut_sin_puntos(rut_raw: str) -> str:
@@ -68,10 +71,14 @@ def _normalizar_rut_sin_puntos(rut_raw: str) -> str:
 
 def _extraer_rut(texto: str) -> str:
     """Intenta múltiples formatos de RUT; devuelve RUT normalizado sin espacios."""
-    m = RE_RUT_EMPRESA.search(texto)
+    # Primero buscar patrón específico "Empresa ... Rut :" (Isapre Consalud, CruzBlanca, etc.)
+    m = RE_RUT_EMPRESA_ISAPRE.search(texto)
     if m:
         return re.sub(r"\s", "", m.group(1))
     m = RE_RUT_EMPLEADOR.search(texto)
+    if m:
+        return re.sub(r"\s", "", m.group(1))
+    m = RE_RUT_EMPRESA.search(texto)
     if m:
         return re.sub(r"\s", "", m.group(1))
     m = RE_RUT_SIN_PUNTOS.search(texto)
@@ -81,6 +88,10 @@ def _extraer_rut(texto: str) -> str:
 
 def _extraer_razon(texto: str) -> str:
     """Intenta múltiples patrones de razón social."""
+    # Primero patrón específico "Empresa NOMBRE Rut :" (Isapre Consalud, CruzBlanca, etc.)
+    m = RE_RAZON_EMPRESA_ISAPRE.search(texto)
+    if m:
+        return _limpiar_razon(m.group(1))
     m = RE_RAZON_SOCIAL.search(texto) or RE_RAZON_HABITAT.search(texto)
     if m:
         return _limpiar_razon(m.group(1))
@@ -967,9 +978,16 @@ def procesar_lote(pares: list, log=None) -> bytes:
             es_no_deuda = False
             rut_nd = razon_nd = ""
             if RE_NO_DEUDA.search(_txt) or "no registra" in _txt_norm:
-                rut_nd   = _extraer_rut(_txt)
-                razon_nd = _extraer_razon(_txt)
                 es_no_deuda = True
+                # Preferir PDF: el Excel puede tener solo el RUT de la institución (ej: Consalud)
+                if tiene_pdf:
+                    try:
+                        _, rut_nd, razon_nd = detectar_no_deuda(pdf_bytes)
+                    except Exception:
+                        pass
+                # Fallback: extraer del Excel si el PDF no dio resultados
+                if not rut_nd:   rut_nd   = _extraer_rut(_txt)
+                if not razon_nd: razon_nd = _extraer_razon(_txt)
 
             # Institución: busca en nombre de hoja, texto de celdas y nombre del archivo Excel
             inst = _detectar_inst_texto(nombre_hoja, _txt, excel_nombre)

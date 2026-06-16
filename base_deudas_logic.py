@@ -1041,13 +1041,19 @@ def procesar_lote(pares: list, log=None) -> bytes:
             rut_nd = razon_nd = ""
             if RE_NO_DEUDA.search(_txt) or "no registra" in _txt_norm:
                 es_no_deuda = True
-                # Preferir PDF: el Excel puede tener solo el RUT de la institución (ej: Consalud)
+                # Prioridad 1: RUT del nombre del archivo (ej: 76216647-k_Consalud.xlsx → 76.216.647-K)
+                _mfn = re.match(r'^(\d{7,8}-[\dKk])', excel_nombre)
+                if _mfn:
+                    rut_nd = _normalizar_rut_sin_puntos(_mfn.group(1))
+                # Prioridad 2: PDF (para obtener razón social y confirmar RUT)
                 if tiene_pdf:
                     try:
-                        _, rut_nd, razon_nd = detectar_no_deuda(pdf_bytes)
+                        _, rut_pdf, razon_pdf = detectar_no_deuda(pdf_bytes)
+                        if not rut_nd:   rut_nd   = rut_pdf
+                        if not razon_nd: razon_nd = razon_pdf
                     except Exception:
                         pass
-                # Fallback: extraer del Excel si el PDF no dio resultados
+                # Fallback: extraer del Excel si no hubo PDF ni nombre de archivo útil
                 if not rut_nd:   rut_nd   = _extraer_rut(_txt)
                 if not razon_nd: razon_nd = _extraer_razon(_txt)
 

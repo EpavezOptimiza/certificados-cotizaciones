@@ -1418,6 +1418,9 @@ def base_deudas_unificar():
 
     archivos = request.files.getlist("archivos")
     pdfs = [f for f in archivos if f.filename.lower().endswith(".pdf")]
+    no_pdf = [f.filename for f in archivos if not f.filename.lower().endswith(".pdf")]
+    if no_pdf:
+        return jsonify({"error": f"El paso 1 solo acepta PDFs. Archivo incorrecto: {', '.join(no_pdf)}"}), 400
     if not pdfs:
         return jsonify({"error": "No se recibieron PDFs"}), 400
 

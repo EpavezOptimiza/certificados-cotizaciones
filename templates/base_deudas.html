@@ -283,7 +283,11 @@ async function unificar(){
 
   try {
     const res = await fetch('/api/base-deudas/unificar', {method:'POST', body:fd});
-    if(!res.ok){ toast('Error al unificar PDFs'); return; }
+    if(!res.ok){
+      const data = await res.json().catch(()=>({}));
+      toast('Error: ' + (data.error || 'No se pudo unificar'));
+      btn.disabled = false; btn.innerHTML = '⬇ Descargar PDF unificado'; return;
+    }
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

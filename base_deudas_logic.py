@@ -673,77 +673,74 @@ def procesar_lote(pares: list, log=None) -> bytes:
 
         _log(f"── {excel_nombre}", "info")
 
-        # Detección NO DEUDA — primero desde el Excel, luego desde PDF si hay
-        es_no_deuda = False
-        rut_nd = razon_nd = ""
-        _wb_nd = openpyxl.load_workbook(io.BytesIO(excel_bytes))
-        _ws_nd = _wb_nd.active
-        _txt_nd = " ".join(
-            str(_ws_nd.cell(r,c).value or "")
-            for r in range(1, min(6, _ws_nd.max_row+1))
-            for c in range(1, _ws_nd.max_column+1)
-        )
-        _txt_norm = re.sub(r'\s+',' ', _txt_nd).lower()
-        if RE_NO_DEUDA.search(_txt_nd) or "no registra" in _txt_norm:
-            m_rut = RE_RUT_EMPRESA.search(_txt_nd)
-            rut_nd   = re.sub(r"\s","",m_rut.group(1)) if m_rut else ""
-            m_rs     = RE_RAZON_SOCIAL.search(_txt_nd) or RE_RAZON_HABITAT.search(_txt_nd)
-            razon_nd = _limpiar_razon(m_rs.group(1)) if m_rs else ""
-            es_no_deuda = True
-        _wb_nd.close()
-
-        if not es_no_deuda and tiene_pdf:
-            try:
-                es_no_deuda, rut_nd, razon_nd = detectar_no_deuda(pdf_bytes)
-            except Exception:
-                pass
-
-        if es_no_deuda:
-            inst = detectar_institucion(pdf_bytes, pdf_nombre) if tiene_pdf else INSTITUCION_DEFAULT
-            _log(f"  Sin deuda — {razon_nd} ({rut_nd})", "ok")
-            _agregar_al_resultado(wb_res, [{
-                "rut":"","nombre":"","monto_nom":0,"monto_act":0,
-                "origen":"","adm":"","periodo":"","estado":"SIN DEUDA","abogado":"",
-            }], rut_nd, razon_nd, inst)
-            continue
-
-        # Extraer datos empresa del Excel
-        _wb_tmp = openpyxl.load_workbook(io.BytesIO(excel_bytes))
-        rut_empresa, razon_social = extraer_datos_empresa(_wb_tmp.active)
-        _wb_tmp.close()
-        institucion = detectar_institucion(pdf_bytes, pdf_nombre) if tiene_pdf else INSTITUCION_DEFAULT
-        _log(f"  {razon_social} ({rut_empresa}) — {institucion}", "info")
-
-        # Leer PDF para validación cruzada (solo si hay PDF)
-        pdf_lookup  = leer_montos_pdf(pdf_bytes) if tiene_pdf else {}
-        totales_pdf = leer_totales_pdf(pdf_bytes) if tiene_pdf else {}
-        total_pdf   = sum(totales_pdf.values())
-        if not totales_pdf:
-            _log("  Sin PDF de referencia — sin validación cruzada", "info")
-
-        # Parsear Excel Adobe
+        # Abrir Excel y procesar CADA HOJA como un certificado independiente
         wb_adobe = openpyxl.load_workbook(io.BytesIO(excel_bytes))
-        if _es_habitat(wb_adobe.active):
-            _log("  Formato Habitat detectado", "info")
-            filas, advertencias, ws_adobe = _parsear_habitat(wb_adobe, pdf_lookup)
-        else:
-            filas, advertencias, ws_adobe = _parsear_excel(wb_adobe, pdf_lookup)
+        hojas = wb_adobe.sheetnames
+        _log(f"  {len(hojas)} hoja(s) encontradas en el Excel", "info")
+
+        for nombre_hoja in hojas:
+            ws = wb_adobe[nombre_hoja]
+
+            # Texto de las primeras filas para detectar no-deuda y empresa
+            _txt = " ".join(
+                str(ws.cell(r, c).value or "")
+                for r in range(1, min(8, ws.max_row + 1))
+                for c in range(1, ws.max_column + 1)
+            )
+            _txt_norm = re.sub(r'\s+', ' ', _txt).lower()
+
+            # Detección NO DEUDA
+            es_no_deuda = False
+            rut_nd = razon_nd = ""
+            if RE_NO_DEUDA.search(_txt) or "no registra" in _txt_norm:
+                m_rut  = RE_RUT_EMPRESA.search(_txt)
+                rut_nd = re.sub(r"\s", "", m_rut.group(1)) if m_rut else ""
+                m_rs   = RE_RAZON_SOCIAL.search(_txt) or RE_RAZON_HABITAT.search(_txt)
+                razon_nd = _limpiar_razon(m_rs.group(1)) if m_rs else ""
+                es_no_deuda = True
+
+            # Nombre AFP desde el nombre de la hoja o texto
+            inst = INSTITUCION_DEFAULT
+            for afp in AFP_NOMBRES:
+                if afp in nombre_hoja.upper() or afp in _txt.upper():
+                    inst = f"AFP {afp}"
+                    break
+
+            if es_no_deuda:
+                _log(f"  [{nombre_hoja}] Sin deuda — {razon_nd} ({rut_nd})", "ok")
+                _agregar_al_resultado(wb_res, [{
+                    "rut": "", "nombre": "", "monto_nom": 0, "monto_act": 0,
+                    "origen": "", "adm": "", "periodo": "", "estado": "SIN DEUDA", "abogado": "",
+                }], rut_nd, razon_nd, inst)
+                continue
+
+            # Extraer empresa y filas de deuda
+            rut_empresa, razon_social = extraer_datos_empresa(ws)
+            if not rut_empresa and not razon_social:
+                _log(f"  [{nombre_hoja}] Sin datos de empresa — omitida", "warn")
+                continue
+
+            _log(f"  [{nombre_hoja}] {razon_social} ({rut_empresa}) — {inst}", "info")
+
+            # Apuntar el workbook a esta hoja para que los parsers la lean
+            wb_adobe.active = ws
+            if _es_habitat(ws):
+                filas, advertencias, ws_adobe2 = _parsear_habitat(wb_adobe, {})
+            else:
+                filas, advertencias, ws_adobe2 = _parsear_excel(wb_adobe, {})
+
+            if not filas:
+                _log(f"  [{nombre_hoja}] Sin filas de deuda — omitida", "warn")
+                continue
+
+            _log(f"  [{nombre_hoja}] {len(filas)} filas extraídas", "info")
+            for a in advertencias:
+                _log(f"  {a}", "warn")
+
+            _agregar_al_resultado(wb_res, filas, rut_empresa, razon_social, inst)
+            _log(f"  [{nombre_hoja}] Listo: {len(filas)} filas agregadas", "ok")
+
         wb_adobe.close()
-        _log(f"  {len(filas)} filas extraídas", "info")
-
-        # Auto-corrección
-        total_excel = sum(f["monto_act"] for f in filas)
-        if totales_pdf and total_excel != total_pdf:
-            _log(f"  Corrigiendo totales ({total_excel:,} → {total_pdf:,})...", "warn")
-            filas, correcciones = autocorregir(filas, ws_adobe, totales_pdf)
-            for c in correcciones:
-                _log(f"  {c}", "info")
-
-        for a in advertencias:
-            _log(f"  {a}", "warn")
-
-        _agregar_al_resultado(wb_res, filas, rut_empresa, razon_social, institucion)
-        _log(f"  Listo: {len(filas)} filas agregadas", "ok")
 
     buf = io.BytesIO()
     wb_res.save(buf)

@@ -1538,8 +1538,47 @@ def base_deudas_procesar():
         return jsonify({"error": str(e), "logs": logs}), 500
 
     excel_b64 = base64.b64encode(resultado_bytes).decode()
+
+    # Determinar nombre del archivo desde los datos procesados
+    def _nombre_archivo():
+        import openpyxl as _opx
+        try:
+            _wb = _opx.load_workbook(io.BytesIO(resultado_bytes))
+            ruts_unicos   = set()
+            razones_unicas = set()
+            for _hoja in ["Base AFP", "Base Isapre"]:
+                if _hoja not in _wb.sheetnames: continue
+                _ws = _wb[_hoja]
+                for _r in range(2, _ws.max_row + 1):
+                    _rut = str(_ws.cell(_r, 1).value or "").strip()
+                    _raz = str(_ws.cell(_r, 2).value or "").strip()
+                    if _rut: ruts_unicos.add(_rut)
+                    if _raz: razones_unicas.add(_raz)
+            if not razones_unicas:
+                return f"Base de deuda_{_time.strftime('%Y%m%d')}.xlsx"
+            if len(razones_unicas) == 1:
+                nombre = list(razones_unicas)[0][:60]
+                return f"Base de deuda_{nombre}.xlsx"
+            # Múltiples razones: buscar nombre del grupo en la DB
+            conn = get_conn()
+            for _rut in ruts_unicos:
+                row = conn.execute(
+                    "SELECT g.nombre FROM empresas e JOIN grupos g ON e.grupo_id=g.id WHERE e.rut=?",
+                    (_rut,)
+                ).fetchone()
+                if row:
+                    conn.close()
+                    return f"Base de deuda_{row['nombre'][:60]}.xlsx"
+            conn.close()
+            # Fallback: usar la razón más larga como representativa
+            nombre = max(razones_unicas, key=len)[:60]
+            return f"Base de deuda_{nombre}.xlsx"
+        except Exception:
+            return f"Base de deuda_{_time.strftime('%Y%m%d')}.xlsx"
+
+    nombre_archivo = _nombre_archivo()
     return jsonify({"ok": True, "excel_b64": excel_b64, "logs": logs,
-                    "nombre": f"Resultados_AFP_{_time.strftime('%Y%m%d_%H%M%S')}.xlsx"})
+                    "nombre": nombre_archivo})
 
 # ============================================================
 #  PREVIRED — AUTOMATIZACIÓN (descarga + conversión)

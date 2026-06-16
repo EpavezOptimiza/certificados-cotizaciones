@@ -802,7 +802,29 @@ def procesar_lote(pares: list, log=None) -> bytes:
 
         wb_adobe.close()
 
+    # Post-proceso: para cada RUT usar el nombre más largo disponible en ambas hojas
+    _normalizar_nombres(wb_res)
+
     buf = io.BytesIO()
     wb_res.save(buf)
     buf.seek(0)
     return buf.read()
+
+
+def _normalizar_nombres(wb_res):
+    """Para cada RUT, propaga el nombre más largo a todas sus filas en ambas hojas."""
+    mejor = {}  # rut_fmt → nombre más largo
+    hojas = [h for h in ["Base AFP", "Base Isapre"] if h in wb_res.sheetnames]
+    for hoja in hojas:
+        ws = wb_res[hoja]
+        for r in range(2, ws.max_row + 1):
+            rut = str(ws.cell(r, 1).value or "").strip()
+            nombre = str(ws.cell(r, 2).value or "").strip()
+            if rut and len(nombre) > len(mejor.get(rut, "")):
+                mejor[rut] = nombre
+    for hoja in hojas:
+        ws = wb_res[hoja]
+        for r in range(2, ws.max_row + 1):
+            rut = str(ws.cell(r, 1).value or "").strip()
+            if rut and mejor.get(rut):
+                ws.cell(r, 2, mejor[rut])

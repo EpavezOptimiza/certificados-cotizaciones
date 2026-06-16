@@ -333,6 +333,89 @@ def _es_habitat(ws) -> bool:
                 return True
     return False
 
+def _es_masvida(ws) -> bool:
+    """Detecta formato Nueva MásVida: tiene 'DEUDA POR ENTIDAD PAGADORA' o 'Pactado' en header."""
+    for r in range(1, 8):
+        for c in range(1, ws.max_column + 1):
+            val = str(ws.cell(r, c).value or "").upper()
+            if "DEUDA POR ENTIDAD PAGADORA" in val or ("PACTADO" in val and "PERIODO" in val):
+                return True
+    return False
+
+def _parsear_masvida(wb) -> tuple:
+    """
+    Parser para Nueva MásVida (formato plano sin fila de grupo).
+    Cada fila de empleado contiene RUT+Nombre en col1, periodo en col4,
+    monto nominal en col9 (Deuda) y monto actualizado en col13 (Deuda Final).
+    """
+    ws = wb.active
+    filas = []
+
+    # Detectar fila de header (contiene "Rut" y "Periodo")
+    header_row = None
+    COL_PERIODO = 4
+    COL_NOM = 9
+    COL_ACT = 13
+    for r in range(1, min(10, ws.max_row + 1)):
+        v1 = str(ws.cell(r, 1).value or "").lower()
+        if "rut" in v1 and "periodo" in v1:
+            header_row = r
+            # Detectar columnas dinámicamente
+            for c in range(1, ws.max_column + 1):
+                hv = str(ws.cell(r, c).value or "").lower()
+                if re.search(r'period', hv) and c > 1:
+                    COL_PERIODO = c
+                elif "deuda" in hv and "final" in hv:
+                    COL_ACT = c
+                elif hv.strip() in ("deuda",):
+                    COL_NOM = c
+            break
+
+    start = (header_row + 1) if header_row else 4
+    RUT_RE_MV = re.compile(r'(\d{1,2}\.\d{3}\.\d{3}-[\dKk])')
+
+    for r in range(start, ws.max_row + 1):
+        v1 = str(ws.cell(r, 1).value or "").strip()
+        if not v1 or "total" in v1.lower() or "honorario" in v1.lower():
+            continue
+        m_rut = RUT_RE_MV.search(v1)
+        if not m_rut:
+            continue
+        rut = m_rut.group(1)
+        nombre = v1[m_rut.end():].strip()
+
+        # Período
+        periodo_raw = ws.cell(r, COL_PERIODO).value
+        # Buscar en toda la fila si la columna asignada está vacía
+        if not periodo_raw:
+            for c in range(1, ws.max_column + 1):
+                cv = str(ws.cell(r, c).value or "").strip()
+                if re.match(r'^\d{2}/\d{4}$', cv):
+                    periodo_raw = cv; break
+
+        # Montos: nom = Deuda, act = Deuda Final (puede tener texto como "127,068 DNP")
+        nom_raw = ws.cell(r, COL_NOM).value
+        act_raw = ws.cell(r, COL_ACT).value
+        # Limpiar monto_act si viene con texto (ej: "127,068 DNP")
+        if isinstance(act_raw, str):
+            act_num = re.sub(r'[^\d.,]', '', act_raw).replace(',', '')
+            act_raw = int(act_num.replace('.', '')) if act_num else 0
+
+        filas.append({
+            "rut": rut,
+            "nombre": nombre,
+            "monto_nom": _convertir_monto(nom_raw),
+            "monto_act": _convertir_monto(act_raw) if isinstance(act_raw, int) else int(act_raw or 0),
+            "_fila_excel": r,
+            "origen": "DECL. Y NO PAGO AUTOM. (DNPA)",
+            "adm": None,
+            "periodo": _periodo(periodo_raw),
+            "estado": "SIN GESTION",
+            "abogado": "",
+        })
+
+    return filas, [], ws
+
 def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     ws    = wb.active
     filas = []
@@ -911,6 +994,8 @@ def procesar_lote(pares: list, log=None) -> bytes:
             wb_adobe.active = ws
             if _es_habitat(ws):
                 filas, advertencias, ws_adobe2 = _parsear_habitat(wb_adobe, {})
+            elif _es_masvida(ws):
+                filas, advertencias, ws_adobe2 = _parsear_masvida(wb_adobe)
             else:
                 filas, advertencias, ws_adobe2 = _parsear_excel(wb_adobe, {})
 

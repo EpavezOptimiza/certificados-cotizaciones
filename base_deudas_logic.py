@@ -94,7 +94,7 @@ RE_GRUPO_PDF     = re.compile(
 RE_DETALLE_PDF   = re.compile(r"^(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s+.+?\s+([\d\.]+)\s+([\d\.]+)\s*$")
 RUT_RE           = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
 RUT_CON_NOMBRE   = re.compile(r"^(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s+(.+)")
-RE_NUD_HDR       = re.compile(r'n[uú]mero\s+[uú]nico\s+de\s+deuda\s*:\s*(\d+)', re.IGNORECASE)
+RE_NUD_HDR       = re.compile(r'n[uú]mero\s+\w+(?:\s+de)?\s+deuda[^0-9]*(\d{6,})', re.IGNORECASE)
 RE_RUT_HDR       = re.compile(r"^r\.u\.t\.", re.IGNORECASE)
 RE_RUT_EMP       = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
 
@@ -362,9 +362,16 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
             curr_nud = int(m_nud.group(1)); continue
         if RE_RUT_HDR.match(v1s): continue
         if any(x in v1s.lower() for x in ["totales","se extiende","saluda"]): break
-        if curr_nud and RE_RUT_EMP.match(v1s):
-            nombre = str(ws.cell(r,3).value or "").strip().strip("'")
-            grupos.setdefault(curr_nud,[]).append((v1s,nombre))
+        # RUT a veces dividido en C1+C2 por OCR (ej: "13" | "133.756-6")
+        rut_candidato = v1s
+        if re.match(r'^\d{1,2}$', v1s):
+            c2 = str(ws.cell(r, 2).value or "").strip()
+            if c2:
+                rut_candidato = v1s + "." + c2
+        if curr_nud and RE_RUT_EMP.match(rut_candidato):
+            nombre_raw = str(ws.cell(r, 3).value or "").strip().strip("'")
+            nombre = re.sub(r'\s+', ' ', nombre_raw)  # convierte \n en espacio
+            grupos.setdefault(curr_nud, []).append((rut_candidato, nombre))
 
     for nud, info in nud_info.items():
         emps = grupos.get(nud,[])

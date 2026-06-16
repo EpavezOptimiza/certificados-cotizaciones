@@ -326,7 +326,7 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
                 _v = str(ws.cell(_r,_c).value or "").lower()
                 if ("origen" in _v or "rtgen" in _v or "orl" in _v) and "deuda" in _v:
                     COL_ORIGEN_P1=_c
-                elif "peri" in _v and COL_PERIODO_P1 is None: COL_PERIODO_P1=_c
+                elif ("peri" in _v or "perl" in _v or "cotiz" in _v) and COL_PERIODO_P1 is None: COL_PERIODO_P1=_c
                 elif ("nominal" in _v or "noml" in _v) and "ondo" in _v: COL_NOM_P1=_c
                 elif "total" in _v and ("pag" in _v or "peger" in _v): COL_TOT_P1=_c
                 elif "jur" in _v or "estudio" in _v: COL_EST_P1=_c
@@ -347,8 +347,15 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
                     nums.append(c)
             if strs and COL_ORIGEN_P1 is None:
                 COL_ORIGEN_P1 = strs[0]
-            if len(strs) > 1 and COL_PERIODO_P1 is None:
-                COL_PERIODO_P1 = strs[1] if len(strs) > 1 else strs[0]
+            if COL_PERIODO_P1 is None:
+                # Buscar período por valor: string "MM/YYYY" o fecha Excel
+                import datetime as _dt
+                for _c2 in range(2, ws.max_column + 1):
+                    _pv = ws.cell(r, _c2).value
+                    if isinstance(_pv, str) and re.match(r'^\d{2}/\d{4}$', _pv.strip()):
+                        COL_PERIODO_P1 = _c2; break
+                    if isinstance(_pv, (_dt.date, _dt.datetime)):
+                        COL_PERIODO_P1 = _c2; break
             if len(nums) >= 2 and COL_NOM_P1 is None:
                 COL_NOM_P1 = nums[0]
             if len(nums) >= 2 and COL_TOT_P1 is None:

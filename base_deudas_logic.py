@@ -108,14 +108,26 @@ def _limpiar_razon(razon: str) -> str:
     razon = RE_RAZON_PREFIJO.sub("", razon.strip())
     return re.sub(r"\s+", " ", razon).strip().rstrip(",")
 
-def _periodo(s: str):
+def _periodo(s):
+    import datetime as _dt
+    if s is None or s == "":
+        return s
+    # Ya es date/datetime (Adobe exporta fechas como objetos)
+    if isinstance(s, (_dt.date, _dt.datetime)):
+        return date(s.year, s.month, 1)
+    s = str(s).strip().lstrip("'")
     if not s:
         return s
-    s = str(s).strip().lstrip("'")
     # Formato estándar MM/YYYY
     m = RE_PERIODO_STR.match(s)
     if m:
         mes, anio = int(m.group(1)), int(m.group(2))
+        if 1 <= mes <= 12 and 1900 <= anio <= 2100:
+            return date(anio, mes, 1)
+    # Formato YYYY-MM-DD (date serializado como string)
+    m3 = re.match(r'^(\d{4})-(\d{2})-\d{2}', s)
+    if m3:
+        anio, mes = int(m3.group(1)), int(m3.group(2))
         if 1 <= mes <= 12 and 1900 <= anio <= 2100:
             return date(anio, mes, 1)
     # Formato AFP Habitat: M1YYYY o MM1YYYY (el "1" es el día, ej: 9/1/2019 → 912019)
@@ -582,17 +594,19 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
                 agregar_fila("","",grupo_fila_pendiente["nom"],grupo_fila_pendiente["act"])
             split_pendiente = None
             # Si la columna asignada no tiene período, escanear toda la fila
-            periodo_str = str(periodo_val).strip() if periodo_val else ""
-            if not periodo_str or not re.search(r'\d{2}/\d{4}', periodo_str):
+            periodo_raw = periodo_val
+            if not periodo_raw:
+                import datetime as _dt2
                 for _cc in range(1, ws.max_column+1):
-                    _pv = str(ws.cell(r, _cc).value or "").strip()
-                    if re.match(r'^\d{2}/\d{4}$', _pv):
-                        periodo_str = _pv
-                        break
+                    _cv = ws.cell(r, _cc).value
+                    if isinstance(_cv, (_dt2.date, _dt2.datetime)):
+                        periodo_raw = _cv; break
+                    if isinstance(_cv, str) and re.match(r'^\d{2}/\d{4}$', _cv.strip()):
+                        periodo_raw = _cv.strip(); break
             grupo = {
                 "origen":  _norm_origen(origen_val),
                 "adm":     adm_val,
-                "periodo": _periodo(periodo_str),
+                "periodo": _periodo(periodo_raw),
                 "estado":  _norm_estado(str(estado_val).upper().strip()) if estado_val else "",
                 "abogado": str(abogado_val).strip() if abogado_val else "",
             }

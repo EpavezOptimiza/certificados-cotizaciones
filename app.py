@@ -1421,18 +1421,28 @@ def base_deudas_unificar():
     if not pdfs:
         return jsonify({"error": "No se recibieron PDFs"}), 400
 
-    writer = PdfWriter()
+    from pypdf import PdfReader, PdfWriter as _W
+    writer = _W()
+    errores = []
     for f in pdfs:
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(f.read()))
-        for page in reader.pages:
-            writer.add_page(page)
+        data = f.read()
+        try:
+            reader = PdfReader(io.BytesIO(data), strict=False)
+            writer.append(reader)
+        except Exception as e:
+            errores.append(f.filename)
+
+    if not writer.pages:
+        return jsonify({"error": f"No se pudo leer ningún PDF. Archivos con error: {', '.join(errores)}"}), 400
 
     buf = io.BytesIO()
     writer.write(buf)
     buf.seek(0)
-    return send_file(buf, mimetype="application/pdf",
+    resp = send_file(buf, mimetype="application/pdf",
                      as_attachment=True, download_name="certificados_unificados.pdf")
+    if errores:
+        resp.headers["X-Errores"] = ", ".join(errores)
+    return resp
 
 
 @app.route("/api/base-deudas/procesar", methods=["POST"])

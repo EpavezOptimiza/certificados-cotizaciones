@@ -1431,16 +1431,29 @@ def base_deudas_unificar():
         data = f.read()
         try:
             reader = PdfReader(io.BytesIO(data), strict=False)
-            writer.append(reader)
+            # intentar página por página para aislar PDFs problemáticos
+            ok = False
+            for page in reader.pages:
+                try:
+                    writer.add_page(page)
+                    ok = True
+                except Exception:
+                    pass
+            if not ok:
+                errores.append(f.filename)
         except Exception as e:
             errores.append(f.filename)
 
     if not writer.pages:
-        return jsonify({"error": f"No se pudo leer ningún PDF. Archivos con error: {', '.join(errores)}"}), 400
+        return jsonify({"error": f"No se pudo leer ningún PDF. Verifica que los archivos sean PDFs válidos. Errores: {', '.join(errores)}"}), 400
 
-    buf = io.BytesIO()
-    writer.write(buf)
-    buf.seek(0)
+    try:
+        buf = io.BytesIO()
+        writer.write(buf)
+        buf.seek(0)
+    except Exception as e:
+        return jsonify({"error": f"Error al combinar PDFs: {str(e)}"}), 500
+
     resp = send_file(buf, mimetype="application/pdf",
                      as_attachment=True, download_name="certificados_unificados.pdf")
     if errores:

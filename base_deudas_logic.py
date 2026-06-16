@@ -50,7 +50,7 @@ RE_RAZON_PREFIJO = re.compile(r"^(?:cuya\s+raz[o6ó]n\s+social\s+es\s+)", re.IGN
 RE_RAZON_HABITAT = re.compile(r"(?:Se\w{1,5}res?\s*[\n\r\s]*)(.+?)\s+Rut\s*:", re.IGNORECASE | re.DOTALL)
 RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA|REGISTRO\s+DE\s+NO\s+DEUDA|NO\s+REGISTRA\s+DEUDA", re.IGNORECASE)
 RE_RUT_SIN_PUNTOS = re.compile(r"[Rr]ut\s+(\d{7,8}-[\dKk])\b")
-RE_RUT_EMPLEADOR  = re.compile(r"R\.?U\.?T\.?\s+[Ee]mpleador\s+(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.IGNORECASE)
+RE_RUT_EMPLEADOR  = re.compile(r"R\.?U\.?T\.?\s+[Ee]mpleador\s*:?\s*(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.IGNORECASE)
 RE_RAZON_CERTIFICA = re.compile(r"certifica que[:\s]+([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ\s\.]+?),?\s+[Rr]ut\s", re.IGNORECASE)
 # Isapre-style: "la Empresa NOMBRE Rut : XX.XXX.XXX-X"
 RE_RUT_EMPRESA_ISAPRE  = re.compile(r"[Ee]mpresa\s+.+?\s+[Rr]ut\s*:\s*(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.DOTALL)
@@ -156,7 +156,7 @@ def _convertir_monto(val) -> int:
     if val is None:
         return 0
     if isinstance(val, str):
-        limpio = val.replace("$","").replace(" ","").replace(",","").strip("'\" ")
+        limpio = val.replace("$","").replace(" ","").replace("\xa0","").replace(",","").strip("'\" ")
         if "/" in limpio or not limpio.replace(".","").isdigit():
             return 0
         return int(limpio.replace(".",""))
@@ -228,16 +228,24 @@ def detectar_no_deuda(pdf_bytes: bytes) -> tuple:
     return True, rut, razon
 
 def extraer_datos_empresa(ws) -> tuple:
+    razon_fallback = ""
     for r in range(1, min(12, ws.max_row + 1)):
+        v1 = str(ws.cell(r, 1).value or "").strip().lower()
+        # Guardar razón si hay una fila "Nombre" con valor en celdas siguientes
+        if v1 == "nombre" and not razon_fallback:
+            for c in range(2, ws.max_column + 1):
+                v = ws.cell(r, c).value
+                if isinstance(v, str) and v.strip() and len(v.strip()) > 5:
+                    razon_fallback = v.strip(); break
         for c in range(1, ws.max_column + 1):
             val = ws.cell(r, c).value
             if not isinstance(val, str):
                 continue
             rut = _extraer_rut(val)
             if rut:
-                razon = _extraer_razon(val)
+                razon = _extraer_razon(val) or razon_fallback
                 return rut, razon
-    return "", ""
+    return "", razon_fallback
 
 
 # ── Lectura PDF (fuente de verdad) ────────────────────────────────────────────
@@ -356,67 +364,98 @@ def _es_masvida(ws) -> bool:
 def _parsear_masvida(wb) -> tuple:
     """
     Parser para Nueva MásVida (formato plano sin fila de grupo).
-    Cada fila de empleado contiene RUT+Nombre en col1, periodo en col4,
-    monto nominal en col9 (Deuda) y monto actualizado en col13 (Deuda Final).
+    Header en la fila donde col1='Rut'. Columnas típicas:
+    C1=Rut, C3=Nombre, C5=Periodo, C12=Deuda, C16=Deuda Final.
     """
     ws = wb.active
     filas = []
 
-    # Detectar fila de header (contiene "Rut" y "Periodo")
     header_row = None
-    COL_PERIODO = 4
-    COL_NOM = 9
-    COL_ACT = 13
-    for r in range(1, min(10, ws.max_row + 1)):
-        v1 = str(ws.cell(r, 1).value or "").lower()
-        if "rut" in v1 and "periodo" in v1:
+    COL_PERIODO = 5
+    COL_NOM     = 12
+    COL_ACT     = 16
+    COL_NOMBRE  = 3
+
+    for r in range(1, min(12, ws.max_row + 1)):
+        v1 = str(ws.cell(r, 1).value or "").strip().lower()
+        if v1 == "rut":
             header_row = r
-            # Detectar columnas dinámicamente
             for c in range(1, ws.max_column + 1):
-                hv = str(ws.cell(r, c).value or "").lower()
-                if re.search(r'period', hv) and c > 1:
+                hv = str(ws.cell(r, c).value or "").strip().lower()
+                if "period" in hv and c > 1:
                     COL_PERIODO = c
-                elif "deuda" in hv and "final" in hv:
+                elif hv == "final":
                     COL_ACT = c
-                elif hv.strip() in ("deuda",):
+                elif hv == "deuda":
                     COL_NOM = c
+                elif "nomb" in hv and c > 1:
+                    COL_NOMBRE = c
             break
 
-    start = (header_row + 1) if header_row else 4
+    start = (header_row + 1) if header_row else 5
     RUT_RE_MV = re.compile(r'(\d{1,2}\.\d{3}\.\d{3}-[\dKk])')
+
+    def _limpiar_acto(v):
+        """Convierte '147,836 DNP' → 147836, int 211265 → 211265.
+        En caso de celdas con múltiples valores (\xa0 merged), usa solo el primer número."""
+        if v is None: return 0
+        if isinstance(v, int): return v
+        if isinstance(v, float): return round(v * 1000)
+        s = str(v).replace(',', '').replace('\xa0', ' ')
+        m = re.search(r'\d[\d.]*', s)
+        if not m: return 0
+        return int(m.group(0).replace('.', ''))
 
     for r in range(start, ws.max_row + 1):
         v1 = str(ws.cell(r, 1).value or "").strip()
         if not v1 or "total" in v1.lower() or "honorario" in v1.lower():
             continue
-        m_rut = RUT_RE_MV.search(v1)
+
+        # Normalizar error OCR: letra inicial en lugar de dígito (ej: 'j6.913.695-5' → '16.913.695-5')
+        v1_norm = re.sub(r'^([a-zA-Z])(\d)', lambda m: '1' + m.group(2), v1)
+
+        m_rut = RUT_RE_MV.search(v1_norm)
         if not m_rut:
             continue
         rut = m_rut.group(1)
-        nombre = v1[m_rut.end():].strip()
 
-        # Período
+        # Nombre: prioridad col header, luego col2, luego texto después del RUT en col1
+        nombre = str(ws.cell(r, COL_NOMBRE).value or "").replace("\xa0", " ").strip()
+        if not nombre:
+            nombre = str(ws.cell(r, 2).value or "").replace("\xa0", " ").strip()
+        if not nombre:
+            nombre = v1_norm[m_rut.end():].strip()
+        nombre = re.sub(r'\s+', ' ', nombre).strip()
+
+        # Período: columna detectada, luego escanear fila, luego extraer del nombre
         periodo_raw = ws.cell(r, COL_PERIODO).value
-        # Buscar en toda la fila si la columna asignada está vacía
         if not periodo_raw:
             for c in range(1, ws.max_column + 1):
                 cv = str(ws.cell(r, c).value or "").strip()
                 if re.match(r'^\d{2}/\d{4}$', cv):
                     periodo_raw = cv; break
+        if not periodo_raw:
+            _m_per_n = re.search(r'(\d{2}/\d{4})', nombre)
+            if _m_per_n:
+                periodo_raw = _m_per_n.group(1)
+        # Quitar patrones de fecha incrustados en el nombre, y caracteres basura al final
+        nombre = re.sub(r'\s+\d{1,2}/\d{4}', '', nombre)
+        nombre = re.sub(r'[\s\W]+$', '', nombre, flags=re.UNICODE).strip()
 
-        # Montos: nom = Deuda, act = Deuda Final (puede tener texto como "127,068 DNP")
         nom_raw = ws.cell(r, COL_NOM).value
         act_raw = ws.cell(r, COL_ACT).value
-        # Limpiar monto_act si viene con texto (ej: "127,068 DNP")
-        if isinstance(act_raw, str):
-            act_num = re.sub(r'[^\d.,]', '', act_raw).replace(',', '')
-            act_raw = int(act_num.replace('.', '')) if act_num else 0
+
+        monto_nom = _limpiar_acto(nom_raw)
+        monto_act = _limpiar_acto(act_raw)
+
+        if monto_nom == 0 and monto_act == 0:
+            continue
 
         filas.append({
             "rut": rut,
             "nombre": nombre,
-            "monto_nom": _convertir_monto(nom_raw),
-            "monto_act": _convertir_monto(act_raw) if isinstance(act_raw, int) else int(act_raw or 0),
+            "monto_nom": monto_nom,
+            "monto_act": monto_act,
             "_fila_excel": r,
             "origen": "DECL. Y NO PAGO AUTOM. (DNPA)",
             "adm": None,
@@ -1002,6 +1041,11 @@ def procesar_lote(pares: list, log=None) -> bytes:
 
             # Extraer empresa y filas de deuda
             rut_empresa, razon_social = extraer_datos_empresa(ws)
+            # Fallback: RUT desde nombre del archivo (ej: "76216647-K_Nueva Mas Vida.xlsx")
+            if not rut_empresa:
+                _mfn = re.match(r'^(\d{7,8}-[\dKk])', excel_nombre)
+                if _mfn:
+                    rut_empresa = _normalizar_rut_sin_puntos(_mfn.group(1))
             if not rut_empresa and not razon_social:
                 _log(f"  [{nombre_hoja}] Sin datos de empresa — omitida", "warn")
                 continue

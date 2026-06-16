@@ -581,10 +581,18 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
             if grupo_fila_pendiente is not None and len(filas)==filas_antes_grupo:
                 agregar_fila("","",grupo_fila_pendiente["nom"],grupo_fila_pendiente["act"])
             split_pendiente = None
+            # Si la columna asignada no tiene período, escanear toda la fila
+            periodo_str = str(periodo_val).strip() if periodo_val else ""
+            if not periodo_str or not re.search(r'\d{2}/\d{4}', periodo_str):
+                for _cc in range(1, ws.max_column+1):
+                    _pv = str(ws.cell(r, _cc).value or "").strip()
+                    if re.match(r'^\d{2}/\d{4}$', _pv):
+                        periodo_str = _pv
+                        break
             grupo = {
                 "origen":  _norm_origen(origen_val),
                 "adm":     adm_val,
-                "periodo": _periodo(str(periodo_val) if periodo_val else ""),
+                "periodo": _periodo(periodo_str),
                 "estado":  _norm_estado(str(estado_val).upper().strip()) if estado_val else "",
                 "abogado": str(abogado_val).strip() if abogado_val else "",
             }

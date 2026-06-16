@@ -111,13 +111,20 @@ def _limpiar_razon(razon: str) -> str:
 def _periodo(s: str):
     if not s:
         return s
-    m = RE_PERIODO_STR.match(str(s).strip())
-    if not m:
-        return s
-    mes, anio = int(m.group(1)), int(m.group(2))
-    if not (1 <= mes <= 12 and 1900 <= anio <= 2100):
-        return s
-    return date(anio, mes, 1)
+    s = str(s).strip().lstrip("'")
+    # Formato estándar MM/YYYY
+    m = RE_PERIODO_STR.match(s)
+    if m:
+        mes, anio = int(m.group(1)), int(m.group(2))
+        if 1 <= mes <= 12 and 1900 <= anio <= 2100:
+            return date(anio, mes, 1)
+    # Formato AFP Habitat: MYYYY o MMYYYY sin separador (ej: 912019 = 9/2019)
+    m2 = re.match(r'^(\d{1,2})(\d{4})$', s)
+    if m2:
+        mes, anio = int(m2.group(1)), int(m2.group(2))
+        if 1 <= mes <= 12 and 1990 <= anio <= 2100:
+            return date(anio, mes, 1)
+    return s
 
 def _limpiar_num_pdf(s: str) -> int:
     return int(s.replace(".", ""))
@@ -464,9 +471,11 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
             act_e = round(info["total_pagar"] / n_div)
             nom_e = round(info["monto_nom"] / n_div)
             for rut, nombre, total_emp in emps:
+                if total_emp == 0:
+                    continue  # no registrar empleados sin deuda en el período
                 filas.append({"rut":rut,"nombre":nombre,
-                              "monto_nom": nom_e if total_emp > 0 else 0,
-                              "monto_act": act_e if total_emp > 0 else 0,
+                              "monto_nom": nom_e,
+                              "monto_act": act_e,
                               "_fila_excel":0,
                               "origen":info["origen"],"adm":None,
                               "periodo":info["periodo"],"estado":info["estado"],"abogado":""})

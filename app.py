@@ -362,6 +362,43 @@ def index():
     resp.headers["Expires"] = "0"
     return resp
 
+# ── Noticias (página principal) ────────────────────────────────────────────────
+_noticias_cache = {"ts": 0, "data": []}
+
+@app.route("/api/noticias")
+@api_login_required
+def get_noticias():
+    import urllib.request, urllib.parse
+    import xml.etree.ElementTree as ET
+
+    if _time.time() - _noticias_cache["ts"] < 1800 and _noticias_cache["data"]:
+        return jsonify({"ok": True, "noticias": _noticias_cache["data"]})
+
+    query = "deuda previsional OR mora previsional OR cotizaciones impagas AFP Chile"
+    url = "https://news.google.com/rss/search?q=" + urllib.parse.quote(query) + "&hl=es-419&gl=CL&ceid=CL:es-419"
+    noticias = []
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            xml_data = r.read()
+        root = ET.fromstring(xml_data)
+        for item in root.findall(".//item")[:15]:
+            titulo = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            fecha = (item.findtext("pubDate") or "").strip()
+            fuente_el = item.find("source")
+            fuente = fuente_el.text.strip() if fuente_el is not None and fuente_el.text else ""
+            if titulo and link:
+                noticias.append({"titulo": titulo, "link": link, "fecha": fecha, "fuente": fuente})
+        _noticias_cache["ts"] = _time.time()
+        _noticias_cache["data"] = noticias
+    except Exception as e:
+        if _noticias_cache["data"]:
+            return jsonify({"ok": True, "noticias": _noticias_cache["data"]})
+        return jsonify({"ok": False, "error": str(e), "noticias": []})
+
+    return jsonify({"ok": True, "noticias": noticias})
+
 # ── API usuario actual ────────────────────────────────────────────────────────
 @app.route("/api/me")
 @api_login_required

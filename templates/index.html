@@ -317,6 +317,12 @@ body.dark .pref-label{color:#e2e8f0}
       <a href="/logout">Salir</a>
     </div>
   </div>
+  <div style="padding:4px 10px 10px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid rgba(255,255,255,.06)">
+    <a href="#" onclick="verPrincipal();return false" class="sb-btn" id="nav-principal" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);color:#e2e8f0">
+      <span style="font-size:15px">🏠</span>
+      <div style="font-size:12px;font-weight:600">Página principal</div>
+    </a>
+  </div>
   <div id="sidebar-btns">
     <button class="sb-btn admin-only" onclick="openModal('modalGrupo')" style="display:none">＋ Nuevo grupo</button>
     <button class="sb-btn admin-only" onclick="openModal_empresa()" style="display:none">＋ Nueva empresa</button>
@@ -324,8 +330,6 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="sb-btn admin-only" onclick="openModal('modalUsuarios')" style="display:none">👥 Gestionar usuarios</button>
     <button class="sb-btn orange ahorro-only" onclick="abrirSolicitud()" style="display:none">📋 Nueva solicitud</button>
     <button class="sb-btn accent terreno-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
-    <button class="sb-btn" onclick="verSolicitudes()" style="">📋 Solicitudes</button>
-    <button class="sb-btn" onclick="abrirCartas()" style="background:#4c1d95;color:#ede9fe">✉ Cartas Previsionales</button>
   </div>
   <div id="sidebar-label" style="padding-top:14px">Herramientas</div>
   <div style="padding:4px 10px 10px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid rgba(255,255,255,.06)">
@@ -348,6 +352,20 @@ body.dark .pref-label{color:#e2e8f0}
       <div>
         <div style="font-size:12px;font-weight:600">Base Deudas</div>
         <div style="font-size:10px;opacity:.65;font-weight:400">Consolidar deudas AFP</div>
+      </div>
+    </a>
+    <a href="#" onclick="verSolicitudes();return false" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(148,163,184,.1);color:#cbd5e1;border-color:rgba(148,163,184,.2)">
+      <span style="font-size:15px">📋</span>
+      <div>
+        <div style="font-size:12px;font-weight:600">Solicitudes</div>
+        <div style="font-size:10px;opacity:.65;font-weight:400">Pendientes y atendidas</div>
+      </div>
+    </a>
+    <a href="#" onclick="abrirCartas();return false" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(139,92,246,.1);color:#c4b5fd;border-color:rgba(139,92,246,.2)">
+      <span style="font-size:15px">✉</span>
+      <div>
+        <div style="font-size:12px;font-weight:600">Cartas Previsionales</div>
+        <div style="font-size:10px;opacity:.65;font-weight:400">Generar cartas</div>
       </div>
     </a>
   </div>
@@ -394,6 +412,11 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="btn btn-orange admin-ahorro-only" onclick="moverGeneracionEmpresa()" id="btn-mover-gen" style="display:none;margin-left:4px" title="Mover todos los Posteriores a Iniciales">🔄 Mover Posteriores → Iniciales</button>
   </div>
   <div id="table-wrap">
+    <div id="home-view" style="display:none;padding:4px">
+      <h3 style="margin-bottom:4px;font-size:15px;color:#0f172a">📰 Noticias sobre mora previsional</h3>
+      <p style="margin-bottom:14px;font-size:11px;color:#64748b">Últimas noticias relacionadas con deuda previsional, cotizaciones impagas y AFP en Chile.</p>
+      <div id="noticias-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
     <div id="sol-view" style="display:none;padding:4px">
       <h3 style="margin-bottom:12px;font-size:14px;color:#0f172a">📋 Solicitudes pendientes</h3>
       <div id="sol-list"></div>
@@ -787,6 +810,7 @@ async function init(){
   initColorChips();
   await loadGrupos();
   if(currentUser.rol === "terreno") verSolicitudes();
+  else verPrincipal();
   // Mostrar modal cambio de clave si es primer login
   if(!currentUser.clave_cambiada){
     setTimeout(()=>{
@@ -879,8 +903,10 @@ async function selEmpresa(eid,gid){
   document.getElementById("btn-mas").style.display="";
   if(currentUser.rol==="admin") document.getElementById("btn-agregar").style.display="";
   if(currentUser.rol!=="terreno") document.getElementById("btn-mover-gen").style.display="";
+  document.getElementById("home-view").style.display="none";
   document.getElementById("sol-view").style.display="none";
   document.getElementById("tabla").style.display="";
+  document.getElementById("nav-principal").style.background="rgba(255,255,255,.06)";
   const r=await fetch(`/api/empresas/${eid}`);
   const emp=await r.json();
   certData=emp.certificados||[];
@@ -1450,8 +1476,47 @@ async function enviarSolicitud(){
     : `✅ ${creadas} solicitud${creadas!==1?"es":""} enviada${creadas!==1?"s":""}`;
   toast(msg, errores ? 8000 : 3000);
 }
+async function verPrincipal(){
+  empresaId=null;
+  document.querySelectorAll(".e-node").forEach(n=>n.classList.remove("active"));
+  document.getElementById("tabla").style.display="none";
+  document.getElementById("sol-view").style.display="none";
+  document.getElementById("home-view").style.display="";
+  document.getElementById("stats").innerHTML="";
+  document.getElementById("btn-reporte").style.display="none";
+  document.getElementById("btn-mas").style.display="none";
+  document.getElementById("btn-agregar").style.display="none";
+  document.getElementById("btn-mover-gen").style.display="none";
+  document.getElementById("header-title").textContent="🏠 Página principal";
+  document.getElementById("header-meta").textContent="Resumen y noticias previsionales";
+  const navEl=document.getElementById("nav-principal");
+  if(navEl) navEl.style.background="rgba(var(--accent-rgb),.18)";
+  const list=document.getElementById("noticias-list");
+  list.innerHTML='<p style="color:#94a3b8;font-size:12px">Cargando noticias…</p>';
+  try{
+    const r=await fetch("/api/noticias");
+    const d=await r.json();
+    const noticias=d.noticias||[];
+    if(!noticias.length){
+      list.innerHTML='<p style="color:#94a3b8;font-size:12px">No se encontraron noticias por el momento.</p>';
+      return;
+    }
+    list.innerHTML=noticias.map(n=>{
+      let fechaFmt="";
+      try{ fechaFmt=new Date(n.fecha).toLocaleDateString("es-CL",{day:"2-digit",month:"short",year:"numeric"}); }catch(e){}
+      return `<a href="${n.link}" target="_blank" rel="noopener" style="text-decoration:none;display:block;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='#e2e8f0'">
+        <div style="font-size:13px;font-weight:600;color:#0f172a;line-height:1.4">${n.titulo}</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:6px">${n.fuente||""}${n.fuente&&fechaFmt?" · ":""}${fechaFmt}</div>
+      </a>`;
+    }).join("");
+  }catch(e){
+    list.innerHTML='<p style="color:#dc2626;font-size:12px">Error al cargar noticias.</p>';
+  }
+}
+
 async function verSolicitudes(){
   empresaId=null;
+  document.getElementById("home-view").style.display="none";
   document.getElementById("tabla").style.display="none";
   document.getElementById("sol-view").style.display="";
   document.getElementById("stats").innerHTML="";

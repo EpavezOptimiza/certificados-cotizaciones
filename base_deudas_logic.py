@@ -377,6 +377,7 @@ def _parsear_masvida(wb) -> tuple:
     COL_NOM     = 12
     COL_ACT     = 16
     COL_NOMBRE  = 3
+    COL_PAGADO  = 10  # columna "Pagado" del Excel MásVida
 
     for r in range(1, min(12, ws.max_row + 1)):
         v1 = str(ws.cell(r, 1).value or "").strip().lower()
@@ -392,6 +393,8 @@ def _parsear_masvida(wb) -> tuple:
                     COL_NOM = c
                 elif "nomb" in hv and c > 1:
                     COL_NOMBRE = c
+                elif hv == "pagado":
+                    COL_PAGADO = c
             break
 
     start = (header_row + 1) if header_row else 5
@@ -444,11 +447,13 @@ def _parsear_masvida(wb) -> tuple:
         nombre = re.sub(r'\s+\d{1,2}/\d{4}', '', nombre)
         nombre = re.sub(r'[\s\W]+$', '', nombre, flags=re.UNICODE).strip()
 
-        nom_raw = ws.cell(r, COL_NOM).value
-        act_raw = ws.cell(r, COL_ACT).value
+        nom_raw    = ws.cell(r, COL_NOM).value
+        act_raw    = ws.cell(r, COL_ACT).value
+        pagado_raw = ws.cell(r, COL_PAGADO).value
 
-        monto_nom = _limpiar_acto(nom_raw)
-        monto_act = _limpiar_acto(act_raw)
+        monto_nom    = _limpiar_acto(nom_raw)
+        monto_act    = _limpiar_acto(act_raw)
+        monto_pagado = _limpiar_acto(pagado_raw)
 
         if monto_nom == 0 and monto_act == 0:
             continue
@@ -458,6 +463,7 @@ def _parsear_masvida(wb) -> tuple:
             "nombre": nombre,
             "monto_nom": monto_nom,
             "monto_act": monto_act,
+            "pagado":    monto_pagado,
             "_fila_excel": r,
             "origen": "DECL. Y NO PAGO AUTOM. (DNPA)",
             "adm": None,
@@ -880,14 +886,19 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
 
         if es_isapre:
             # Base Isapre:
-            # col8=PACTADO, col9=PAGADO(vacío), col10=PAG_OTRA(vacío),
-            # col11=DIFERENCIA, col18=15_ESTATUS
+            # col8=PACTADO, col9=PAGADO(vacío), col10=PAGADO A OTRA(vacío),
+            # col11=DIFERENCIA, col12=MONTO INTERES(=pagado del excel), col18=ESTATUS
             ws.cell(i, 8,  f.get("monto_nom", 0)).number_format = FMT_PESO
             ws.cell(i, 9,  "")
             ws.cell(i, 10, "")
             ws.cell(i, 11, f.get("monto_act", 0)).number_format = FMT_PESO
+            _pag = f.get("pagado", 0) or 0
+            if _pag:
+                ws.cell(i, 12, _pag).number_format = FMT_PESO
+            else:
+                ws.cell(i, 12, "")
             ws.cell(i, 18, f.get("estado", ""))
-            for col in [12, 13, 14, 15, 16, 17, 19, 20]:
+            for col in [13, 14, 15, 16, 17, 19, 20]:
                 ws.cell(i, col, "")
         else:
             # Base AFP: col8=TIPO DEUDA, col9=MONTO NOMINAL, col10=MONTO INTERES

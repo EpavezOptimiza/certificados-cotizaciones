@@ -564,7 +564,10 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
 
 def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
                           razon_social: str, institucion: str):
-    ws = wb_res["Base AFP"]
+    es_isapre = any(k in institucion.upper() for k in ("ISAPRE", "CRUZ BLANCA", "CONSALUD", "MASVIDA"))
+    hoja = "Base Isapre" if es_isapre else "Base AFP"
+    ws = wb_res[hoja]
+    razon_social = razon_social.upper() if razon_social else ""
     rut_fmt = rut_empresa.replace(".", "")
 
     # Borrar solo filas de esta empresa + esta institución (no borrar otras AFPs)

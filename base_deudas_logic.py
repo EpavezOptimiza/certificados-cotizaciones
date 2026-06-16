@@ -394,7 +394,8 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     nuds_ord  = list(nud_info.keys())
     curr_nud  = nuds_ord[0] if nuds_ord else None
     in_part2  = False
-    nombre_col = 3  # columna del nombre en Part 2; se detecta desde el header R.U.T.
+    nombre_col = 3   # columna del nombre en Part 2; se detecta desde el header R.U.T.
+    total_col  = 24  # columna "Total" en la tabla de detalle por empleado
 
     for r in range(1, ws.max_row+1):
         v1 = ws.cell(r,1).value
@@ -405,24 +406,26 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
         v1s = v1.strip()
         if not in_part2 and RE_RUT_HDR.match(v1s):
             in_part2 = True
-            # Detectar columna del nombre desde el header "R.U.T. | ... | Nombre"
+            # Detectar columnas nombre y Total desde el header "R.U.T. | ... | Nombre | ... | Total"
             for _c in range(2, ws.max_column + 1):
-                _hv = str(ws.cell(r, _c).value or "").lower()
+                _hv = str(ws.cell(r, _c).value or "").strip().lower()
                 if "nomb" in _hv:
                     nombre_col = _c
-                    break
+                elif _hv == "total":
+                    total_col = _c
             continue
         if not in_part2: continue
         m_nud = RE_NUD_HDR.search(v1s)
         if m_nud:
             curr_nud = int(m_nud.group(1)); continue
         if RE_RUT_HDR.match(v1s):
-            # Nuevo bloque de detalle: re-detectar columna nombre
+            # Nuevo bloque de detalle: re-detectar columnas
             for _c in range(2, ws.max_column + 1):
-                _hv = str(ws.cell(r, _c).value or "").lower()
+                _hv = str(ws.cell(r, _c).value or "").strip().lower()
                 if "nomb" in _hv:
                     nombre_col = _c
-                    break
+                elif _hv == "total":
+                    total_col = _c
             continue
         if any(x in v1s.lower() for x in ["totales","se extiende","saluda"]): break
         # RUT a veces dividido en varias celdas por OCR
@@ -443,22 +446,28 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
         if curr_nud and RE_RUT_EMP.match(rut_candidato):
             nombre_raw = str(ws.cell(r, nombre_col).value or "").strip().strip("'")
             nombre = re.sub(r'\s+', ' ', nombre_raw)
-            grupos.setdefault(curr_nud, []).append((rut_candidato, nombre))
+            total_raw = ws.cell(r, total_col).value
+            total_emp = _convertir_monto(total_raw) if total_raw is not None else 0
+            grupos.setdefault(curr_nud, []).append((rut_candidato, nombre, total_emp))
 
     for nud, info in nud_info.items():
         emps = grupos.get(nud,[])
-        n    = len(emps)
-        if n==0:
+        if not emps:
             filas.append({"rut":"","nombre":"","monto_nom":info["monto_nom"],
                           "monto_act":info["total_pagar"],"_fila_excel":0,
                           "origen":info["origen"],"adm":None,
                           "periodo":info["periodo"],"estado":info["estado"],"abogado":""})
         else:
-            act_e = round(info["total_pagar"]/n)
-            nom_e = round(info["monto_nom"]/n)
-            for rut,nombre in emps:
-                filas.append({"rut":rut,"nombre":nombre,"monto_nom":nom_e,
-                              "monto_act":act_e,"_fila_excel":0,
+            # Dividir total_pagar solo entre empleados con total > 0
+            emps_con_deuda = [e for e in emps if e[2] > 0]
+            n_div = len(emps_con_deuda) if emps_con_deuda else len(emps)
+            act_e = round(info["total_pagar"] / n_div)
+            nom_e = round(info["monto_nom"] / n_div)
+            for rut, nombre, total_emp in emps:
+                filas.append({"rut":rut,"nombre":nombre,
+                              "monto_nom": nom_e if total_emp > 0 else 0,
+                              "monto_act": act_e if total_emp > 0 else 0,
+                              "_fila_excel":0,
                               "origen":info["origen"],"adm":None,
                               "periodo":info["periodo"],"estado":info["estado"],"abogado":""})
     return filas, [], ws

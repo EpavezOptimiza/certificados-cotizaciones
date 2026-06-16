@@ -36,60 +36,44 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .page-title{font-size:19px;font-weight:700;color:#0f172a;letter-spacing:-.3px}
 .page-sub{font-size:12px;color:#64748b;margin-top:2px}
 
-/* Pasos */
-.steps-row{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:start;gap:0;margin-bottom:20px}
-.step-box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px}
-.step-num{width:26px;height:26px;border-radius:50%;background:#fef9c3;color:#854d0e;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
-.step-title{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px}
-.step-desc{font-size:11px;color:#64748b;line-height:1.5}
-.step-arrow{display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:20px;padding:0 8px;padding-top:20px}
+/* Instrucciones */
+.instrucciones{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.inst-title{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:14px}
+.inst-pasos{display:flex;flex-direction:column;gap:10px}
+.inst-paso{display:flex;gap:12px;align-items:flex-start}
+.paso-num{width:24px;height:24px;border-radius:50%;background:#fef9c3;color:#854d0e;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.paso-body{flex:1}
+.paso-titulo{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:3px}
+.paso-desc{font-size:12px;color:#64748b;line-height:1.5}
+.adobe-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:#e44d26;color:#fff;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;margin-top:6px}
+.adobe-btn:hover{opacity:.85}
+.afp-tag{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;margin:2px 2px 0 0}
 
-/* Cards */
+/* Upload card */
 .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:14px}
-.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.card-title{font-size:13px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:7px}
-.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
-.badge-blue{background:#dbeafe;color:#1d4ed8}
-.badge-green{background:#dcfce7;color:#15803d}
-
-/* Drop zones */
-.dropzone{border:2px dashed #cbd5e1;border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .15s;background:#f8fafc}
+.card-title{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.dropzone{border:2px dashed #cbd5e1;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .15s;background:#f8fafc}
 .dropzone:hover,.dropzone.drag-over{border-color:#d97706;background:#fffbeb}
-.dz-icon{font-size:28px;margin-bottom:6px}
+.dz-icon{font-size:30px;margin-bottom:8px}
 .dz-text{font-size:13px;font-weight:600;color:#374151}
-.dz-hint{font-size:11px;color:#94a3b8;margin-top:3px}
+.dz-hint{font-size:11px;color:#94a3b8;margin-top:4px}
 .file-input{display:none}
-
-/* Listas de archivos */
 .file-list{display:flex;flex-direction:column;gap:5px;margin-top:10px}
-.file-item{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:7px;font-size:12px}
-.file-pdf{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
-.file-excel{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
-.file-name{font-family:monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+.file-item{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;border-radius:8px;font-size:12px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.file-name{font-family:monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px}
 .file-remove{background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 3px;flex-shrink:0}
 .file-remove:hover{color:#dc2626}
-
-/* Botones */
-.btn{width:100%;padding:12px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:7px}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn:hover:not(:disabled){opacity:.88}
-.btn-blue{background:#1d4ed8;color:#fff}
-.btn-green{background:#15803d;color:#fff}
-.btn-amber{background:#d97706;color:#fff}
-
-/* Adobe link */
-.adobe-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;background:#e44d26;color:#fff;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none;transition:opacity .15s;margin-top:10px}
-.adobe-btn:hover{opacity:.85}
-
-/* Log */
-.log-wrap{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-top:12px}
+.btn-procesar{width:100%;padding:13px;background:#15803d;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-procesar:hover:not(:disabled){opacity:.88}
+.btn-procesar:disabled{opacity:.4;cursor:not-allowed}
+.log-wrap{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-top:14px}
 .log-head{padding:10px 16px;border-bottom:1px solid #f1f5f9;font-size:12px;font-weight:600;color:#374151;display:flex;justify-content:space-between;align-items:center}
-.log-body{padding:4px 0;max-height:220px;overflow-y:auto}
+.log-body{padding:4px 0;max-height:260px;overflow-y:auto}
 .log-line{display:flex;gap:10px;padding:6px 16px;border-bottom:1px solid #f9fafb;font-size:12px}
 .log-dot{width:7px;height:7px;border-radius:50%;margin-top:3px;flex-shrink:0}
 .dot-ok{background:#16a34a}.dot-warn{background:#d97706}.dot-info{background:#185FA5}.dot-err{background:#dc2626}
 .log-text{color:#374151;flex:1}
-.btn-dl{display:none;padding:6px 13px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer}
+.btn-dl{display:none;padding:7px 14px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer}
 .btn-dl.show{display:inline-block}
 .spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -140,85 +124,73 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="page-icon">📋</div>
       <div>
         <div class="page-title">Base Deudas</div>
-        <div class="page-sub">Flujo en 3 pasos: unifica → convierte en Adobe → procesa</div>
+        <div class="page-sub">Consolida certificados AFP en un Excel único</div>
       </div>
     </div>
 
-    <!-- Pasos -->
-    <div class="steps-row">
-      <div class="step-box">
-        <div class="step-num">1</div>
-        <div class="step-title">Unificar PDFs</div>
-        <div class="step-desc">Sube todos los certificados AFP aquí → descarga un único PDF combinado</div>
-      </div>
-      <div class="step-arrow">→</div>
-      <div class="step-box">
-        <div class="step-num">2</div>
-        <div class="step-title">Convertir en Adobe</div>
-        <div class="step-desc">Sube ese PDF único a Adobe Acrobat → descarga el Excel generado</div>
-      </div>
-      <div class="step-arrow">→</div>
-      <div class="step-box">
-        <div class="step-num">3</div>
-        <div class="step-title">Generar resultado</div>
-        <div class="step-desc">Sube el Excel de Adobe aquí → descarga el Resultados AFP.xlsx consolidado</div>
-      </div>
-    </div>
-
-    <!-- PASO 1: Unificar PDFs -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">📄 Paso 1 — Unificar PDFs <span class="badge badge-blue">DESCARGA PDF</span></div>
-      </div>
-      <div class="dropzone" id="dz1" onclick="document.getElementById('fi1').click()"
-           ondragover="ev(event,'over','dz1')" ondragleave="ev(event,'leave','dz1')" ondrop="ev(event,'drop','dz1','pdf1')">
-        <div class="dz-icon">📄</div>
-        <div class="dz-text">Arrastra todos los PDFs AFP aquí</div>
-        <div class="dz-hint">Puedes subir varios a la vez — uno por empresa o uno por AFP</div>
-      </div>
-      <input type="file" id="fi1" class="file-input" multiple accept=".pdf" onchange="agregar(this.files,'pdf1')">
-      <div class="file-list" id="list-pdf1"></div>
-      <button class="btn btn-blue" id="btn-unificar" style="margin-top:12px" onclick="unificar()" disabled>
-        ⬇ Descargar PDF unificado
-      </button>
-    </div>
-
-    <!-- PASO 2: Adobe -->
-    <div class="card" style="border-color:#fde68a;background:#fffbeb">
-      <div class="card-header">
-        <div class="card-title">🔗 Paso 2 — Convertir en Adobe</div>
-      </div>
-      <div style="font-size:12px;color:#713f12;line-height:1.6">
-        Toma el PDF descargado en el paso 1 y súbelo a Adobe Acrobat para convertirlo a Excel.
-        Luego descarga el Excel resultante y pásalo al paso 3.
-      </div>
-      <a href="https://acrobat.adobe.com/link/acrobat/createpdf?x_api_client_id=adobe_com&x_api_client_location=createpdf"
-         target="_blank" class="adobe-btn">Abrir Adobe PDF → Excel ↗</a>
-    </div>
-
-    <!-- PASO 3: Procesar Excel -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">📊 Paso 3 — Procesar Excel de Adobe <span class="badge badge-green">DESCARGA EXCEL</span></div>
-      </div>
-      <div class="dropzone" id="dz3" onclick="document.getElementById('fi3').click()"
-           ondragover="ev(event,'over','dz3')" ondragleave="ev(event,'leave','dz3')" ondrop="ev(event,'drop','dz3','excel3')">
-        <div class="dz-icon">📊</div>
-        <div class="dz-text">Arrastra el Excel de Adobe aquí</div>
-        <div class="dz-hint">El archivo .xlsx que generó Adobe Acrobat</div>
-      </div>
-      <input type="file" id="fi3" class="file-input" multiple accept=".xlsx" onchange="agregar(this.files,'excel3')">
-      <div class="file-list" id="list-excel3"></div>
-      <button class="btn btn-green" id="btn-procesar" style="margin-top:12px" onclick="procesar()" disabled>
-        ▶ Generar Resultados AFP.xlsx
-      </button>
-      <div class="log-wrap" id="log-wrap" style="display:none">
-        <div class="log-head">
-          <span>📋 Registro</span>
-          <button id="btn-dl" class="btn-dl" onclick="descargar()">⬇ Descargar Resultados AFP</button>
+    <div class="instrucciones">
+      <div class="inst-title">¿Cómo funciona?</div>
+      <div class="inst-pasos">
+        <div class="inst-paso">
+          <div class="paso-num">1</div>
+          <div class="paso-body">
+            <div class="paso-titulo">Convierte cada PDF AFP a Excel en Adobe</div>
+            <div class="paso-desc">
+              Sube <strong>cada certificado por separado</strong> a Adobe Acrobat — uno por uno.
+              Aplica a las AFP que entregan PDF imagen:
+              <div style="margin-top:5px">
+                <span class="afp-tag">Capital</span>
+                <span class="afp-tag">Cuprum</span>
+                <span class="afp-tag">Habitat</span>
+                <span class="afp-tag">Provida</span>
+                <span class="afp-tag">Uno</span>
+                <span class="afp-tag">Consalud</span>
+                <span class="afp-tag">Cruz Blanca</span>
+              </div>
+            </div>
+            <a href="https://acrobat.adobe.com/link/acrobat/createpdf?x_api_client_id=adobe_com&x_api_client_location=createpdf"
+               target="_blank" class="adobe-btn">Abrir Adobe PDF → Excel ↗</a>
+          </div>
         </div>
-        <div class="log-body" id="log-body"></div>
+        <div class="inst-paso">
+          <div class="paso-num">2</div>
+          <div class="paso-body">
+            <div class="paso-titulo">Sube todos los Excels de Adobe aquí de una vez</div>
+            <div class="paso-desc">Puedes seleccionar o arrastrar múltiples archivos .xlsx al mismo tiempo — no es necesario subirlos uno por uno.</div>
+          </div>
+        </div>
+        <div class="inst-paso">
+          <div class="paso-num">3</div>
+          <div class="paso-body">
+            <div class="paso-titulo">Descarga el Resultados AFP.xlsx consolidado</div>
+            <div class="paso-desc">El portal procesa todos los Excels y genera un único archivo con todas las deudas organizadas.</div>
+          </div>
+        </div>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 Excels de Adobe (.xlsx)</div>
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('fi').click()"
+           ondragover="ev(event,'over')" ondragleave="ev(event,'leave')" ondrop="ev(event,'drop')">
+        <div class="dz-icon">⬆</div>
+        <div class="dz-text">Arrastra aquí todos los Excels de Adobe</div>
+        <div class="dz-hint">Selecciona múltiples .xlsx a la vez — uno por cada certificado AFP convertido</div>
+      </div>
+      <input type="file" id="fi" class="file-input" multiple accept=".xlsx" onchange="agregar(this.files)">
+      <div class="file-list" id="file-list"></div>
+    </div>
+
+    <button class="btn-procesar" id="btn-procesar" onclick="procesar()" disabled>
+      ▶ Generar Resultados AFP.xlsx
+    </button>
+
+    <div class="log-wrap" id="log-wrap" style="display:none">
+      <div class="log-head">
+        <span>📋 Registro</span>
+        <button id="btn-dl" class="btn-dl" onclick="descargar()">⬇ Descargar Resultados AFP</button>
+      </div>
+      <div class="log-body" id="log-body"></div>
     </div>
   </div>
 </div>
@@ -227,7 +199,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 let _panelOpen = true;
-const _files = {pdf1: [], excel3: []};
+let _files = [];
 let _resultado = null;
 
 function togglePanel(){
@@ -236,74 +208,40 @@ function togglePanel(){
   document.getElementById('toggle-btn').textContent = _panelOpen ? '✕' : '☰';
 }
 
-function ev(e, tipo, dzId, listKey){
+function ev(e, tipo){
   e.preventDefault();
-  const dz = document.getElementById(dzId);
+  const dz = document.getElementById('dropzone');
   if(tipo==='over')  dz.classList.add('drag-over');
   if(tipo==='leave') dz.classList.remove('drag-over');
-  if(tipo==='drop'){ dz.classList.remove('drag-over'); if(listKey) agregar(e.dataTransfer.files, listKey); }
+  if(tipo==='drop'){ dz.classList.remove('drag-over'); agregar(e.dataTransfer.files); }
 }
 
-function agregar(files, key){
-  const ext = key === 'pdf1' ? 'pdf' : 'xlsx';
+function agregar(files){
   for(const f of files){
-    if(!f.name.toLowerCase().endsWith('.'+ext)) continue;
-    if(!_files[key].find(x=>x.name===f.name)) _files[key].push(f);
+    if(!f.name.toLowerCase().endsWith('.xlsx')) { toast('Solo archivos .xlsx'); continue; }
+    if(!_files.find(x=>x.name===f.name)) _files.push(f);
   }
-  renderLista(key);
-  if(key==='pdf1')   document.getElementById('btn-unificar').disabled  = _files.pdf1.length === 0;
-  if(key==='excel3') document.getElementById('btn-procesar').disabled  = _files.excel3.length === 0;
+  renderLista();
+  document.getElementById('btn-procesar').disabled = _files.length === 0;
 }
 
-function renderLista(key){
-  const el  = document.getElementById('list-'+key);
-  const cls = key==='pdf1' ? 'file-pdf' : 'file-excel';
-  const ico = key==='pdf1' ? '📄' : '📊';
-  el.innerHTML = _files[key].map((f,i)=>`
-    <div class="file-item ${cls}">
-      <span>${ico} <span class="file-name" title="${f.name}">${f.name}</span></span>
-      <button class="file-remove" onclick="quitar('${key}',${i})">✕</button>
+function renderLista(){
+  const el = document.getElementById('file-list');
+  el.innerHTML = _files.map((f,i)=>`
+    <div class="file-item">
+      <span>📊 <span class="file-name" title="${f.name}">${f.name}</span></span>
+      <button class="file-remove" onclick="quitar(${i})">✕</button>
     </div>`).join('');
 }
 
-function quitar(key, i){
-  _files[key].splice(i,1);
-  renderLista(key);
-  if(key==='pdf1')   document.getElementById('btn-unificar').disabled  = _files.pdf1.length === 0;
-  if(key==='excel3') document.getElementById('btn-procesar').disabled  = _files.excel3.length === 0;
-}
-
-async function unificar(){
-  const btn = document.getElementById('btn-unificar');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Unificando...';
-
-  const fd = new FormData();
-  _files.pdf1.forEach(f => fd.append('archivos', f));
-
-  try {
-    const res = await fetch('/api/base-deudas/unificar', {method:'POST', body:fd});
-    if(!res.ok){
-      const data = await res.json().catch(()=>({}));
-      toast('Error: ' + (data.error || 'No se pudo unificar'));
-      btn.disabled = false; btn.innerHTML = '⬇ Descargar PDF unificado'; return;
-    }
-    const blob = await res.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'certificados_unificados.pdf';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    toast('PDF unificado descargado — llévalo a Adobe (paso 2)');
-  } catch(e){
-    toast('Error de conexión');
-  }
-
-  btn.disabled = false;
-  btn.innerHTML = '⬇ Descargar PDF unificado';
+function quitar(i){
+  _files.splice(i,1);
+  renderLista();
+  document.getElementById('btn-procesar').disabled = _files.length === 0;
 }
 
 async function procesar(){
+  if(!_files.length){ toast('Agrega al menos un Excel'); return; }
   const btn = document.getElementById('btn-procesar');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Procesando...';
@@ -313,7 +251,7 @@ async function procesar(){
   _resultado = null;
 
   const fd = new FormData();
-  _files.excel3.forEach(f => fd.append('archivos', f));
+  _files.forEach(f => fd.append('archivos', f));
 
   try {
     const res  = await fetch('/api/base-deudas/procesar', {method:'POST', body:fd});

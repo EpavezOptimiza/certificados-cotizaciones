@@ -867,6 +867,7 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
     if primera_libre == 2 and ws.cell(2,1).value is None:
         primera_libre = 2
 
+    FMT_PESO = '"$"#,##0'
     for i, f in enumerate(filas, start=primera_libre):
         ws.cell(i, 1, rut_fmt)
         ws.cell(i, 2, razon_social)
@@ -876,13 +877,25 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
         ws.cell(i, 6, institucion)
         celda = ws.cell(i, 7, f.get("periodo",""))
         celda.number_format = "mmm-yy"
-        ws.cell(i, 8, f.get("estado",""))
-        c9 = ws.cell(i, 9, f.get("monto_nom",0))
-        c9.number_format  = '"$"#,##0'
-        c10 = ws.cell(i,10, f.get("monto_act",0))
-        c10.number_format = '"$"#,##0'
-        for col in range(11, 18):
-            ws.cell(i, col, "")
+
+        if es_isapre:
+            # Base Isapre:
+            # col8=PACTADO, col9=PAGADO(vacío), col10=PAG_OTRA(vacío),
+            # col11=DIFERENCIA, col18=15_ESTATUS
+            ws.cell(i, 8,  f.get("monto_nom", 0)).number_format = FMT_PESO
+            ws.cell(i, 9,  "")
+            ws.cell(i, 10, "")
+            ws.cell(i, 11, f.get("monto_act", 0)).number_format = FMT_PESO
+            ws.cell(i, 18, f.get("estado", ""))
+            for col in [12, 13, 14, 15, 16, 17, 19, 20]:
+                ws.cell(i, col, "")
+        else:
+            # Base AFP: col8=TIPO DEUDA, col9=MONTO NOMINAL, col10=MONTO INTERES
+            ws.cell(i, 8, f.get("estado", ""))
+            ws.cell(i, 9, f.get("monto_nom", 0)).number_format = FMT_PESO
+            ws.cell(i, 10, f.get("monto_act", 0)).number_format = FMT_PESO
+            for col in range(11, 18):
+                ws.cell(i, col, "")
 
 
 # ── Extracción directa desde PDF (sin Excel Adobe) ───────────────────────────

@@ -82,8 +82,20 @@
     root.setProperty('--orb1', orb1);
     root.setProperty('--orb2', orb2);
     root.setProperty('--themed-bg-image', designLayer(style, orb1Rgb, orb2Rgb));
-    root.setProperty('--themed-bg-size', style === 'geometrico' ? '22px 22px, 22px 22px, 100% 100%' : 'cover');
+    root.setProperty('--themed-bg-size', bgSize(style));
     document.documentElement.setAttribute('data-theme-style', style);
+  }
+
+  function bgSize(style) {
+    switch (style) {
+      case 'geometrico': return '22px 22px, 22px 22px, 140% 140%';
+      case 'cosmos': return '80px 80px, 90px 90px, 70px 70px, 100px 100px, 140% 140%';
+      case 'lluvia': return '24px 24px, 36px 36px';
+      case 'hexagonal': return '140% 140%, 140% 140%, 100% 100%';
+      case 'orbos': return '160% 160%, 160% 160%, 18px 18px';
+      case 'minimal': return 'cover';
+      default: return '180% 180%';
+    }
   }
 
   try {

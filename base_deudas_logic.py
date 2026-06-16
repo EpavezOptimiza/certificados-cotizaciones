@@ -29,7 +29,9 @@ INSTITUCIONES_MAP = [
     ("CRUZBLANCA",    "ISAPRE CRUZ BLANCA"),
     ("CONSALUD",      "ISAPRE CONSALUD"),
     ("NUEVA MASVIDA", "ISAPRE NUEVA MASVIDA"),
+    ("NUEVA MAS VIDA","ISAPRE NUEVA MASVIDA"),
     ("MASVIDA",       "ISAPRE NUEVA MASVIDA"),
+    ("MAS VIDA",      "ISAPRE NUEVA MASVIDA"),
     ("AFC",           "AFC"),
 ]
 
@@ -1058,6 +1060,9 @@ def procesar_lote(pares: list, log=None) -> bytes:
                 filas, advertencias, ws_adobe2 = _parsear_habitat(wb_adobe, {})
             elif _es_masvida(ws):
                 filas, advertencias, ws_adobe2 = _parsear_masvida(wb_adobe)
+                # Si la institución no se detectó del nombre/contenido, forzar MásVida
+                if inst == INSTITUCION_DEFAULT:
+                    inst = "ISAPRE NUEVA MASVIDA"
             else:
                 filas, advertencias, ws_adobe2 = _parsear_excel(wb_adobe, {})
 

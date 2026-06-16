@@ -319,24 +319,61 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     filas = []
     _EXCLUIR = {"origen deuda","nud","totales",""}
 
-    COL_ORIGEN_P1=3; COL_PERIODO_P1=4; COL_NOM_P1=6; COL_TOT_P1=21; COL_EST_P1=23
+    COL_ORIGEN_P1=None; COL_PERIODO_P1=None; COL_NOM_P1=None; COL_TOT_P1=None; COL_EST_P1=None
     for _r in range(1, min(10, ws.max_row+1)):
         if ws.cell(_r,1).value == "NUD" or (isinstance(ws.cell(_r,1).value,str) and "NUD" in str(ws.cell(_r,1).value).upper().split()):
             for _c in range(1, ws.max_column+1):
                 _v = str(ws.cell(_r,_c).value or "").lower()
-                if "origen" in _v or "rtgen" in _v: COL_ORIGEN_P1=_c
-                elif "peri" in _v and COL_PERIODO_P1==4: COL_PERIODO_P1=_c
-                elif "nominal" in _v and "ondo" in _v: COL_NOM_P1=_c
+                if ("origen" in _v or "rtgen" in _v or "orl" in _v) and "deuda" in _v:
+                    COL_ORIGEN_P1=_c
+                elif "peri" in _v and COL_PERIODO_P1 is None: COL_PERIODO_P1=_c
+                elif ("nominal" in _v or "noml" in _v) and "ondo" in _v: COL_NOM_P1=_c
                 elif "total" in _v and ("pag" in _v or "peger" in _v): COL_TOT_P1=_c
                 elif "jur" in _v or "estudio" in _v: COL_EST_P1=_c
             break
+
+    # Fallback: detectar columnas desde la primera fila de datos NUD real
+    if None in (COL_ORIGEN_P1, COL_PERIODO_P1, COL_NOM_P1, COL_TOT_P1):
+        for r in range(1, min(15, ws.max_row+1)):
+            nud_v = ws.cell(r, 1).value
+            if not isinstance(nud_v, int) or nud_v < 100000:
+                continue
+            nums, strs = [], []
+            for c in range(2, ws.max_column + 1):
+                v = ws.cell(r, c).value
+                if isinstance(v, str) and v.strip().lower() not in _EXCLUIR:
+                    strs.append(c)
+                elif isinstance(v, (int, float)) and v > 0:
+                    nums.append(c)
+            if strs and COL_ORIGEN_P1 is None:
+                COL_ORIGEN_P1 = strs[0]
+            if len(strs) > 1 and COL_PERIODO_P1 is None:
+                COL_PERIODO_P1 = strs[1] if len(strs) > 1 else strs[0]
+            if len(nums) >= 2 and COL_NOM_P1 is None:
+                COL_NOM_P1 = nums[0]
+            if len(nums) >= 2 and COL_TOT_P1 is None:
+                COL_TOT_P1 = nums[-1]
+            if COL_EST_P1 is None:
+                # buscar string en los últimos cols
+                for c in range(ws.max_column, 1, -1):
+                    v = ws.cell(r, c).value
+                    if isinstance(v, str) and v.strip():
+                        COL_EST_P1 = c; break
+            break
+
+    # Valores por defecto si aún sin detectar
+    if COL_ORIGEN_P1 is None:  COL_ORIGEN_P1 = 3
+    if COL_PERIODO_P1 is None: COL_PERIODO_P1 = 4
+    if COL_NOM_P1 is None:     COL_NOM_P1 = 6
+    if COL_TOT_P1 is None:     COL_TOT_P1 = 21
+    if COL_EST_P1 is None:     COL_EST_P1 = 23
 
     nud_info = {}
     for r in range(1, ws.max_row+1):
         nud = ws.cell(r,1).value
         v_or = ws.cell(r,COL_ORIGEN_P1).value
         if not isinstance(nud,int): continue
-        if nud < 100000: continue  # filtra fragmentos de RUT (ej: 13, 10) que openpyxl lee como int
+        if nud < 100000: continue
         if not (isinstance(v_or,str) and v_or.strip().lower() not in _EXCLUIR): continue
         nud_info[nud] = {
             "periodo": _periodo(str(ws.cell(r,COL_PERIODO_P1).value or "").strip()),
@@ -350,6 +387,7 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     nuds_ord  = list(nud_info.keys())
     curr_nud  = nuds_ord[0] if nuds_ord else None
     in_part2  = False
+    nombre_col = 3  # columna del nombre en Part 2; se detecta desde el header R.U.T.
 
     for r in range(1, ws.max_row+1):
         v1 = ws.cell(r,1).value
@@ -359,22 +397,45 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
         if not isinstance(v1,str): continue
         v1s = v1.strip()
         if not in_part2 and RE_RUT_HDR.match(v1s):
-            in_part2 = True; continue
+            in_part2 = True
+            # Detectar columna del nombre desde el header "R.U.T. | ... | Nombre"
+            for _c in range(2, ws.max_column + 1):
+                _hv = str(ws.cell(r, _c).value or "").lower()
+                if "nomb" in _hv:
+                    nombre_col = _c
+                    break
+            continue
         if not in_part2: continue
         m_nud = RE_NUD_HDR.search(v1s)
         if m_nud:
             curr_nud = int(m_nud.group(1)); continue
-        if RE_RUT_HDR.match(v1s): continue
+        if RE_RUT_HDR.match(v1s):
+            # Nuevo bloque de detalle: re-detectar columna nombre
+            for _c in range(2, ws.max_column + 1):
+                _hv = str(ws.cell(r, _c).value or "").lower()
+                if "nomb" in _hv:
+                    nombre_col = _c
+                    break
+            continue
         if any(x in v1s.lower() for x in ["totales","se extiende","saluda"]): break
-        # RUT a veces dividido en C1+C2 por OCR (ej: "13" | "133.756-6")
+        # RUT a veces dividido en varias celdas por OCR
+        # Casos: "13.133.756-6" (completo), "13"|"133.756-6", "13"|"133"|"756-6"
         rut_candidato = v1s
         if re.match(r'^\d{1,2}$', v1s):
-            c2 = str(ws.cell(r, 2).value or "").strip()
-            if c2:
-                rut_candidato = v1s + "." + c2
+            c2_val = ws.cell(r, 2).value
+            c2 = str(c2_val).strip() if c2_val is not None else ""
+            if re.match(r'^\d{3}$', c2):
+                # Tres partes: C1=RR, C2=DDD, C3=DDD-K
+                c3 = str(ws.cell(r, 3).value or "").strip()
+                if re.match(r'^\d{3}-[\dKk]$', c3):
+                    rut_candidato = f"{v1s}.{c2}.{c3}"
+                else:
+                    rut_candidato = f"{v1s}.{c2}"
+            elif c2:
+                rut_candidato = f"{v1s}.{c2}"
         if curr_nud and RE_RUT_EMP.match(rut_candidato):
-            nombre_raw = str(ws.cell(r, 3).value or "").strip().strip("'")
-            nombre = re.sub(r'\s+', ' ', nombre_raw)  # convierte \n en espacio
+            nombre_raw = str(ws.cell(r, nombre_col).value or "").strip().strip("'")
+            nombre = re.sub(r'\s+', ' ', nombre_raw)
             grupos.setdefault(curr_nud, []).append((rut_candidato, nombre))
 
     for nud, info in nud_info.items():

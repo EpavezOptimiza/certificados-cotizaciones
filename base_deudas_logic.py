@@ -103,15 +103,16 @@ def _norm_origen(b_val: str) -> str:
 # ── Detección ─────────────────────────────────────────────────────────────────
 
 def detectar_institucion(pdf_bytes: bytes, nombre_archivo: str = "") -> str:
-    try:
-        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            texto = pdf.pages[0].extract_text() or ""
-        for linea in texto.splitlines():
-            m = RE_INSTITUCION.match(linea.strip())
-            if m:
-                return m.group(1).upper().strip()
-    except Exception:
-        pass
+    if pdf_bytes and len(pdf_bytes) > 256:
+        try:
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                texto = pdf.pages[0].extract_text() or ""
+            for linea in texto.splitlines():
+                m = RE_INSTITUCION.match(linea.strip())
+                if m:
+                    return m.group(1).upper().strip()
+        except Exception:
+            pass
     nombre_upper = nombre_archivo.upper()
     for afp in AFP_NOMBRES:
         if afp in nombre_upper:
@@ -664,54 +665,61 @@ def procesar_lote(pares: list, log=None) -> bytes:
     wb_res = openpyxl.load_workbook(TEMPLATE_PATH)
 
     for par in pares:
-        pdf_bytes   = par["pdf_bytes"]
-        pdf_nombre  = par["pdf_nombre"]
-        excel_bytes = par["excel_bytes"]
+        pdf_bytes    = par.get("pdf_bytes") or b""
+        pdf_nombre   = par.get("pdf_nombre", "")
+        excel_bytes  = par["excel_bytes"]
         excel_nombre = par["excel_nombre"]
+        tiene_pdf    = len(pdf_bytes) > 256  # bytes vacíos o casi vacíos = sin PDF
 
-        _log(f"── {pdf_nombre}", "info")
+        _log(f"── {excel_nombre}", "info")
 
-        # Detección NO DEUDA
-        es_no_deuda, rut_nd, razon_nd = detectar_no_deuda(pdf_bytes)
-        if not es_no_deuda:
-            # Verificar también en el Excel
-            _wb_nd = openpyxl.load_workbook(io.BytesIO(excel_bytes))
-            _ws_nd = _wb_nd.active
-            _txt_nd = " ".join(
-                str(_ws_nd.cell(r,c).value or "")
-                for r in range(1, min(6, _ws_nd.max_row+1))
-                for c in range(1, _ws_nd.max_column+1)
-            )
-            _txt_norm = re.sub(r'\s+',' ',_txt_nd).lower()
-            if RE_NO_DEUDA.search(_txt_nd) or "no registra" in _txt_norm:
-                m_rut = RE_RUT_EMPRESA.search(_txt_nd)
-                rut_nd   = re.sub(r"\s","",m_rut.group(1)) if m_rut else ""
-                m_rs     = RE_RAZON_SOCIAL.search(_txt_nd) or RE_RAZON_HABITAT.search(_txt_nd)
-                razon_nd = _limpiar_razon(m_rs.group(1)) if m_rs else ""
-                es_no_deuda = True
-            _wb_nd.close()
+        # Detección NO DEUDA — primero desde el Excel, luego desde PDF si hay
+        es_no_deuda = False
+        rut_nd = razon_nd = ""
+        _wb_nd = openpyxl.load_workbook(io.BytesIO(excel_bytes))
+        _ws_nd = _wb_nd.active
+        _txt_nd = " ".join(
+            str(_ws_nd.cell(r,c).value or "")
+            for r in range(1, min(6, _ws_nd.max_row+1))
+            for c in range(1, _ws_nd.max_column+1)
+        )
+        _txt_norm = re.sub(r'\s+',' ', _txt_nd).lower()
+        if RE_NO_DEUDA.search(_txt_nd) or "no registra" in _txt_norm:
+            m_rut = RE_RUT_EMPRESA.search(_txt_nd)
+            rut_nd   = re.sub(r"\s","",m_rut.group(1)) if m_rut else ""
+            m_rs     = RE_RAZON_SOCIAL.search(_txt_nd) or RE_RAZON_HABITAT.search(_txt_nd)
+            razon_nd = _limpiar_razon(m_rs.group(1)) if m_rs else ""
+            es_no_deuda = True
+        _wb_nd.close()
+
+        if not es_no_deuda and tiene_pdf:
+            try:
+                es_no_deuda, rut_nd, razon_nd = detectar_no_deuda(pdf_bytes)
+            except Exception:
+                pass
 
         if es_no_deuda:
+            inst = detectar_institucion(pdf_bytes, pdf_nombre) if tiene_pdf else INSTITUCION_DEFAULT
             _log(f"  Sin deuda — {razon_nd} ({rut_nd})", "ok")
             _agregar_al_resultado(wb_res, [{
                 "rut":"","nombre":"","monto_nom":0,"monto_act":0,
                 "origen":"","adm":"","periodo":"","estado":"SIN DEUDA","abogado":"",
-            }], rut_nd, razon_nd, detectar_institucion(pdf_bytes, pdf_nombre))
+            }], rut_nd, razon_nd, inst)
             continue
 
         # Extraer datos empresa del Excel
         _wb_tmp = openpyxl.load_workbook(io.BytesIO(excel_bytes))
         rut_empresa, razon_social = extraer_datos_empresa(_wb_tmp.active)
         _wb_tmp.close()
-        institucion = detectar_institucion(pdf_bytes, pdf_nombre)
+        institucion = detectar_institucion(pdf_bytes, pdf_nombre) if tiene_pdf else INSTITUCION_DEFAULT
         _log(f"  {razon_social} ({rut_empresa}) — {institucion}", "info")
 
-        # Leer PDF para validación cruzada
-        pdf_lookup  = leer_montos_pdf(pdf_bytes)
-        totales_pdf = leer_totales_pdf(pdf_bytes)
+        # Leer PDF para validación cruzada (solo si hay PDF)
+        pdf_lookup  = leer_montos_pdf(pdf_bytes) if tiene_pdf else {}
+        totales_pdf = leer_totales_pdf(pdf_bytes) if tiene_pdf else {}
         total_pdf   = sum(totales_pdf.values())
         if not totales_pdf:
-            _log("  PDF escaneado — sin validación cruzada", "warn")
+            _log("  Sin PDF de referencia — sin validación cruzada", "info")
 
         # Parsear Excel Adobe
         wb_adobe = openpyxl.load_workbook(io.BytesIO(excel_bytes))

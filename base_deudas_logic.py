@@ -1069,12 +1069,15 @@ def procesar_lote(pares: list, log=None) -> bytes:
                 continue
 
             # Extraer empresa y filas de deuda
-            rut_empresa, razon_social = extraer_datos_empresa(ws)
-            # Fallback: RUT desde nombre del archivo (ej: "76216647-K_Nueva Mas Vida.xlsx")
+            # RUT desde nombre del archivo SIEMPRE tiene prioridad (evita confundir RUT institución con RUT empresa)
+            rut_empresa = ""
+            _mfn = re.match(r'^(\d{7,8}-[\dKk])', excel_nombre)
+            if _mfn:
+                rut_empresa = _normalizar_rut_sin_puntos(_mfn.group(1))
+            _, razon_social = extraer_datos_empresa(ws)
+            # Si el nombre del archivo no tenía RUT válido, buscar en el Excel
             if not rut_empresa:
-                _mfn = re.match(r'^(\d{7,8}-[\dKk])', excel_nombre)
-                if _mfn:
-                    rut_empresa = _normalizar_rut_sin_puntos(_mfn.group(1))
+                rut_empresa, _ = extraer_datos_empresa(ws)
             if not rut_empresa and not razon_social:
                 _log(f"  [{nombre_hoja}] Sin datos de empresa — omitida", "warn")
                 continue

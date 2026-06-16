@@ -336,6 +336,7 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
         nud = ws.cell(r,1).value
         v_or = ws.cell(r,COL_ORIGEN_P1).value
         if not isinstance(nud,int): continue
+        if nud < 100000: continue  # filtra fragmentos de RUT (ej: 13, 10) que openpyxl lee como int
         if not (isinstance(v_or,str) and v_or.strip().lower() not in _EXCLUIR): continue
         nud_info[nud] = {
             "periodo": _periodo(str(ws.cell(r,COL_PERIODO_P1).value or "").strip()),
@@ -352,6 +353,9 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
 
     for r in range(1, ws.max_row+1):
         v1 = ws.cell(r,1).value
+        # Entero pequeño = fragmento de RUT (ej: 13 de "13.133.756-6"), tratar como string
+        if isinstance(v1, int) and v1 < 100000:
+            v1 = str(v1)
         if not isinstance(v1,str): continue
         v1s = v1.strip()
         if not in_part2 and RE_RUT_HDR.match(v1s):

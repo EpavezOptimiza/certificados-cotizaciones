@@ -24,7 +24,45 @@ RE_RAZON_SOCIAL  = re.compile(
 RE_RAZON_PREFIJO = re.compile(r"^(?:cuya\s+raz[o6ó]n\s+social\s+es\s+)", re.IGNORECASE)
 RE_RAZON_HABITAT = re.compile(r"(?:Se\w{1,5}res?\s*[\n\r\s]*)(.+?)\s+Rut\s*:", re.IGNORECASE | re.DOTALL)
 RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA|REGISTRO\s+DE\s+NO\s+DEUDA", re.IGNORECASE)
+RE_RUT_SIN_PUNTOS = re.compile(r"[Rr]ut\s+(\d{7,8}-[\dKk])\b")
+RE_RUT_EMPLEADOR  = re.compile(r"R\.?U\.?T\.?\s+[Ee]mpleador\s+(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.IGNORECASE)
+RE_RAZON_CERTIFICA = re.compile(r"certifica que[:\s]+([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ\s\.]+?),?\s+[Rr]ut\s", re.IGNORECASE)
 RE_PERIODO_STR   = re.compile(r"^(\d{2})/(\d{4})")
+
+def _normalizar_rut_sin_puntos(rut_raw: str) -> str:
+    """'76003477-0' → '76.003.477-0', '7003477-0' → '7.003.477-0'"""
+    parts = rut_raw.split("-")
+    if len(parts) != 2:
+        return rut_raw
+    digits, dv = parts[0].strip(), parts[1].strip()
+    if len(digits) == 8:
+        return f"{digits[0:2]}.{digits[2:5]}.{digits[5:]}-{dv}"
+    if len(digits) == 7:
+        return f"{digits[0]}.{digits[1:4]}.{digits[4:]}-{dv}"
+    return rut_raw
+
+def _extraer_rut(texto: str) -> str:
+    """Intenta múltiples formatos de RUT; devuelve RUT normalizado sin espacios."""
+    m = RE_RUT_EMPRESA.search(texto)
+    if m:
+        return re.sub(r"\s", "", m.group(1))
+    m = RE_RUT_EMPLEADOR.search(texto)
+    if m:
+        return re.sub(r"\s", "", m.group(1))
+    m = RE_RUT_SIN_PUNTOS.search(texto)
+    if m:
+        return re.sub(r"\s", "", _normalizar_rut_sin_puntos(m.group(1)))
+    return ""
+
+def _extraer_razon(texto: str) -> str:
+    """Intenta múltiples patrones de razón social."""
+    m = RE_RAZON_SOCIAL.search(texto) or RE_RAZON_HABITAT.search(texto)
+    if m:
+        return _limpiar_razon(m.group(1))
+    m = RE_RAZON_CERTIFICA.search(texto)
+    if m:
+        return _limpiar_razon(m.group(1))
+    return ""
 RE_GRUPO_PDF     = re.compile(
     r"^(PLANILLAS COMPLEMENTARIAS|DECL\.?\s*Y NO PAGO\s*AUTOM\.?\s*\(?DNPA\)?)\s+"
     r"\d+\s+(\d{2}/\d{4})\s+([\d\.]+)\s+([\d\.]+)\s+", re.IGNORECASE)
@@ -128,10 +166,8 @@ def detectar_no_deuda(pdf_bytes: bytes) -> tuple:
         texto = " ".join((p.extract_text() or "") for p in pdf.pages[:2])
     if not RE_NO_DEUDA.search(texto):
         return False, "", ""
-    m_rut = RE_RUT_EMPRESA.search(texto)
-    rut = re.sub(r"\s", "", m_rut.group(1)) if m_rut else ""
-    m_rs = RE_RAZON_SOCIAL.search(texto) or RE_RAZON_HABITAT.search(texto)
-    razon = _limpiar_razon(m_rs.group(1)) if m_rs else ""
+    rut   = _extraer_rut(texto)
+    razon = _extraer_razon(texto)
     # Fallback AFC: "empleador NOMBRE, RUT XX.XXX.XXX-X"
     if not razon or not rut:
         m_afc = RE_RAZON_AFC.search(texto)
@@ -141,15 +177,14 @@ def detectar_no_deuda(pdf_bytes: bytes) -> tuple:
     return True, rut, razon
 
 def extraer_datos_empresa(ws) -> tuple:
-    for r in range(1, min(10, ws.max_row + 1)):
+    for r in range(1, min(12, ws.max_row + 1)):
         for c in range(1, ws.max_column + 1):
             val = ws.cell(r, c).value
-            if not isinstance(val, str): continue
-            m_rut = RE_RUT_EMPRESA.search(val)
-            if m_rut:
-                rut = re.sub(r"\s", "", m_rut.group(1))
-                m_rs = RE_RAZON_SOCIAL.search(val) or RE_RAZON_HABITAT.search(val)
-                razon = _limpiar_razon(m_rs.group(1)) if m_rs else ""
+            if not isinstance(val, str):
+                continue
+            rut = _extraer_rut(val)
+            if rut:
+                razon = _extraer_razon(val)
                 return rut, razon
     return "", ""
 
@@ -511,9 +546,11 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
     ws = wb_res["Base AFP"]
     rut_fmt = rut_empresa.replace(".", "")
 
-    # Borrar filas existentes de esta empresa
+    # Borrar solo filas de esta empresa + esta institución (no borrar otras AFPs)
     for r in range(ws.max_row, 1, -1):
-        if str(ws.cell(r,1).value or "").replace(".","") == rut_fmt:
+        mismo_rut  = str(ws.cell(r,1).value or "").replace(".","") == rut_fmt
+        misma_inst = str(ws.cell(r,6).value or "").upper() == institucion.upper()
+        if mismo_rut and misma_inst:
             ws.delete_rows(r)
 
     primera_libre = ws.max_row + 1
@@ -693,10 +730,8 @@ def procesar_lote(pares: list, log=None) -> bytes:
             es_no_deuda = False
             rut_nd = razon_nd = ""
             if RE_NO_DEUDA.search(_txt) or "no registra" in _txt_norm:
-                m_rut  = RE_RUT_EMPRESA.search(_txt)
-                rut_nd = re.sub(r"\s", "", m_rut.group(1)) if m_rut else ""
-                m_rs   = RE_RAZON_SOCIAL.search(_txt) or RE_RAZON_HABITAT.search(_txt)
-                razon_nd = _limpiar_razon(m_rs.group(1)) if m_rs else ""
+                rut_nd   = _extraer_rut(_txt)
+                razon_nd = _extraer_razon(_txt)
                 es_no_deuda = True
 
             # Nombre AFP desde el nombre de la hoja o texto
@@ -730,7 +765,12 @@ def procesar_lote(pares: list, log=None) -> bytes:
                 filas, advertencias, ws_adobe2 = _parsear_excel(wb_adobe, {})
 
             if not filas:
-                _log(f"  [{nombre_hoja}] Sin filas de deuda — omitida", "warn")
+                # Tabla vacía con empresa reconocida = certificado sin deuda
+                _log(f"  [{nombre_hoja}] Sin filas de deuda — marcando SIN DEUDA", "ok")
+                _agregar_al_resultado(wb_res, [{
+                    "rut": "", "nombre": "", "monto_nom": 0, "monto_act": 0,
+                    "origen": "", "adm": "", "periodo": "", "estado": "SIN DEUDA", "abogado": "",
+                }], rut_empresa, razon_social, inst)
                 continue
 
             _log(f"  [{nombre_hoja}] {len(filas)} filas extraídas", "info")

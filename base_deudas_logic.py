@@ -13,8 +13,33 @@ TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "static", "template_base_deudas.xlsx")
 
 # ── Constantes ────────────────────────────────────────────────────────────────
-INSTITUCION_DEFAULT = "AFP PLANVITAL"
+INSTITUCION_DEFAULT = "DESCONOCIDA"
 AFP_NOMBRES = ["PLANVITAL", "CAPITAL", "CUPRUM", "HABITAT", "PROVIDA", "MODELO", "UNO"]
+
+# Mapa de keywords → nombre canónico de institución (orden importa: más específico primero)
+INSTITUCIONES_MAP = [
+    ("PLANVITAL",     "AFP PLANVITAL"),
+    ("CAPITAL",       "AFP CAPITAL"),
+    ("CUPRUM",        "AFP CUPRUM"),
+    ("HABITAT",       "AFP HABITAT"),
+    ("PROVIDA",       "AFP PROVIDA"),
+    ("MODELO",        "AFP MODELO"),
+    ("UNO",           "AFP UNO"),
+    ("CRUZ BLANCA",   "ISAPRE CRUZ BLANCA"),
+    ("CRUZBLANCA",    "ISAPRE CRUZ BLANCA"),
+    ("CONSALUD",      "ISAPRE CONSALUD"),
+    ("NUEVA MASVIDA", "ISAPRE NUEVA MASVIDA"),
+    ("MASVIDA",       "ISAPRE NUEVA MASVIDA"),
+    ("AFC",           "AFC"),
+]
+
+def _detectar_inst_texto(*textos: str) -> str:
+    """Detecta institución buscando keywords en cualquiera de los textos dados."""
+    upper = " ".join(t.upper() for t in textos)
+    for keyword, nombre in INSTITUCIONES_MAP:
+        if keyword in upper:
+            return nombre
+    return INSTITUCION_DEFAULT
 
 RE_INSTITUCION   = re.compile(r"^(AFP\s+\w+(?:\s+\w+)?)\s+S\.?\s*A\.?,", re.IGNORECASE)
 RE_RUT_EMPRESA   = re.compile(r"R\.?U\.?T\.?\s*:?\s*(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.IGNORECASE)
@@ -151,11 +176,7 @@ def detectar_institucion(pdf_bytes: bytes, nombre_archivo: str = "") -> str:
                     return m.group(1).upper().strip()
         except Exception:
             pass
-    nombre_upper = nombre_archivo.upper()
-    for afp in AFP_NOMBRES:
-        if afp in nombre_upper:
-            return f"AFP {afp}"
-    return INSTITUCION_DEFAULT
+    return _detectar_inst_texto(nombre_archivo)
 
 RE_RAZON_AFC = re.compile(
     r"(?:empleador\s+)([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ0-9\s\.,]+?),?\s+RUT\s+(\d{1,2}\.\d{3}\.\d{3}-[\dKk])",
@@ -734,12 +755,8 @@ def procesar_lote(pares: list, log=None) -> bytes:
                 razon_nd = _extraer_razon(_txt)
                 es_no_deuda = True
 
-            # Nombre AFP desde el nombre de la hoja o texto
-            inst = INSTITUCION_DEFAULT
-            for afp in AFP_NOMBRES:
-                if afp in nombre_hoja.upper() or afp in _txt.upper():
-                    inst = f"AFP {afp}"
-                    break
+            # Institución: busca en nombre de hoja, texto de celdas y nombre del archivo Excel
+            inst = _detectar_inst_texto(nombre_hoja, _txt, excel_nombre)
 
             if es_no_deuda:
                 _log(f"  [{nombre_hoja}] Sin deuda — {razon_nd} ({rut_nd})", "ok")

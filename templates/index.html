@@ -18,7 +18,7 @@
 body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;display:flex;height:100vh;overflow:hidden;font-size:13px}
 
 /* ── Sidebar ── */
-#sidebar{width:248px;min-width:248px;background:var(--sidebar-grad);display:flex;flex-direction:column;height:100vh;box-shadow:4px 0 24px rgba(0,0,0,.25)}
+#sidebar{width:248px;min-width:248px;background:var(--sidebar-grad);position:relative;display:flex;flex-direction:column;height:100vh;box-shadow:4px 0 24px rgba(0,0,0,.25);overflow:hidden}#sidebar::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:var(--themed-bg-image,none);background-size:var(--themed-bg-size,cover);transition:background-image .4s}#sidebar>*{position:relative;z-index:1}
 #sidebar-header{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
 #sidebar-header h1{color:#fff;font-size:17px;font-weight:800;letter-spacing:-.3px;line-height:1.1}
 #sidebar-header p{color:#4f83c4;font-size:10px;margin-top:3px;font-weight:500;letter-spacing:.5px;text-transform:uppercase}

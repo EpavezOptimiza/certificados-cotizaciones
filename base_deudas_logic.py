@@ -466,6 +466,27 @@ def _parsear_masvida(wb) -> tuple:
             "abogado": "",
         })
 
+    # Si hay exactamente una fila con act=0 pero nom>0, inferir el valor desde la fila "Totales:"
+    filas_cero = [i for i, f in enumerate(filas) if f["monto_act"] == 0 and f["monto_nom"] > 0]
+    if len(filas_cero) == 1:
+        total_act = 0
+        for r in range(start, ws.max_row + 1):
+            # Buscar fila donde alguna celda diga "Totales:" (no "Total:" que incluye honorarios)
+            for c in range(1, min(10, ws.max_column + 1)):
+                vt = str(ws.cell(r, c).value or "").strip().lower()
+                if vt == "totales:":
+                    v_col = ws.cell(r, COL_ACT).value
+                    if isinstance(v_col, (int, float)) and v_col > 0:
+                        total_act = int(v_col)
+                    break
+            if total_act:
+                break
+        if total_act > 0:
+            suma_otros = sum(f["monto_act"] for i, f in enumerate(filas) if i not in filas_cero)
+            inferido = total_act - suma_otros
+            if inferido > 0:
+                filas[filas_cero[0]]["monto_act"] = inferido
+
     return filas, [], ws
 
 def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:

@@ -102,7 +102,7 @@ def _extraer_razon(texto: str) -> str:
         return _limpiar_razon(m.group(1))
     return ""
 RE_GRUPO_PDF     = re.compile(
-    r"^(PLANILLAS COMPLEMENTARIAS|DECL\.?\s*Y NO PAGO\s*AUTOM\.?\s*\(?DNPA\)?)\s+"
+    r"^(PLANILLAS COMPLEMENTARIAS|DECL\.?\s*Y NO PAGO\s*AUTOM\.?\s*\(?DNPA\)?|COBRO\s+POR\s+DIFERENCIA|COB\.?\s*POR\s+DIF\.?)\s+"
     r"\d+\s+(\d{2}/\d{4})\s+([\d\.]+)\s+([\d\.]+)\s+", re.IGNORECASE)
 RE_DETALLE_PDF   = re.compile(r"^(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s+.+?\s+([\d\.]+)\s+([\d\.]+)\s*$")
 RUT_RE           = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
@@ -183,7 +183,7 @@ def _es_stop(val: str) -> bool:
 
 def _es_grupo(b_val) -> bool:
     if not isinstance(b_val, str): return False
-    return any(x in b_val.upper() for x in ["PLANILLAS","PAGO AUTOM","ECL.","DECL.","DNPA"])
+    return any(x in b_val.upper() for x in ["PLANILLAS","PAGO AUTOM","ECL.","DECL.","DNPA","COB","DIFERENCIA"])
 
 def _norm_estado(estado: str) -> str:
     upper = estado.upper()
@@ -192,7 +192,10 @@ def _norm_estado(estado: str) -> str:
     return estado
 
 def _norm_origen(b_val: str) -> str:
-    return "PLANILLAS COMPLEMENTARIAS" if "PLANILLAS" in b_val.upper() else "DNPA"
+    u = b_val.upper()
+    if "PLANILLAS" in u:           return "PLANILLAS COMPLEMENTARIAS"
+    if "COB" in u and "DIF" in u:  return "COB POR DIF"
+    return "DNPA"
 
 
 # ── Detección ─────────────────────────────────────────────────────────────────

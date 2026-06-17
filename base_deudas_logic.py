@@ -192,7 +192,7 @@ def _norm_estado(estado: str) -> str:
     return estado
 
 def _norm_origen(b_val: str) -> str:
-    return "PLANILLAS COMPLEMENTARIAS" if "PLANILLAS" in b_val.upper() else "DECL. Y NO PAGO AUTOM. (DNPA)"
+    return "PLANILLAS COMPLEMENTARIAS" if "PLANILLAS" in b_val.upper() else "DNPA"
 
 
 # ── Detección ─────────────────────────────────────────────────────────────────
@@ -465,7 +465,7 @@ def _parsear_masvida(wb) -> tuple:
             "monto_act": monto_act,
             "pagado":    monto_pagado,
             "_fila_excel": r,
-            "origen": "DECL. Y NO PAGO AUTOM. (DNPA)",
+            "origen": "DNPA",
             "adm": None,
             "periodo": _periodo(periodo_raw),
             "estado": "SIN GESTION",

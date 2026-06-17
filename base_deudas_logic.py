@@ -669,13 +669,23 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
         ws.cell(i, 6, institucion)
         celda = ws.cell(i, 7, f.get("periodo",""))
         celda.number_format = "mmm-yy"
-        ws.cell(i, 8, f.get("estado",""))
-        c9 = ws.cell(i, 9, f.get("monto_nom",0))
-        c9.number_format  = '"$"#,##0'
-        c10 = ws.cell(i,10, f.get("monto_act",0))
-        c10.number_format = '"$"#,##0'
-        for col in range(11, 18):
-            ws.cell(i, col, "")
+        if es_isapre:
+            # Base Isapre: H=PACTADO, I=PAGADO, J=PAGADO OTRA, K=DIFERENCIA, L=MONTO INTERÉS, R=ESTATUS
+            ws.cell(i, 8,  f.get("monto_nom", 0)).number_format = '"$"#,##0'
+            ws.cell(i, 9,  f.get("monto_act", 0)).number_format = '"$"#,##0'
+            ws.cell(i, 10, 0)
+            ws.cell(i, 11, 0)
+            ws.cell(i, 12, 0)
+            ws.cell(i, 18, f.get("estado", ""))
+            for col in range(13, 18):
+                ws.cell(i, col, "")
+        else:
+            # Base AFP: H=TIPO DEUDA, I=MONTO NOMINAL, J=MONTO INTERÉS
+            ws.cell(i, 8,  f.get("estado", ""))
+            ws.cell(i, 9,  f.get("monto_nom", 0)).number_format = '"$"#,##0'
+            ws.cell(i, 10, f.get("monto_act", 0)).number_format = '"$"#,##0'
+            for col in range(11, 18):
+                ws.cell(i, col, "")
 
 
 # ── Extracción directa desde PDF (sin Excel Adobe) ───────────────────────────

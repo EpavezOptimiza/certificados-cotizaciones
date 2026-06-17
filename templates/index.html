@@ -328,7 +328,6 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="sb-btn admin-only" onclick="openModal_empresa()" style="display:none">＋ Nueva empresa</button>
     <button class="sb-btn accent admin-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
     <button class="sb-btn admin-only" onclick="openModal('modalUsuarios')" style="display:none">👥 Gestionar usuarios</button>
-    <button class="sb-btn orange ahorro-only" onclick="abrirSolicitud()" style="display:none">📋 Nueva solicitud</button>
     <button class="sb-btn accent terreno-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
   </div>
   <div id="sidebar-label" style="padding-top:14px">Herramientas</div>
@@ -355,9 +354,9 @@ body.dark .pref-label{color:#e2e8f0}
       </div>
     </a>
     <a href="#" onclick="verSolicitudes();return false" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(148,163,184,.1);color:#cbd5e1;border-color:rgba(148,163,184,.2)">
-      <span style="font-size:15px">📋</span>
+      <span style="font-size:15px">📄</span>
       <div>
-        <div style="font-size:12px;font-weight:600">Solicitudes</div>
+        <div style="font-size:12px;font-weight:600">Certificados de deuda</div>
         <div style="font-size:10px;opacity:.65;font-weight:400">Pendientes y atendidas</div>
       </div>
     </a>
@@ -369,12 +368,6 @@ body.dark .pref-label{color:#e2e8f0}
       </div>
     </a>
   </div>
-  <div id="sidebar-label">Empresas</div>
-  <div id="search-wrap">
-    <span class="icon">🔍</span>
-    <input type="text" id="search-input" placeholder="Buscar…" oninput="renderTree()">
-  </div>
-  <div id="tree"></div>
 </div>
 
 <div id="main">
@@ -418,7 +411,10 @@ body.dark .pref-label{color:#e2e8f0}
       <div id="noticias-list" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
     <div id="sol-view" style="display:none;padding:4px">
-      <h3 style="margin-bottom:12px;font-size:14px;color:#0f172a">📋 Solicitudes pendientes</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="font-size:14px;color:#0f172a;margin:0">📄 Certificados de deuda</h3>
+        <button class="btn btn-orange ahorro-only" onclick="abrirSolicitud()" style="font-size:11px;padding:5px 14px">＋ Nueva solicitud</button>
+      </div>
       <div id="sol-list"></div>
     </div>
     <table id="tabla" style="display:none">
@@ -1520,7 +1516,7 @@ async function verSolicitudes(){
   document.getElementById("tabla").style.display="none";
   document.getElementById("sol-view").style.display="";
   document.getElementById("stats").innerHTML="";
-  document.getElementById("header-title").textContent="📋 Solicitudes";
+  document.getElementById("header-title").textContent="📄 Certificados de deuda";
   document.getElementById("header-meta").textContent="";
   const r=await fetch("/api/solicitudes");
   const sols=await r.json();

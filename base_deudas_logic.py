@@ -29,7 +29,9 @@ INSTITUCIONES_MAP = [
     ("CRUZBLANCA",    "ISAPRE CRUZ BLANCA"),
     ("CONSALUD",      "ISAPRE CONSALUD"),
     ("NUEVA MASVIDA", "ISAPRE NUEVA MASVIDA"),
+    ("NUEVA MAS VIDA","ISAPRE NUEVA MASVIDA"),
     ("MASVIDA",       "ISAPRE NUEVA MASVIDA"),
+    ("MAS VIDA",      "ISAPRE NUEVA MASVIDA"),
     ("AFC",           "AFC"),
 ]
 
@@ -48,10 +50,13 @@ RE_RAZON_SOCIAL  = re.compile(
     re.IGNORECASE)
 RE_RAZON_PREFIJO = re.compile(r"^(?:cuya\s+raz[o6ó]n\s+social\s+es\s+)", re.IGNORECASE)
 RE_RAZON_HABITAT = re.compile(r"(?:Se\w{1,5}res?\s*[\n\r\s]*)(.+?)\s+Rut\s*:", re.IGNORECASE | re.DOTALL)
-RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA|REGISTRO\s+DE\s+NO\s+DEUDA", re.IGNORECASE)
+RE_NO_DEUDA      = re.compile(r"CERTIFICADO\s+DE\s+NO\s+DEUDA|REGISTRO\s+DE\s+NO\s+DEUDA|NO\s+REGISTRA\s+DEUDA", re.IGNORECASE)
 RE_RUT_SIN_PUNTOS = re.compile(r"[Rr]ut\s+(\d{7,8}-[\dKk])\b")
-RE_RUT_EMPLEADOR  = re.compile(r"R\.?U\.?T\.?\s+[Ee]mpleador\s+(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.IGNORECASE)
+RE_RUT_EMPLEADOR  = re.compile(r"R\.?U\.?T\.?\s+[Ee]mpleador\s*:?\s*(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.IGNORECASE)
 RE_RAZON_CERTIFICA = re.compile(r"certifica que[:\s]+([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ\s\.]+?),?\s+[Rr]ut\s", re.IGNORECASE)
+# Isapre-style: "la Empresa NOMBRE Rut : XX.XXX.XXX-X"
+RE_RUT_EMPRESA_ISAPRE  = re.compile(r"[Ee]mpresa\s+.+?\s+[Rr]ut\s*:\s*(\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dKk])", re.DOTALL)
+RE_RAZON_EMPRESA_ISAPRE = re.compile(r"[Ee]mpresa\s+([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ0-9\s\.,]+?)\s+[Rr]ut\s*:", re.IGNORECASE)
 RE_PERIODO_STR   = re.compile(r"^(\d{2})/(\d{4})")
 
 def _normalizar_rut_sin_puntos(rut_raw: str) -> str:
@@ -68,10 +73,14 @@ def _normalizar_rut_sin_puntos(rut_raw: str) -> str:
 
 def _extraer_rut(texto: str) -> str:
     """Intenta múltiples formatos de RUT; devuelve RUT normalizado sin espacios."""
-    m = RE_RUT_EMPRESA.search(texto)
+    # Primero buscar patrón específico "Empresa ... Rut :" (Isapre Consalud, CruzBlanca, etc.)
+    m = RE_RUT_EMPRESA_ISAPRE.search(texto)
     if m:
         return re.sub(r"\s", "", m.group(1))
     m = RE_RUT_EMPLEADOR.search(texto)
+    if m:
+        return re.sub(r"\s", "", m.group(1))
+    m = RE_RUT_EMPRESA.search(texto)
     if m:
         return re.sub(r"\s", "", m.group(1))
     m = RE_RUT_SIN_PUNTOS.search(texto)
@@ -81,6 +90,10 @@ def _extraer_rut(texto: str) -> str:
 
 def _extraer_razon(texto: str) -> str:
     """Intenta múltiples patrones de razón social."""
+    # Primero patrón específico "Empresa NOMBRE Rut :" (Isapre Consalud, CruzBlanca, etc.)
+    m = RE_RAZON_EMPRESA_ISAPRE.search(texto)
+    if m:
+        return _limpiar_razon(m.group(1))
     m = RE_RAZON_SOCIAL.search(texto) or RE_RAZON_HABITAT.search(texto)
     if m:
         return _limpiar_razon(m.group(1))
@@ -108,16 +121,35 @@ def _limpiar_razon(razon: str) -> str:
     razon = RE_RAZON_PREFIJO.sub("", razon.strip())
     return re.sub(r"\s+", " ", razon).strip().rstrip(",")
 
-def _periodo(s: str):
+def _periodo(s):
+    import datetime as _dt
+    if s is None or s == "":
+        return s
+    # Ya es date/datetime (Adobe exporta fechas como objetos)
+    if isinstance(s, (_dt.date, _dt.datetime)):
+        return date(s.year, s.month, 1)
+    s = str(s).strip().lstrip("'")
     if not s:
         return s
-    m = RE_PERIODO_STR.match(str(s).strip())
-    if not m:
-        return s
-    mes, anio = int(m.group(1)), int(m.group(2))
-    if not (1 <= mes <= 12 and 1900 <= anio <= 2100):
-        return s
-    return date(anio, mes, 1)
+    # Formato estándar MM/YYYY
+    m = RE_PERIODO_STR.match(s)
+    if m:
+        mes, anio = int(m.group(1)), int(m.group(2))
+        if 1 <= mes <= 12 and 1900 <= anio <= 2100:
+            return date(anio, mes, 1)
+    # Formato YYYY-MM-DD (date serializado como string)
+    m3 = re.match(r'^(\d{4})-(\d{2})-\d{2}', s)
+    if m3:
+        anio, mes = int(m3.group(1)), int(m3.group(2))
+        if 1 <= mes <= 12 and 1900 <= anio <= 2100:
+            return date(anio, mes, 1)
+    # Formato AFP Habitat: M1YYYY o MM1YYYY (el "1" es el día, ej: 9/1/2019 → 912019)
+    m2 = re.match(r'^(\d{1,2})1(\d{4})$', s)
+    if m2:
+        mes, anio = int(m2.group(1)), int(m2.group(2))
+        if 1 <= mes <= 12 and 1990 <= anio <= 2100:
+            return date(anio, mes, 1)
+    return s
 
 def _limpiar_num_pdf(s: str) -> int:
     return int(s.replace(".", ""))
@@ -126,7 +158,7 @@ def _convertir_monto(val) -> int:
     if val is None:
         return 0
     if isinstance(val, str):
-        limpio = val.replace("$","").replace(" ","").replace(",","").strip("'\" ")
+        limpio = val.replace("$","").replace(" ","").replace("\xa0","").replace(",","").strip("'\" ")
         if "/" in limpio or not limpio.replace(".","").isdigit():
             return 0
         return int(limpio.replace(".",""))
@@ -198,16 +230,24 @@ def detectar_no_deuda(pdf_bytes: bytes) -> tuple:
     return True, rut, razon
 
 def extraer_datos_empresa(ws) -> tuple:
+    razon_fallback = ""
     for r in range(1, min(12, ws.max_row + 1)):
+        v1 = str(ws.cell(r, 1).value or "").strip().lower()
+        # Guardar razón si hay una fila "Nombre" con valor en celdas siguientes
+        if v1 == "nombre" and not razon_fallback:
+            for c in range(2, ws.max_column + 1):
+                v = ws.cell(r, c).value
+                if isinstance(v, str) and v.strip() and len(v.strip()) > 5:
+                    razon_fallback = v.strip(); break
         for c in range(1, ws.max_column + 1):
             val = ws.cell(r, c).value
             if not isinstance(val, str):
                 continue
             rut = _extraer_rut(val)
             if rut:
-                razon = _extraer_razon(val)
+                razon = _extraer_razon(val) or razon_fallback
                 return rut, razon
-    return "", ""
+    return "", razon_fallback
 
 
 # ── Lectura PDF (fuente de verdad) ────────────────────────────────────────────
@@ -314,6 +354,147 @@ def _es_habitat(ws) -> bool:
                 return True
     return False
 
+def _es_masvida(ws) -> bool:
+    """Detecta formato Nueva MásVida: tiene 'DEUDA POR ENTIDAD PAGADORA' o 'Pactado' en header."""
+    for r in range(1, 8):
+        for c in range(1, ws.max_column + 1):
+            val = str(ws.cell(r, c).value or "").upper()
+            if "DEUDA POR ENTIDAD PAGADORA" in val or ("PACTADO" in val and "PERIODO" in val):
+                return True
+    return False
+
+def _parsear_masvida(wb) -> tuple:
+    """
+    Parser para Nueva MásVida (formato plano sin fila de grupo).
+    Header en la fila donde col1='Rut'. Columnas típicas:
+    C1=Rut, C3=Nombre, C5=Periodo, C12=Deuda, C16=Deuda Final.
+    """
+    ws = wb.active
+    filas = []
+
+    header_row = None
+    COL_PERIODO = 5
+    COL_NOM     = 12
+    COL_ACT     = 16
+    COL_NOMBRE  = 3
+    COL_PAGADO  = 10  # columna "Pagado" del Excel MásVida
+
+    for r in range(1, min(12, ws.max_row + 1)):
+        v1 = str(ws.cell(r, 1).value or "").strip().lower()
+        if v1 == "rut":
+            header_row = r
+            for c in range(1, ws.max_column + 1):
+                hv = str(ws.cell(r, c).value or "").strip().lower()
+                if "period" in hv and c > 1:
+                    COL_PERIODO = c
+                elif hv == "final":
+                    COL_ACT = c
+                elif hv == "deuda":
+                    COL_NOM = c
+                elif "nomb" in hv and c > 1:
+                    COL_NOMBRE = c
+                elif hv == "pagado":
+                    COL_PAGADO = c
+            break
+
+    start = (header_row + 1) if header_row else 5
+    RUT_RE_MV = re.compile(r'(\d{1,2}\.\d{3}\.\d{3}-[\dKk])')
+
+    def _limpiar_acto(v):
+        """Convierte '147,836 DNP' → 147836, int 211265 → 211265.
+        En caso de celdas con múltiples valores (\xa0 merged), usa solo el primer número."""
+        if v is None: return 0
+        if isinstance(v, int): return v
+        if isinstance(v, float): return round(v * 1000)
+        s = str(v).replace(',', '').replace('\xa0', ' ')
+        m = re.search(r'\d[\d.]*', s)
+        if not m: return 0
+        return int(m.group(0).replace('.', ''))
+
+    for r in range(start, ws.max_row + 1):
+        v1 = str(ws.cell(r, 1).value or "").strip()
+        if not v1 or "total" in v1.lower() or "honorario" in v1.lower():
+            continue
+
+        # Normalizar error OCR: letra inicial en lugar de dígito (ej: 'j6.913.695-5' → '16.913.695-5')
+        v1_norm = re.sub(r'^([a-zA-Z])(\d)', lambda m: '1' + m.group(2), v1)
+
+        m_rut = RUT_RE_MV.search(v1_norm)
+        if not m_rut:
+            continue
+        rut = m_rut.group(1)
+
+        # Nombre: prioridad col header, luego col2, luego texto después del RUT en col1
+        nombre = str(ws.cell(r, COL_NOMBRE).value or "").replace("\xa0", " ").strip()
+        if not nombre:
+            nombre = str(ws.cell(r, 2).value or "").replace("\xa0", " ").strip()
+        if not nombre:
+            nombre = v1_norm[m_rut.end():].strip()
+        nombre = re.sub(r'\s+', ' ', nombre).strip()
+
+        # Período: columna detectada, luego escanear fila, luego extraer del nombre
+        periodo_raw = ws.cell(r, COL_PERIODO).value
+        if not periodo_raw:
+            for c in range(1, ws.max_column + 1):
+                cv = str(ws.cell(r, c).value or "").strip()
+                if re.match(r'^\d{2}/\d{4}$', cv):
+                    periodo_raw = cv; break
+        if not periodo_raw:
+            _m_per_n = re.search(r'(\d{2}/\d{4})', nombre)
+            if _m_per_n:
+                periodo_raw = _m_per_n.group(1)
+        # Quitar patrones de fecha incrustados en el nombre, y caracteres basura al final
+        nombre = re.sub(r'\s+\d{1,2}/\d{4}', '', nombre)
+        nombre = re.sub(r'[\s\W]+$', '', nombre, flags=re.UNICODE).strip()
+
+        nom_raw    = ws.cell(r, COL_NOM).value
+        act_raw    = ws.cell(r, COL_ACT).value
+        pagado_raw = ws.cell(r, COL_PAGADO).value
+
+        monto_nom    = _limpiar_acto(nom_raw)
+        monto_act    = _limpiar_acto(act_raw)
+        monto_pagado = _limpiar_acto(pagado_raw)
+
+        if monto_nom == 0 and monto_act == 0:
+            continue
+
+        filas.append({
+            "rut": rut,
+            "nombre": nombre,
+            "monto_nom": monto_nom,
+            "monto_act": monto_act,
+            "pagado":    monto_pagado,
+            "_fila_excel": r,
+            "origen": "DECL. Y NO PAGO AUTOM. (DNPA)",
+            "adm": None,
+            "periodo": _periodo(periodo_raw),
+            "estado": "SIN GESTION",
+            "abogado": "",
+        })
+
+    # Si hay exactamente una fila con act=0 pero nom>0, inferir el valor desde la fila "Totales:"
+    filas_cero = [i for i, f in enumerate(filas) if f["monto_act"] == 0 and f["monto_nom"] > 0]
+    if len(filas_cero) == 1:
+        total_act = 0
+        for r in range(start, ws.max_row + 1):
+            # Buscar fila donde alguna celda diga "Totales:" (no "Total:" que incluye honorarios)
+            for c in range(1, min(10, ws.max_column + 1)):
+                vt = str(ws.cell(r, c).value or "").strip().lower()
+                if vt == "totales:":
+                    v_col = ws.cell(r, COL_ACT).value
+                    if isinstance(v_col, (int, float)) and v_col > 0:
+                        total_act = int(v_col)
+                    break
+            if total_act:
+                break
+        if total_act > 0:
+            suma_otros = sum(f["monto_act"] for i, f in enumerate(filas) if i not in filas_cero)
+            inferido = total_act - suma_otros
+            if inferido > 0:
+                filas[filas_cero[0]]["monto_act"] = inferido
+
+    return filas, [], ws
+
 def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     ws    = wb.active
     filas = []
@@ -394,7 +575,8 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     nuds_ord  = list(nud_info.keys())
     curr_nud  = nuds_ord[0] if nuds_ord else None
     in_part2  = False
-    nombre_col = 3  # columna del nombre en Part 2; se detecta desde el header R.U.T.
+    nombre_col = 3   # columna del nombre en Part 2; se detecta desde el header R.U.T.
+    total_col  = 24  # columna "Total" en la tabla de detalle por empleado
 
     for r in range(1, ws.max_row+1):
         v1 = ws.cell(r,1).value
@@ -405,24 +587,26 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
         v1s = v1.strip()
         if not in_part2 and RE_RUT_HDR.match(v1s):
             in_part2 = True
-            # Detectar columna del nombre desde el header "R.U.T. | ... | Nombre"
+            # Detectar columnas nombre y Total desde el header "R.U.T. | ... | Nombre | ... | Total"
             for _c in range(2, ws.max_column + 1):
-                _hv = str(ws.cell(r, _c).value or "").lower()
+                _hv = str(ws.cell(r, _c).value or "").strip().lower()
                 if "nomb" in _hv:
                     nombre_col = _c
-                    break
+                elif _hv == "total":
+                    total_col = _c
             continue
         if not in_part2: continue
         m_nud = RE_NUD_HDR.search(v1s)
         if m_nud:
             curr_nud = int(m_nud.group(1)); continue
         if RE_RUT_HDR.match(v1s):
-            # Nuevo bloque de detalle: re-detectar columna nombre
+            # Nuevo bloque de detalle: re-detectar columnas
             for _c in range(2, ws.max_column + 1):
-                _hv = str(ws.cell(r, _c).value or "").lower()
+                _hv = str(ws.cell(r, _c).value or "").strip().lower()
                 if "nomb" in _hv:
                     nombre_col = _c
-                    break
+                elif _hv == "total":
+                    total_col = _c
             continue
         if any(x in v1s.lower() for x in ["totales","se extiende","saluda"]): break
         # RUT a veces dividido en varias celdas por OCR
@@ -443,22 +627,30 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
         if curr_nud and RE_RUT_EMP.match(rut_candidato):
             nombre_raw = str(ws.cell(r, nombre_col).value or "").strip().strip("'")
             nombre = re.sub(r'\s+', ' ', nombre_raw)
-            grupos.setdefault(curr_nud, []).append((rut_candidato, nombre))
+            total_raw = ws.cell(r, total_col).value
+            total_emp = _convertir_monto(total_raw) if total_raw is not None else 0
+            grupos.setdefault(curr_nud, []).append((rut_candidato, nombre, total_emp))
 
     for nud, info in nud_info.items():
         emps = grupos.get(nud,[])
-        n    = len(emps)
-        if n==0:
+        if not emps:
             filas.append({"rut":"","nombre":"","monto_nom":info["monto_nom"],
                           "monto_act":info["total_pagar"],"_fila_excel":0,
                           "origen":info["origen"],"adm":None,
                           "periodo":info["periodo"],"estado":info["estado"],"abogado":""})
         else:
-            act_e = round(info["total_pagar"]/n)
-            nom_e = round(info["monto_nom"]/n)
-            for rut,nombre in emps:
-                filas.append({"rut":rut,"nombre":nombre,"monto_nom":nom_e,
-                              "monto_act":act_e,"_fila_excel":0,
+            # Dividir total_pagar solo entre empleados con total > 0
+            emps_con_deuda = [e for e in emps if e[2] > 0]
+            n_div = len(emps_con_deuda) if emps_con_deuda else len(emps)
+            act_e = round(info["total_pagar"] / n_div)
+            nom_e = round(info["monto_nom"] / n_div)
+            for rut, nombre, total_emp in emps:
+                if total_emp == 0:
+                    continue  # no registrar empleados sin deuda en el período
+                filas.append({"rut":rut,"nombre":nombre,
+                              "monto_nom": nom_e,
+                              "monto_act": act_e,
+                              "_fila_excel":0,
                               "origen":info["origen"],"adm":None,
                               "periodo":info["periodo"],"estado":info["estado"],"abogado":""})
     return filas, [], ws
@@ -563,10 +755,20 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
             if grupo_fila_pendiente is not None and len(filas)==filas_antes_grupo:
                 agregar_fila("","",grupo_fila_pendiente["nom"],grupo_fila_pendiente["act"])
             split_pendiente = None
+            # Si la columna asignada no tiene período, escanear toda la fila
+            periodo_raw = periodo_val
+            if not periodo_raw:
+                import datetime as _dt2
+                for _cc in range(1, ws.max_column+1):
+                    _cv = ws.cell(r, _cc).value
+                    if isinstance(_cv, (_dt2.date, _dt2.datetime)):
+                        periodo_raw = _cv; break
+                    if isinstance(_cv, str) and re.match(r'^\d{2}/\d{4}$', _cv.strip()):
+                        periodo_raw = _cv.strip(); break
             grupo = {
                 "origen":  _norm_origen(origen_val),
                 "adm":     adm_val,
-                "periodo": _periodo(str(periodo_val) if periodo_val else ""),
+                "periodo": _periodo(periodo_raw),
                 "estado":  _norm_estado(str(estado_val).upper().strip()) if estado_val else "",
                 "abogado": str(abogado_val).strip() if abogado_val else "",
             }
@@ -582,14 +784,25 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
         if not _es_grupo(origen_val) and isinstance(a,str) and _es_grupo(a) and not RUT_RE.match(a):
             split_pendiente = None
             periodo_g = ""; estado_g = ""
+            # Primero buscar período incrustado en el texto de col 1 (ej: Provida comprime todo en col 1)
+            _m_per = re.search(r'(\d{2}/\d{4})', a)
+            if _m_per:
+                periodo_g = _m_per.group(1)
+            # También buscar estado en col 1
+            _a_upper = a.upper()
+            if not estado_g:
+                for _kw in ["SIN GESTION","PREJUDICIAL","JUICIO","RESOLUCION","INGRESADA"]:
+                    if _kw in _a_upper:
+                        estado_g = _norm_estado(_kw); break
             for cc in range(1, ws.max_column+1):
                 val_g = ws.cell(r,cc).value
-                if isinstance(val_g,str) and re.match(r'^\d{2}/\d{4}$',val_g.strip()):
-                    periodo_g = val_g.strip()
-                elif cc!=1 and isinstance(val_g,str) and val_g.strip():
-                    upper_g = val_g.upper().strip()
-                    if any(x in upper_g for x in ["SIN GESTION","PREJUDICIAL","JUICIO","RESOLUCION","INGRESADA"]):
-                        estado_g = _norm_estado(upper_g)
+                if isinstance(val_g,str):
+                    if not periodo_g and re.match(r'^\d{2}/\d{4}$',val_g.strip()):
+                        periodo_g = val_g.strip()
+                    elif cc!=1 and val_g.strip():
+                        upper_g = val_g.upper().strip()
+                        if not estado_g and any(x in upper_g for x in ["SIN GESTION","PREJUDICIAL","JUICIO","RESOLUCION","INGRESADA"]):
+                            estado_g = _norm_estado(upper_g)
             grupo = {"origen":_norm_origen(a),"adm":None,
                      "periodo":_periodo(periodo_g) if periodo_g else "",
                      "estado":estado_g,"abogado":""}
@@ -660,6 +873,7 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
     if primera_libre == 2 and ws.cell(2,1).value is None:
         primera_libre = 2
 
+    FMT_PESO = '"$"#,##0'
     for i, f in enumerate(filas, start=primera_libre):
         ws.cell(i, 1, rut_fmt)
         ws.cell(i, 2, razon_social)
@@ -669,21 +883,28 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
         ws.cell(i, 6, institucion)
         celda = ws.cell(i, 7, f.get("periodo",""))
         celda.number_format = "mmm-yy"
+
         if es_isapre:
-            # Base Isapre: H=PACTADO, I=PAGADO, J=PAGADO OTRA, K=DIFERENCIA, L=MONTO INTERÉS, R=ESTATUS
-            ws.cell(i, 8,  f.get("monto_nom", 0)).number_format = '"$"#,##0'
-            ws.cell(i, 9,  f.get("monto_act", 0)).number_format = '"$"#,##0'
-            ws.cell(i, 10, 0)
-            ws.cell(i, 11, 0)
-            ws.cell(i, 12, 0)
+            # Base Isapre:
+            # col8=PACTADO, col9=PAGADO(vacío), col10=PAGADO A OTRA(vacío),
+            # col11=DIFERENCIA, col12=MONTO INTERES(=pagado del excel), col18=ESTATUS
+            ws.cell(i, 8,  f.get("monto_nom", 0)).number_format = FMT_PESO
+            ws.cell(i, 9,  "")
+            ws.cell(i, 10, "")
+            ws.cell(i, 11, f.get("monto_act", 0)).number_format = FMT_PESO
+            _pag = f.get("pagado", 0) or 0
+            if _pag:
+                ws.cell(i, 12, _pag).number_format = FMT_PESO
+            else:
+                ws.cell(i, 12, "")
             ws.cell(i, 18, f.get("estado", ""))
-            for col in range(13, 18):
+            for col in [13, 14, 15, 16, 17, 19, 20]:
                 ws.cell(i, col, "")
         else:
-            # Base AFP: H=TIPO DEUDA, I=MONTO NOMINAL, J=MONTO INTERÉS
-            ws.cell(i, 8,  f.get("estado", ""))
-            ws.cell(i, 9,  f.get("monto_nom", 0)).number_format = '"$"#,##0'
-            ws.cell(i, 10, f.get("monto_act", 0)).number_format = '"$"#,##0'
+            # Base AFP: col8=TIPO DEUDA, col9=MONTO NOMINAL, col10=MONTO INTERES
+            ws.cell(i, 8, f.get("estado", ""))
+            ws.cell(i, 9, f.get("monto_nom", 0)).number_format = FMT_PESO
+            ws.cell(i, 10, f.get("monto_act", 0)).number_format = FMT_PESO
             for col in range(11, 18):
                 ws.cell(i, col, "")
 
@@ -843,9 +1064,22 @@ def procesar_lote(pares: list, log=None) -> bytes:
             es_no_deuda = False
             rut_nd = razon_nd = ""
             if RE_NO_DEUDA.search(_txt) or "no registra" in _txt_norm:
-                rut_nd   = _extraer_rut(_txt)
-                razon_nd = _extraer_razon(_txt)
                 es_no_deuda = True
+                # Prioridad 1: RUT del nombre del archivo (ej: 76216647-k_Consalud.xlsx → 76.216.647-K)
+                _mfn = re.match(r'^(\d{7,8}-[\dKk])', excel_nombre)
+                if _mfn:
+                    rut_nd = _normalizar_rut_sin_puntos(_mfn.group(1))
+                # Prioridad 2: PDF (para obtener razón social y confirmar RUT)
+                if tiene_pdf:
+                    try:
+                        _, rut_pdf, razon_pdf = detectar_no_deuda(pdf_bytes)
+                        if not rut_nd:   rut_nd   = rut_pdf
+                        if not razon_nd: razon_nd = razon_pdf
+                    except Exception:
+                        pass
+                # Fallback: extraer del Excel si no hubo PDF ni nombre de archivo útil
+                if not rut_nd:   rut_nd   = _extraer_rut(_txt)
+                if not razon_nd: razon_nd = _extraer_razon(_txt)
 
             # Institución: busca en nombre de hoja, texto de celdas y nombre del archivo Excel
             inst = _detectar_inst_texto(nombre_hoja, _txt, excel_nombre)
@@ -859,7 +1093,15 @@ def procesar_lote(pares: list, log=None) -> bytes:
                 continue
 
             # Extraer empresa y filas de deuda
-            rut_empresa, razon_social = extraer_datos_empresa(ws)
+            # RUT desde nombre del archivo SIEMPRE tiene prioridad (evita confundir RUT institución con RUT empresa)
+            rut_empresa = ""
+            _mfn = re.match(r'^(\d{7,8}-[\dKk])', excel_nombre)
+            if _mfn:
+                rut_empresa = _normalizar_rut_sin_puntos(_mfn.group(1))
+            _, razon_social = extraer_datos_empresa(ws)
+            # Si el nombre del archivo no tenía RUT válido, buscar en el Excel
+            if not rut_empresa:
+                rut_empresa, _ = extraer_datos_empresa(ws)
             if not rut_empresa and not razon_social:
                 _log(f"  [{nombre_hoja}] Sin datos de empresa — omitida", "warn")
                 continue
@@ -870,6 +1112,11 @@ def procesar_lote(pares: list, log=None) -> bytes:
             wb_adobe.active = ws
             if _es_habitat(ws):
                 filas, advertencias, ws_adobe2 = _parsear_habitat(wb_adobe, {})
+            elif _es_masvida(ws):
+                filas, advertencias, ws_adobe2 = _parsear_masvida(wb_adobe)
+                # Si la institución no se detectó del nombre/contenido, forzar MásVida
+                if inst == INSTITUCION_DEFAULT:
+                    inst = "ISAPRE NUEVA MASVIDA"
             else:
                 filas, advertencias, ws_adobe2 = _parsear_excel(wb_adobe, {})
 

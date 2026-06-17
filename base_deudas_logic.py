@@ -888,18 +888,12 @@ def _agregar_al_resultado(wb_res, filas: list, rut_empresa: str,
         celda.number_format = "mmm-yy"
 
         if es_isapre:
-            # Base Isapre:
-            # col8=PACTADO, col9=PAGADO(vacío), col10=PAGADO A OTRA(vacío),
-            # col11=DIFERENCIA, col12=MONTO INTERES(=pagado del excel), col18=ESTATUS
-            ws.cell(i, 8,  f.get("monto_nom", 0)).number_format = FMT_PESO
-            ws.cell(i, 9,  "")
+            # Base Isapre: H=PACTADO, I=PAGADO, J=PAGADO OTRA, K=DIFERENCIA, L=MONTO INTERÉS, R=ESTATUS
+            ws.cell(i, 8,  "")
+            ws.cell(i, 9,  f.get("monto_nom", 0)).number_format = FMT_PESO   # PAGADO
             ws.cell(i, 10, "")
-            ws.cell(i, 11, f.get("monto_act", 0)).number_format = FMT_PESO
-            _pag = f.get("pagado", 0) or 0
-            if _pag:
-                ws.cell(i, 12, _pag).number_format = FMT_PESO
-            else:
-                ws.cell(i, 12, "")
+            ws.cell(i, 11, "")
+            ws.cell(i, 12, f.get("monto_act", 0)).number_format = FMT_PESO   # MONTO INTERÉS
             ws.cell(i, 18, f.get("estado", ""))
             for col in [13, 14, 15, 16, 17, 19, 20]:
                 ws.cell(i, col, "")

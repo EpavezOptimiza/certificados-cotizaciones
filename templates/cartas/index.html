@@ -370,6 +370,7 @@ textarea{resize:vertical;min-height:70px}
     <div class="modal-header">🔐 Credenciales PreviRed</div>
     <div class="modal-body">
       <div class="alert alert-info" style="font-size:12px">Tus credenciales no se guardan en el servidor.</div>
+      <div id="modal-error" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 12px;color:#b91c1c;font-size:12px;margin-bottom:8px"></div>
       <div class="form-group">
         <label>RUT (sin puntos ni guión)</label>
         <input type="text" id="modal-rut" placeholder="20200699k">
@@ -754,7 +755,13 @@ function cerrarModal() {
 async function iniciarBot() {
   const rut = document.getElementById('modal-rut').value.trim();
   const clave = document.getElementById('modal-clave').value;
-  if (!rut || !clave) { alert('Ingresa RUT y clave.'); return; }
+  const modalErr = document.getElementById('modal-error');
+  if (!rut || !clave) {
+    modalErr.textContent = !rut ? 'Ingresa tu RUT.' : 'Ingresa tu clave.';
+    modalErr.style.display = 'block';
+    return;
+  }
+  modalErr.style.display = 'none';
 
   const workers = trabajadores
     .filter(w => seleccionados[w.rut_trabajador]?.checked)

@@ -313,6 +313,12 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         opts.add_argument('--disable-gpu')
         opts.add_argument('--window-size=1280,900')
 
+        # En Railway/Linux usar Chromium de nixpkgs si está disponible
+        import shutil
+        _chromium = shutil.which('chromium') or shutil.which('chromium-browser')
+        if _chromium:
+            opts.binary_location = _chromium
+
         # Configurar descarga automática de PDFs
         tmp_dir = tempfile.mkdtemp()
         opts.add_experimental_option("prefs", {

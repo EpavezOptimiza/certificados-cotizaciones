@@ -328,7 +328,10 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
             "download.directory_upgrade": True,
         })
 
-        driver = webdriver.Chrome(options=opts)
+        from selenium.webdriver.chrome.service import Service as ChromeService
+        _chromedriver = shutil.which('chromedriver')
+        service = ChromeService(executable_path=_chromedriver) if _chromedriver else ChromeService()
+        driver = webdriver.Chrome(service=service, options=opts)
         wait = WebDriverWait(driver, 20)
 
         def click(by, val):

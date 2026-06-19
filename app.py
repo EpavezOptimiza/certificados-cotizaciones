@@ -22,6 +22,10 @@ app.config["DATA_DIR"] = DATA_DIR
 from cartas import cartas_bp
 app.register_blueprint(cartas_bp)
 
+# Módulo Reportes de Cierre
+from reportes import reportes_bp
+app.register_blueprint(reportes_bp)
+
 EXCEL_URL = "https://docs.google.com/spreadsheets/d/1xNA3CS_WX4KeOc4vRizCUC5rpNoTmCGmswpOjWK9VjI/gviz/tq?tqx=out:csv"
 _empresa_cache = None
 

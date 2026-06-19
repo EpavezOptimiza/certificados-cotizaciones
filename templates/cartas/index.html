@@ -541,10 +541,16 @@ function renderCartaForm() {
 
   // Instituciones
   const instEl = document.getElementById('f-inst');
-  instEl.innerHTML = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital',
-    'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC']
-    .map(i => `<option ${w.institucion?.toLowerCase().includes(i.toLowerCase())?'selected':''}>${i}</option>`).join('');
-  if (w.institucion) instEl.value = w.institucion;
+  const INST_LIST = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital',
+    'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC'];
+  instEl.innerHTML = INST_LIST.map(i => `<option>${i}</option>`).join('');
+  if (w.institucion) {
+    const instLow = w.institucion.toLowerCase().trim();
+    const match = INST_LIST.find(i => i.toLowerCase() === instLow)
+               || INST_LIST.find(i => instLow.includes(i.toLowerCase()))
+               || INST_LIST.find(i => i.toLowerCase().includes(instLow));
+    if (match) instEl.value = match;
+  }
 
   document.getElementById('f-mes').value = w.mes || new Date().toISOString().slice(0,7);
   document.getElementById('f-salud').value = sel.salud;

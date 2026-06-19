@@ -313,11 +313,14 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         opts.add_argument('--disable-gpu')
         opts.add_argument('--window-size=1280,900')
 
-        # En Railway/Linux usar Chromium de nixpkgs si está disponible
+        # En Railway/Linux usar Chrome de apt si está disponible
         import shutil
-        _chromium = shutil.which('chromium') or shutil.which('chromium-browser')
-        if _chromium:
-            opts.binary_location = _chromium
+        _chrome = (shutil.which('google-chrome-stable')
+                or shutil.which('google-chrome')
+                or shutil.which('chromium')
+                or shutil.which('chromium-browser'))
+        if _chrome:
+            opts.binary_location = _chrome
 
         # Configurar descarga automática de PDFs
         tmp_dir = tempfile.mkdtemp()
@@ -329,8 +332,12 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         })
 
         from selenium.webdriver.chrome.service import Service as ChromeService
+        from webdriver_manager.chrome import ChromeDriverManager
         _chromedriver = shutil.which('chromedriver')
-        service = ChromeService(executable_path=_chromedriver) if _chromedriver else ChromeService()
+        if _chromedriver:
+            service = ChromeService(executable_path=_chromedriver)
+        else:
+            service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=opts)
         wait = WebDriverWait(driver, 20)
 

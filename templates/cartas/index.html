@@ -451,8 +451,6 @@ async function subirExcel(file) {
     }
     statusEl.innerHTML = `<div class="alert alert-success">✅ ${data.total} trabajadores cargados</div>`;
     renderSidebar();
-    renderVisor(trabajadores);
-    document.getElementById('card-visor').style.display = '';
   } catch(e) {
     statusEl.innerHTML = `<div class="alert alert-error">❌ Error al procesar el archivo: ${e.message}</div>`;
   }
@@ -834,40 +832,6 @@ function mostrarPDFs(resultados) {
   document.getElementById('bot-resultados').style.display = '';
 }
 
-// ── Visor Excel ───────────────────────────────────────────────────────────────
-function renderVisor(datos) {
-  if (!datos.length) return;
-  visorDatos = datos;
-  const cols = Object.keys(datos[0]);
-  visorCols = cols;
-  const NOMBRES = {
-    rut_empresa:'Rut Empresa', razon_social:'Razón Social',
-    rut_trabajador:'Rut Trabajador', nombre:'Nombre',
-    tipo:'Tipo Producto', institucion:'Institución',
-    periodo:'Período', monto_nominal:'Monto Nominal',
-    monto_interes:'Monto Interés', fee:'Fee%',
-    fecha_cese:'Fecha Cese', analisis:'Análisis',
-    motivo:'Motivos Deuda', tipo_documento:'Tipo Documento',
-    estatus:'Estatus', observaciones:'Observaciones',
-  };
-
-  document.getElementById('visor-thead').innerHTML =
-    '<tr>' + cols.map(c => `<th>${NOMBRES[c]||c}</th>`).join('') + '</tr>';
-  document.getElementById('visor-total').textContent = `— ${datos.length} registros`;
-  renderVisorRows(datos);
-}
-
-function renderVisorRows(datos) {
-  document.getElementById('visor-tbody').innerHTML = datos.map(d =>
-    '<tr>' + visorCols.map(c => `<td>${d[c]||''}</td>`).join('') + '</tr>'
-  ).join('');
-}
-
-function filtrarVisor() {
-  const q = document.getElementById('visor-search').value.toLowerCase();
-  if (!q) { renderVisorRows(visorDatos); return; }
-  renderVisorRows(visorDatos.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(q))));
-}
 
 // ── Estado ────────────────────────────────────────────────────────────────────
 function renderEstado() {

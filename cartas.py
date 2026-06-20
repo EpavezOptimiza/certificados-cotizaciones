@@ -559,15 +559,40 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_dentro_empresa_{job_id[:8]}.png')
                 log(f"URL dentro empresa: {page.url}")
 
-                # Ir a Regularización / Movimiento Personal
-                click("a[id*='regulariza']")
-                if page.locator("a[id*='regulariza']").count() == 0:
-                    for sel in ["a:has-text('Regulariz')", "a:has-text('Movimiento')", "li:has-text('Regulariz') a"]:
+                # Hacer click en "Ingresar" de la sección Movimiento de Personal
+                mov_clicked = False
+                try:
+                    # Buscar el contenedor con texto "Movimiento de Personal" y su botón Ingresar
+                    secciones = page.locator("td, div, li").all()
+                    for sec in secciones:
+                        txt = sec.inner_text() or ''
+                        if 'Movimiento de Personal' in txt or 'Reconocimiento de Deuda' in txt:
+                            btn = sec.locator("button:has-text('Ingresar'), a:has-text('Ingresar'), input[value='Ingresar']")
+                            if btn.count() > 0:
+                                btn.first.click()
+                                log("✓ Click en Ingresar de Movimiento de Personal")
+                                mov_clicked = True
+                                break
+                except: pass
+
+                if not mov_clicked:
+                    # Fallback por texto directo
+                    for sel in ["a[id*='regulariza']", "a:has-text('Regulariz')", "button:has-text('Ingresar')"]:
                         try:
-                            page.locator(sel).first.click()
-                            break
+                            if page.locator(sel).count() > 0:
+                                page.locator(sel).first.click()
+                                log(f"✓ Click Movimiento fallback: {sel}")
+                                mov_clicked = True
+                                break
                         except: pass
-                page.wait_for_timeout(800)
+
+                if not mov_clicked:
+                    save_screenshot(f'bot_nomov_{job_id[:8]}.png')
+                    raise Exception("No se encontró sección Movimiento de Personal. Ver captura.")
+
+                page.wait_for_timeout(1500)
+                save_screenshot(f'bot_mov_personal_{job_id[:8]}.png')
+                log(f"URL movimiento personal: {page.url}")
 
                 # Ingreso Manual
                 click("#regularizacion_manual")

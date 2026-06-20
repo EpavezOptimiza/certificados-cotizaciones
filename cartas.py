@@ -470,33 +470,42 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 return
 
             log("Login OK")
-            portal_url = page.url  # guardar URL del portal post-login
 
-            def ir_a_empresas():
-                """Navega al portal y hace click en el menú Empresas."""
-                try:
-                    page.goto(portal_url, wait_until='domcontentloaded', timeout=15000)
-                except Exception:
-                    page.goto("https://www.previred.com/wPortal/login/portal.jsp", wait_until='domcontentloaded', timeout=15000)
-                page.wait_for_timeout(3000)
-                # Si hay error de PreviRed, refrescar
-                if page.locator("text=Elemento no encontrado").count() > 0 or page.locator("text=Error interno").count() > 0:
-                    log("⚠ PreviRed mostró error, refrescando...")
-                    page.reload(wait_until='domcontentloaded')
-                    page.wait_for_timeout(3000)
-                empresa_menu_sels = [
-                    "li#empresa", "li[id='empresa']",
-                    "a:has-text('Empresas')", "span:has-text('Empresas')",
-                ]
-                for sel in empresa_menu_sels:
+            def ir_a_inicio():
+                """Vuelve a la página principal clickeando el logo de PreviRed."""
+                for sel in ["a img[alt*='PreviRed' i]", ".logo a", "a[href*='Ctrl1Fce']", "a[href*='portal']"]:
                     try:
                         el = page.locator(sel).first
                         if el.count() > 0:
                             el.click()
-                            log(f"✓ Click en menú Empresas: {sel}")
-                            break
+                            page.wait_for_timeout(3000)
+                            return
                     except: pass
-                page.wait_for_timeout(4000)
+                # Si nada funciona, volver atrás en historial
+                try:
+                    page.go_back(wait_until='domcontentloaded', timeout=8000)
+                    page.wait_for_timeout(2000)
+                except: pass
+
+            def ir_a_empresas():
+                """Hace click en el menú/tile Empresas desde la página actual."""
+                # Si la página muestra error de PreviRed, intentar volver al inicio
+                if page.locator("text=Elemento no encontrado").count() > 0:
+                    log("⚠ PreviRed mostró error — volviendo al inicio...")
+                    ir_a_inicio()
+                    page.wait_for_timeout(2000)
+
+                for sel in ["li#empresa > a", "li#empresa", "a:has-text('Empresas')", "span:has-text('Empresas')"]:
+                    try:
+                        el = page.locator(sel).first
+                        if el.count() > 0:
+                            el.scroll_into_view_if_needed()
+                            el.click()
+                            log(f"✓ Click en Empresas: {sel}")
+                            page.wait_for_timeout(4000)
+                            return
+                    except: pass
+                log("⚠ No se encontró el botón Empresas")
 
             # ── Procesar cada trabajador ───────────────────────────────────────
             for w in workers:

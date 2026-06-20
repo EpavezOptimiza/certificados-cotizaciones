@@ -403,9 +403,13 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
             # ── Procesar cada trabajador ───────────────────────────────────────
             for w in workers:
-                rut_e = w['rut_empresa']
+                rut_e = w.get('rut_empresa') or ''
+                rut_t_raw = w.get('rut_trabajador') or ''
+                if not rut_e or not rut_t_raw:
+                    log(f"⚠ Saltando trabajador sin RUT empresa o trabajador: {w.get('nombre','?')}")
+                    continue
                 rut_num = rut_e.replace('.','').split('-')[0].strip()
-                rut_t = w['rut_trabajador'].replace('.','').replace(' ','')
+                rut_t = rut_t_raw.replace('.','').replace(' ','')
                 inst = w.get('institucion','').strip()
                 es_ausentismo = 'ausentismo' in (w.get('causa') or '').lower()
                 periodos_parsed = parse_periodos(w) if es_ausentismo else []

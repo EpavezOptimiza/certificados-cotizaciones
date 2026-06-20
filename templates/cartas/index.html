@@ -826,8 +826,8 @@ async function pollBot() {
     document.getElementById('bot-spinner').style.display = 'none';
   }
 
-  // Mostrar captura o video si están disponibles
-  if (data.screenshot) {
+  // Mostrar captura inline si está disponible
+  if (data.screenshot_b64) {
     let diagEl = document.getElementById('bot-diagnostico');
     if (!diagEl) {
       diagEl = document.createElement('div');
@@ -836,15 +836,11 @@ async function pollBot() {
       document.getElementById('bot-log').parentElement.appendChild(diagEl);
     }
     diagEl.innerHTML = `
-      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">📸 Captura de pantalla del bot:</div>
-      <a href="/cartas/api/descargar/${data.screenshot}" target="_blank"
-         style="display:inline-block;padding:6px 14px;background:#2563eb;color:white;border-radius:6px;font-size:12px;text-decoration:none">
-        🔍 Ver captura
-      </a>
-      ${data.video ? `<a href="/cartas/api/descargar/${data.video}" target="_blank"
-         style="display:inline-block;margin-left:8px;padding:6px 14px;background:#7c3aed;color:white;border-radius:6px;font-size:12px;text-decoration:none">
-        🎥 Ver video
-      </a>` : ''}
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">📸 ${data.screenshot_label || 'Captura del bot'}:</div>
+      <img src="data:image/png;base64,${data.screenshot_b64}"
+           style="max-width:100%;border-radius:4px;border:1px solid #334155;cursor:pointer"
+           onclick="window.open(this.src,'_blank')"
+           title="Click para ver en pantalla completa" />
     `;
   }
 }

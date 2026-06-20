@@ -391,15 +391,14 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
             # ── Login ─────────────────────────────────────────────────────────
             log("Accediendo a PreviRed...")
-            data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
-            os.makedirs(data_dir, exist_ok=True)
 
-            def save_screenshot(name):
-                path = os.path.join(data_dir, name)
+            def save_screenshot(label):
                 try:
-                    page.screenshot(path=path, full_page=True)
-                    job['screenshot'] = name
-                    log(f"📸 Captura: {name}")
+                    import base64
+                    png_bytes = page.screenshot(full_page=True)
+                    job['screenshot_b64'] = base64.b64encode(png_bytes).decode()
+                    job['screenshot_label'] = label
+                    log(f"📸 Captura guardada: {label}")
                 except Exception as se:
                     log(f"(sin captura: {se})")
 
@@ -785,7 +784,8 @@ def estado_bot(job_id):
         "log": job['log'],
         "resultados": job['resultados'],
         "error": job.get('error'),
-        "screenshot": job.get('screenshot'),
+        "screenshot_b64": job.get('screenshot_b64'),
+        "screenshot_label": job.get('screenshot_label'),
         "video": job.get('video'),
     })
 

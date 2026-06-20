@@ -16,4 +16,5 @@ RUN playwright install chromium
 
 COPY . .
 
-CMD ["python", "-c", "import os,subprocess,sys; port=os.environ.get('PORT','8080'); sys.exit(subprocess.call(['gunicorn','app:app','--bind',f'0.0.0.0:{port}','--workers','1','--threads','4','--timeout','600']))"]
+EXPOSE 8080
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "600"]

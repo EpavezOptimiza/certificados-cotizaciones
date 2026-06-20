@@ -1,13 +1,20 @@
 FROM python:3.11-slim
 
-# Chromium + chromedriver de Debian (version-matched, sin descargas externas)
+# Dependencias base + Chrome oficial de Google
 RUN apt-get update && apt-get install -y \
-    chromium chromium-driver \
-    fonts-liberation libatk-bridge2.0-0 libgtk-3-0 libxss1 \
+    wget gnupg ca-certificates curl \
+    libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+    libxfixes3 libxrandr2 libgbm1 libasound2 \
+    && wget -q -O /tmp/chrome.deb \
+       https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get install -y /tmp/chrome.deb \
+    && rm /tmp/chrome.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Deshabilitar Selenium Manager para que no intente descargar su propio chromedriver
-ENV SE_MANAGER_ENABLED=false
+# Deshabilitar Selenium Manager (usa el chromedriver que descargue webdriver-manager)
+ENV SE_MANAGER_ENABLED=false \
+    WDM_LOG=0
 
 WORKDIR /app
 COPY requirements.txt .

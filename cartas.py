@@ -315,12 +315,12 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         opts.add_argument('--disable-gpu')
         opts.add_argument('--window-size=1280,900')
 
-        # Buscar binario de Chrome/Chromium
-        _chrome = (shutil.which('chromium')
-                or shutil.which('chromium-browser')
-                or shutil.which('google-chrome-stable')
-                or shutil.which('google-chrome'))
-        log(f"Chrome encontrado: {_chrome}")
+        # Buscar binario de Chrome/Chromium instalado
+        _chrome = (shutil.which('google-chrome-stable')
+                or shutil.which('google-chrome')
+                or shutil.which('chromium')
+                or shutil.which('chromium-browser'))
+        log(f"Chrome binario: {_chrome}")
         if _chrome:
             opts.binary_location = _chrome
 
@@ -334,15 +334,12 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         })
 
         from selenium.webdriver.chrome.service import Service as ChromeService
-        # Buscar chromedriver (Debian lo instala en /usr/bin/chromedriver)
-        _chromedriver = (shutil.which('chromedriver')
-                      or '/usr/bin/chromedriver'
-                      or '/usr/lib/chromium/chromedriver')
-        log(f"ChromeDriver encontrado: {_chromedriver}")
-
-        # SE_MANAGER_ENABLED=false en Dockerfile, pero también forzamos aquí
+        from webdriver_manager.chrome import ChromeDriverManager
         os.environ['SE_MANAGER_ENABLED'] = 'false'
-        service = ChromeService(executable_path=_chromedriver)
+        # webdriver_manager descarga el chromedriver correcto para la versión instalada
+        _wdm_path = ChromeDriverManager().install()
+        log(f"ChromeDriver: {_wdm_path}")
+        service = ChromeService(executable_path=_wdm_path)
         driver = webdriver.Chrome(service=service, options=opts)
         wait = WebDriverWait(driver, 20)
 

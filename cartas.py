@@ -319,6 +319,9 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 except: pass
             return result
 
+        video_dir = os.path.join(tmp_dir, 'video')
+        os.makedirs(video_dir, exist_ok=True)
+
         with sync_playwright() as pw:
             browser = pw.chromium.launch(
                 headless=True,
@@ -328,9 +331,11 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
             ctx = browser.new_context(
                 accept_downloads=True,
                 viewport={'width': 1280, 'height': 900},
+                record_video_dir=video_dir,
+                record_video_size={'width': 1280, 'height': 900},
             )
             page = ctx.new_page()
-            page.set_default_timeout(25000)
+            page.set_default_timeout(45000)
 
             def click(selector):
                 try:
@@ -569,7 +574,19 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     log(f"⚠ Error comprobante {rut_t}: {e}")
                     job['resultados'][w['rut_trabajador']] = 'sin_pdf'
 
+            ctx.close()
             browser.close()
+
+            # Guardar video
+            videos = [f for f in os.listdir(video_dir) if f.endswith('.webm')]
+            if videos:
+                data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
+                os.makedirs(data_dir, exist_ok=True)
+                video_dest = os.path.join(data_dir, f'bot_video_{job_id[:8]}.webm')
+                shutil.move(os.path.join(video_dir, videos[0]), video_dest)
+                job['video'] = f'bot_video_{job_id[:8]}.webm'
+                log(f"🎥 Video guardado: bot_video_{job_id[:8]}.webm")
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
         job['status'] = 'done'
         log("✅ Bot finalizado")
@@ -580,6 +597,16 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         job['error'] = str(e)
         job['log'].append(f"Error fatal: {e}")
         print(traceback.format_exc())
+        # Guardar video aunque haya error
+        try:
+            videos = [f for f in os.listdir(video_dir) if f.endswith('.webm')]
+            if videos:
+                data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
+                os.makedirs(data_dir, exist_ok=True)
+                video_dest = os.path.join(data_dir, f'bot_video_{job_id[:8]}.webm')
+                shutil.move(os.path.join(video_dir, videos[0]), video_dest)
+                job['video'] = f'bot_video_{job_id[:8]}.webm'
+        except: pass
 
 # ── Rutas ─────────────────────────────────────────────────────────────────────
 

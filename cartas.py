@@ -470,6 +470,33 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 return
 
             log("Login OK")
+            portal_url = page.url  # guardar URL del portal post-login
+
+            def ir_a_empresas():
+                """Navega al portal y hace click en el menú Empresas."""
+                try:
+                    page.goto(portal_url, wait_until='domcontentloaded', timeout=15000)
+                except Exception:
+                    page.goto("https://www.previred.com/wPortal/login/portal.jsp", wait_until='domcontentloaded', timeout=15000)
+                page.wait_for_timeout(3000)
+                # Si hay error de PreviRed, refrescar
+                if page.locator("text=Elemento no encontrado").count() > 0 or page.locator("text=Error interno").count() > 0:
+                    log("⚠ PreviRed mostró error, refrescando...")
+                    page.reload(wait_until='domcontentloaded')
+                    page.wait_for_timeout(3000)
+                empresa_menu_sels = [
+                    "li#empresa", "li[id='empresa']",
+                    "a:has-text('Empresas')", "span:has-text('Empresas')",
+                ]
+                for sel in empresa_menu_sels:
+                    try:
+                        el = page.locator(sel).first
+                        if el.count() > 0:
+                            el.click()
+                            log(f"✓ Click en menú Empresas: {sel}")
+                            break
+                    except: pass
+                page.wait_for_timeout(4000)
 
             # ── Procesar cada trabajador ───────────────────────────────────────
             for w in workers:
@@ -485,26 +512,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 periodos_parsed = parse_periodos(w) if es_ausentismo else []
 
                 log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")
-
-                # Ir a la sección Empresas desde el menú principal
-                page.goto("https://www.previred.com/wPortal/Ctrl1Fce", wait_until='domcontentloaded')
-                page.wait_for_timeout(3000)
-
-                # Click en "Empresas" del menú o tile
-                empresa_menu_sels = [
-                    "li#empresa", "li[id='empresa']",
-                    "a:has-text('Empresas')", "span:has-text('Empresas')",
-                    "div:has-text('Empresas')",
-                ]
-                for sel in empresa_menu_sels:
-                    try:
-                        el = page.locator(sel).first
-                        if el.count() > 0:
-                            el.click()
-                            log(f"✓ Click en menú Empresas: {sel}")
-                            break
-                    except: pass
-                page.wait_for_timeout(4000)
+                ir_a_empresas()
 
                 # Scroll para cargar lista de empresas
                 for _ in range(10):

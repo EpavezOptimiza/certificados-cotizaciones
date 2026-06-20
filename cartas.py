@@ -306,6 +306,8 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         import time, calendar
 
         log("Iniciando Chrome headless...")
+        import shutil, os
+
         opts = webdriver.ChromeOptions()
         opts.add_argument('--headless')
         opts.add_argument('--no-sandbox')
@@ -313,12 +315,12 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         opts.add_argument('--disable-gpu')
         opts.add_argument('--window-size=1280,900')
 
-        # En Railway/Linux usar Chrome de apt si está disponible
-        import shutil
-        _chrome = (shutil.which('google-chrome-stable')
-                or shutil.which('google-chrome')
-                or shutil.which('chromium')
-                or shutil.which('chromium-browser'))
+        # Buscar binario de Chrome/Chromium
+        _chrome = (shutil.which('chromium')
+                or shutil.which('chromium-browser')
+                or shutil.which('google-chrome-stable')
+                or shutil.which('google-chrome'))
+        log(f"Chrome encontrado: {_chrome}")
         if _chrome:
             opts.binary_location = _chrome
 
@@ -332,12 +334,15 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         })
 
         from selenium.webdriver.chrome.service import Service as ChromeService
-        from webdriver_manager.chrome import ChromeDriverManager
-        _chromedriver = shutil.which('chromedriver')
-        if _chromedriver:
-            service = ChromeService(executable_path=_chromedriver)
-        else:
-            service = ChromeService(ChromeDriverManager().install())
+        # Buscar chromedriver (Debian lo instala en /usr/bin/chromedriver)
+        _chromedriver = (shutil.which('chromedriver')
+                      or '/usr/bin/chromedriver'
+                      or '/usr/lib/chromium/chromedriver')
+        log(f"ChromeDriver encontrado: {_chromedriver}")
+
+        # SE_MANAGER_ENABLED=false en Dockerfile, pero también forzamos aquí
+        os.environ['SE_MANAGER_ENABLED'] = 'false'
+        service = ChromeService(executable_path=_chromedriver)
         driver = webdriver.Chrome(service=service, options=opts)
         wait = WebDriverWait(driver, 20)
 

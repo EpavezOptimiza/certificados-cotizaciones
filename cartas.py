@@ -533,24 +533,50 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_empresas_{job_id[:8]}.png')
                 log(f"URL empresas: {page.url}")
 
-                # Buscar empresa por RUT
-                emp_btn = page.locator(f"[id*='empresa#{rut_num}']")
-                if emp_btn.count() == 0:
-                    log(f"⚠ Empresa {rut_e} (RUT limpio: {rut_num}) no encontrada")
+                # Buscar empresa — nuevo UI: botón "Ingresar" en tabla
+                # Intentar fila que contenga el RUT
+                ingresado = False
+                rut_formateado = rut_e.replace('.','').split('-')[0]  # 78383289
+                try:
+                    # Buscar fila con el RUT y hacer click en su botón Ingresar
+                    filas = page.locator("tr").all()
+                    for fila in filas:
+                        if rut_formateado in (fila.inner_text() or ''):
+                            btn = fila.locator("button:has-text('Ingresar'), input[value='Ingresar'], a:has-text('Ingresar')")
+                            if btn.count() > 0:
+                                btn.first.click()
+                                log(f"✓ Click Ingresar en fila con RUT {rut_e}")
+                                ingresado = True
+                                break
+                except: pass
+
+                if not ingresado:
+                    # Fallback: primer botón Ingresar de la página
+                    btn = page.locator("button:has-text('Ingresar'), input[value='Ingresar'], a:has-text('Ingresar')").first
+                    if btn.count() > 0:
+                        btn.click()
+                        log("✓ Click en primer botón Ingresar")
+                        ingresado = True
+
+                if not ingresado:
+                    save_screenshot(f'bot_noemp_{job_id[:8]}.png')
+                    log(f"⚠ No se encontró botón Ingresar para empresa {rut_e}")
                     job['resultados'][w['rut_trabajador']] = 'error_empresa'
                     continue
 
-                emp_btn.first.scroll_into_view_if_needed()
-                emp_id = emp_btn.first.get_attribute('id')
-                emp_btn.first.click()
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(3000)
+                save_screenshot(f'bot_dentro_empresa_{job_id[:8]}.png')
+                log(f"URL dentro empresa: {page.url}")
 
-                # Regulariza
-                reg_id = emp_id.replace('empresa#', 'regulariza#')
-                try:
-                    page.locator(f"#{reg_id}").click()
-                except:
-                    click("a[id*='regulariza']")
+                # Ir a Regularización / Movimiento Personal
+                click("a[id*='regulariza']")
+                if page.locator("a[id*='regulariza']").count() == 0:
+                    # Nuevo UI: buscar enlace por texto
+                    for sel in ["a:has-text('Regulariz')", "a:has-text('Movimiento')", "li:has-text('Regulariz') a"]:
+                        try:
+                            page.locator(sel).first.click()
+                            break
+                        except: pass
                 page.wait_for_timeout(1500)
 
                 # Ingreso Manual

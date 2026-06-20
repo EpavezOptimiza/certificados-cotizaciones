@@ -16,4 +16,6 @@ RUN playwright install chromium
 
 COPY . .
 
-CMD ["/bin/sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 4 --timeout 600"]
+RUN chmod +x start.sh
+
+ENTRYPOINT ["/bin/sh", "start.sh"]

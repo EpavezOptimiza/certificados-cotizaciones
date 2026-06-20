@@ -1,18 +1,15 @@
-FROM python:3.11-slim
+FROM python:3.11-bookworm
 
-# Dependencias base + Chrome oficial de Google
-RUN apt-get update && apt-get install -y \
-    wget gnupg ca-certificates curl \
-    libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
-    libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-    libxfixes3 libxrandr2 libgbm1 libasound2 \
-    && wget -q -O /tmp/chrome.deb \
-       https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get install -y /tmp/chrome.deb \
-    && rm /tmp/chrome.deb \
+# Chrome oficial de Google con todas sus dependencias en Debian Bookworm
+RUN apt-get update && apt-get install -y wget gnupg ca-certificates \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub \
+       | gpg --dearmor -o /usr/share/keyrings/googlechrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome.gpg] \
+       http://dl.google.com/linux/chrome/deb/ stable main" \
+       > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-# Deshabilitar Selenium Manager (usa el chromedriver que descargue webdriver-manager)
 ENV SE_MANAGER_ENABLED=false \
     WDM_LOG=0
 

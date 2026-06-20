@@ -391,21 +391,79 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
             # ── Login ─────────────────────────────────────────────────────────
             log("Accediendo a PreviRed...")
-            page.goto("https://www.previred.com/wEmpresas/CtrlFce", wait_until='domcontentloaded')
-            page.wait_for_timeout(4000)
-
-            # Captura de pantalla para diagnóstico
             data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
             os.makedirs(data_dir, exist_ok=True)
-            screenshot_path = os.path.join(data_dir, f'bot_login_{job_id[:8]}.png')
-            page.screenshot(path=screenshot_path, full_page=True)
-            job['screenshot'] = f'bot_login_{job_id[:8]}.png'
-            log(f"📸 Captura guardada: bot_login_{job_id[:8]}.png")
 
-            fill('#web_rut', rut_login)
-            fill('#web_clave', clave)
-            page.locator('#web_btn_login').click()
-            page.wait_for_timeout(4000)
+            def save_screenshot(name):
+                path = os.path.join(data_dir, name)
+                try:
+                    page.screenshot(path=path, full_page=True)
+                    job['screenshot'] = name
+                    log(f"📸 Captura: {name}")
+                except Exception as se:
+                    log(f"(sin captura: {se})")
+
+            page.goto("https://www.previred.com/wEmpresas/CtrlFce", wait_until='domcontentloaded')
+            page.wait_for_timeout(5000)
+            log(f"URL actual: {page.url}")
+            save_screenshot(f'bot_login_{job_id[:8]}.png')
+
+            # Detectar y llenar el formulario de login con múltiples selectores
+            RUT_SELS   = ['#web_rut', '[name="web_rut"]', '[name="web_rut2"]', 'input[type="text"]']
+            CLAVE_SELS = ['#web_clave', '[name="web_clave"]', '[name="web_password"]', 'input[type="password"]']
+            BTN_SELS   = [
+                '#web_btn_login',
+                'button[type="submit"]',
+                'input[type="submit"]',
+                'button:has-text("INGRESAR")',
+                'button:has-text("Ingresar")',
+                'button:has-text("Entrar")',
+                '[value="INGRESAR"]',
+            ]
+
+            def try_fill(sels, value, campo):
+                for sel in sels:
+                    try:
+                        el = page.locator(sel).first
+                        el.wait_for(state='visible', timeout=2000)
+                        el.fill(value)
+                        log(f"✓ Campo {campo} llenado con: {sel}")
+                        return True
+                    except: pass
+                log(f"⚠ No se encontró campo {campo}")
+                return False
+
+            try_fill(RUT_SELS, rut_login, 'RUT')
+            try_fill(CLAVE_SELS, clave, 'clave')
+
+            btn_clicked = False
+            for sel in BTN_SELS:
+                try:
+                    el = page.locator(sel).first
+                    el.wait_for(state='visible', timeout=3000)
+                    el.click()
+                    btn_clicked = True
+                    log(f"✓ Click en botón login: {sel}")
+                    break
+                except: pass
+
+            if not btn_clicked:
+                # Último recurso: Enter en el campo clave
+                for sel in CLAVE_SELS:
+                    try:
+                        page.locator(sel).first.press('Enter')
+                        btn_clicked = True
+                        log("✓ Login via Enter en campo clave")
+                        break
+                    except: pass
+
+            if not btn_clicked:
+                save_screenshot(f'bot_nologin_{job_id[:8]}.png')
+                raise Exception("No se encontró el botón de login en PreviRed. Ver captura para diagnóstico.")
+
+            page.wait_for_timeout(5000)
+            save_screenshot(f'bot_postlogin_{job_id[:8]}.png')
+            log(f"URL post-login: {page.url}")
 
             if 'login' in page.url.lower() or page.locator('text=Ingresa tu RUT').count() > 0:
                 job['status'] = 'error'
@@ -720,6 +778,8 @@ def estado_bot(job_id):
         "log": job['log'],
         "resultados": job['resultados'],
         "error": job.get('error'),
+        "screenshot": job.get('screenshot'),
+        "video": job.get('video'),
     })
 
 @cartas_bp.route("/api/marcar_gestion", methods=["POST"])

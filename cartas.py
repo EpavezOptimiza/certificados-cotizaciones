@@ -402,22 +402,21 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 except Exception as se:
                     log(f"(sin captura: {se})")
 
-            page.goto("https://www.previred.com/wEmpresas/CtrlFce", wait_until='domcontentloaded')
+            page.goto("https://www.previred.com/wPortal/login/login.jsp", wait_until='domcontentloaded')
             page.wait_for_timeout(5000)
             log(f"URL actual: {page.url}")
             save_screenshot(f'bot_login_{job_id[:8]}.png')
 
-            # Detectar y llenar el formulario de login con múltiples selectores
-            RUT_SELS   = ['#web_rut', '[name="web_rut"]', '[name="web_rut2"]', 'input[type="text"]']
-            CLAVE_SELS = ['#web_clave', '[name="web_clave"]', '[name="web_password"]', 'input[type="password"]']
+            # Selectores del formulario de login de PreviRed
+            RUT_SELS   = ['[name="web_rut2"]', '#web_rut', '[name="web_rut"]', 'input[type="text"]']
+            CLAVE_SELS = ['[name="web_password"]', '#web_clave', '[name="web_clave"]', 'input[type="password"]']
             BTN_SELS   = [
+                'button:has-text("INGRESAR")',
+                'button:has-text("Ingresar")',
+                'input[value="INGRESAR"]',
                 '#web_btn_login',
                 'button[type="submit"]',
                 'input[type="submit"]',
-                'button:has-text("INGRESAR")',
-                'button:has-text("Ingresar")',
-                'button:has-text("Entrar")',
-                '[value="INGRESAR"]',
             ]
 
             def try_fill(sels, value, campo):

@@ -729,10 +729,17 @@ def generar_carta():
 @cartas_bp.route("/api/descargar/<filename>")
 @cartas_login_required
 def descargar(filename):
-    """Descarga un PDF generado."""
-    data_dir = current_app.config.get('DATA_DIR', 'adjuntos')
-    return send_file(os.path.join(data_dir, filename),
-                     as_attachment=True, download_name=filename)
+    """Descarga o muestra un archivo generado (PDF, PNG, WEBM)."""
+    # Buscar en DATA_DIR configurado, o en adjuntos/ relativo al módulo
+    data_dir = current_app.config.get('DATA_DIR') or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
+    filepath = os.path.join(data_dir, filename)
+    if not os.path.isfile(filepath):
+        return f"Archivo no encontrado: {filename}. El bot debe ejecutarse de nuevo para generar una nueva captura.", 404
+    ext = filename.rsplit('.', 1)[-1].lower()
+    mime = {'png': 'image/png', 'webm': 'video/webm', 'pdf': 'application/pdf'}.get(ext, 'application/octet-stream')
+    as_attach = ext not in ('png', 'webm')
+    return send_file(filepath, mimetype=mime, as_attachment=as_attach, download_name=filename)
 
 @cartas_bp.route("/api/iniciar_bot", methods=["POST"])
 @cartas_login_required

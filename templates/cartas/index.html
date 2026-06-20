@@ -826,8 +826,8 @@ async function pollBot() {
     document.getElementById('bot-spinner').style.display = 'none';
   }
 
-  // Mostrar captura inline si está disponible
-  if (data.screenshot_b64) {
+  // Mostrar captura y video si están disponibles
+  if (data.screenshot_b64 || data.video) {
     let diagEl = document.getElementById('bot-diagnostico');
     if (!diagEl) {
       diagEl = document.createElement('div');
@@ -835,13 +835,24 @@ async function pollBot() {
       diagEl.style = 'margin-top:12px;padding:10px;background:#1e293b;border-radius:6px';
       document.getElementById('bot-log').parentElement.appendChild(diagEl);
     }
-    diagEl.innerHTML = `
-      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">📸 ${data.screenshot_label || 'Captura del bot'}:</div>
+    let html = '';
+    if (data.screenshot_b64) {
+      html += `<div style="font-size:12px;color:#94a3b8;margin-bottom:6px">📸 ${data.screenshot_label || 'Captura del bot'}:</div>
       <img src="data:image/png;base64,${data.screenshot_b64}"
-           style="max-width:100%;border-radius:4px;border:1px solid #334155;cursor:pointer"
+           style="max-width:100%;border-radius:4px;border:1px solid #334155;cursor:pointer;margin-bottom:10px"
            onclick="window.open(this.src,'_blank')"
-           title="Click para ver en pantalla completa" />
-    `;
+           title="Click para ver en pantalla completa" />`;
+    }
+    if (data.video) {
+      html += `<div style="margin-top:8px">
+        <a href="/cartas/api/descargar/${data.video}" target="_blank"
+           style="display:inline-block;padding:7px 16px;background:#7c3aed;color:white;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600">
+          🎥 Ver video del bot
+        </a>
+        <span style="font-size:11px;color:#64748b;margin-left:8px">${data.video}</span>
+      </div>`;
+    }
+    diagEl.innerHTML = html;
   }
 }
 

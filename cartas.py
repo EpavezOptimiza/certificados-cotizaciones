@@ -392,7 +392,16 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
             # ── Login ─────────────────────────────────────────────────────────
             log("Accediendo a PreviRed...")
             page.goto("https://www.previred.com/wEmpresas/CtrlFce", wait_until='domcontentloaded')
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(4000)
+
+            # Captura de pantalla para diagnóstico
+            data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
+            os.makedirs(data_dir, exist_ok=True)
+            screenshot_path = os.path.join(data_dir, f'bot_login_{job_id[:8]}.png')
+            page.screenshot(path=screenshot_path, full_page=True)
+            job['screenshot'] = f'bot_login_{job_id[:8]}.png'
+            log(f"📸 Captura guardada: bot_login_{job_id[:8]}.png")
+
             fill('#web_rut', rut_login)
             fill('#web_clave', clave)
             page.locator('#web_btn_login').click()

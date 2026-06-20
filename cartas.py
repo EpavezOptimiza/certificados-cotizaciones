@@ -235,7 +235,7 @@ def generar_carta_pdf(carta_data, firma_data):
     MESES_ES = {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril',
                 '05':'Mayo','06':'Junio','07':'Julio','08':'Agosto',
                 '09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}
-    mes_num = carta_data.get('mes', datetime.now().strftime('%Y-%m')).split('-')
+    mes_num = (carta_data.get('mes') or datetime.now().strftime('%Y-%m')).split('-')
     mes_txt = MESES_ES.get(mes_num[1] if len(mes_num) > 1 else '', '') if len(mes_num) > 1 else ''
     anio_txt = mes_num[0] if mes_num else str(datetime.now().year)
     fecha_txt = f"Santiago, {mes_txt} {anio_txt}"

@@ -17,6 +17,7 @@ MESES_NOMBRE = {
 
 def rut_a_btn_id(rut: str) -> str:
     """'76.098.152-4' → 'empresa#76098152#00#false'"""
+    rut = (rut or '').strip()
     num = rut.split("-")[0].replace(".", "")
     return f"empresa#{num}#00#false"
 

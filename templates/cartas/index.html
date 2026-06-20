@@ -843,13 +843,13 @@ async function pollBot() {
            onclick="window.open(this.src,'_blank')"
            title="Click para ver en pantalla completa" />`;
     }
-    if (data.video) {
+    if (data.has_video) {
       html += `<div style="margin-top:8px">
-        <a href="/cartas/api/descargar/${data.video}" target="_blank"
+        <a href="/cartas/api/video/${jobId}" target="_blank"
            style="display:inline-block;padding:7px 16px;background:#7c3aed;color:white;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600">
           🎥 Ver video del bot
         </a>
-        <span style="font-size:11px;color:#64748b;margin-left:8px">${data.video}</span>
+        <span style="font-size:11px;color:#64748b;margin-left:8px">${data.video_name||''}</span>
       </div>`;
     }
     diagEl.innerHTML = html;

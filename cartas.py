@@ -662,15 +662,13 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
             ctx.close()
             browser.close()
 
-            # Guardar video
+            # Guardar video en memoria
             videos = [f for f in os.listdir(video_dir) if f.endswith('.webm')]
             if videos:
-                data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
-                os.makedirs(data_dir, exist_ok=True)
-                video_dest = os.path.join(data_dir, f'bot_video_{job_id[:8]}.webm')
-                shutil.move(os.path.join(video_dir, videos[0]), video_dest)
+                with open(os.path.join(video_dir, videos[0]), 'rb') as vf:
+                    job['video_bytes'] = vf.read()
                 job['video'] = f'bot_video_{job_id[:8]}.webm'
-                log(f"🎥 Video guardado: bot_video_{job_id[:8]}.webm")
+                log(f"🎥 Video listo: bot_video_{job_id[:8]}.webm")
 
         shutil.rmtree(tmp_dir, ignore_errors=True)
         job['status'] = 'done'
@@ -682,14 +680,12 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         job['error'] = str(e)
         job['log'].append(f"Error fatal: {e}")
         print(traceback.format_exc())
-        # Guardar video aunque haya error
+        # Guardar video en memoria aunque haya error
         try:
             videos = [f for f in os.listdir(video_dir) if f.endswith('.webm')]
             if videos:
-                data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adjuntos')
-                os.makedirs(data_dir, exist_ok=True)
-                video_dest = os.path.join(data_dir, f'bot_video_{job_id[:8]}.webm')
-                shutil.move(os.path.join(video_dir, videos[0]), video_dest)
+                with open(os.path.join(video_dir, videos[0]), 'rb') as vf:
+                    job['video_bytes'] = vf.read()
                 job['video'] = f'bot_video_{job_id[:8]}.webm'
         except: pass
 
@@ -743,6 +739,17 @@ def generar_carta():
     with open(dest, 'wb') as fout:
         fout.write(pdf_bytes)
     return jsonify({"ok": True, "filename": fname})
+
+@cartas_bp.route("/api/video/<job_id>")
+@cartas_login_required
+def ver_video(job_id):
+    """Sirve el video del bot desde memoria."""
+    job = _jobs.get(job_id)
+    if not job or not job.get('video_bytes'):
+        return "Video no disponible (el bot debe ejecutarse de nuevo)", 404
+    from flask import Response
+    return Response(job['video_bytes'], mimetype='video/webm',
+                    headers={'Content-Disposition': f'inline; filename="{job.get("video","bot_video.webm")}"'})
 
 @cartas_bp.route("/api/descargar/<filename>")
 @cartas_login_required
@@ -805,7 +812,8 @@ def estado_bot(job_id):
         "error": job.get('error'),
         "screenshot_b64": job.get('screenshot_b64'),
         "screenshot_label": job.get('screenshot_label'),
-        "video": job.get('video'),
+        "has_video": bool(job.get('video_bytes')),
+        "video_name": job.get('video'),
     })
 
 @cartas_bp.route("/api/marcar_gestion", methods=["POST"])

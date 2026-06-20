@@ -486,20 +486,40 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")
 
-                page.goto("https://www.previred.com/wEmpresas/CtrlFce", wait_until='domcontentloaded')
-                page.wait_for_timeout(2000)
+                # Ir a la sección Empresas desde el menú principal
+                page.goto("https://www.previred.com/wPortal/Ctrl1Fce", wait_until='domcontentloaded')
+                page.wait_for_timeout(3000)
 
-                # Scroll para cargar empresas
-                for _ in range(8):
-                    page.evaluate("window.scrollBy(0, 400)")
-                    page.wait_for_timeout(150)
+                # Click en "Empresas" del menú o tile
+                empresa_menu_sels = [
+                    "li#empresa", "li[id='empresa']",
+                    "a:has-text('Empresas')", "span:has-text('Empresas')",
+                    "div:has-text('Empresas')",
+                ]
+                for sel in empresa_menu_sels:
+                    try:
+                        el = page.locator(sel).first
+                        if el.count() > 0:
+                            el.click()
+                            log(f"✓ Click en menú Empresas: {sel}")
+                            break
+                    except: pass
+                page.wait_for_timeout(4000)
+
+                # Scroll para cargar lista de empresas
+                for _ in range(10):
+                    page.evaluate("window.scrollBy(0, 300)")
+                    page.wait_for_timeout(200)
                 page.evaluate("window.scrollTo(0, 0)")
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(1000)
+
+                save_screenshot(f'bot_empresas_{job_id[:8]}.png')
+                log(f"URL empresas: {page.url}")
 
                 # Buscar empresa por RUT
-                emp_btn = page.locator(f"button[id*='empresa#{rut_num}']")
+                emp_btn = page.locator(f"[id*='empresa#{rut_num}']")
                 if emp_btn.count() == 0:
-                    log(f"⚠ Empresa {rut_e} no encontrada")
+                    log(f"⚠ Empresa {rut_e} (RUT limpio: {rut_num}) no encontrada")
                     job['resultados'][w['rut_trabajador']] = 'error_empresa'
                     continue
 

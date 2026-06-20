@@ -299,335 +299,273 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
         print(f"[BOT {job_id[:8]}] {msg}")
 
     try:
-        from selenium import webdriver
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait, Select
-        from selenium.webdriver.support import expected_conditions as EC
-        import time, calendar
+        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+        import time, calendar, datetime as _dt
 
-        log("Iniciando Chrome headless...")
-        import shutil, os
-
-        opts = webdriver.ChromeOptions()
-        opts.add_argument('--headless')
-        opts.add_argument('--no-sandbox')
-        opts.add_argument('--disable-dev-shm-usage')
-        opts.add_argument('--disable-gpu')
-        opts.add_argument('--window-size=1280,900')
-
-        # Buscar binario de Chrome/Chromium instalado
-        _chrome = (shutil.which('google-chrome-stable')
-                or shutil.which('google-chrome')
-                or shutil.which('chromium')
-                or shutil.which('chromium-browser'))
-        log(f"Chrome binario: {_chrome}")
-        if _chrome:
-            opts.binary_location = _chrome
-
-        # Configurar descarga automática de PDFs
+        log("Iniciando navegador...")
         tmp_dir = tempfile.mkdtemp()
-        opts.add_experimental_option("prefs", {
-            "download.default_directory": tmp_dir,
-            "download.prompt_for_download": False,
-            "plugins.always_open_pdf_externally": True,
-            "download.directory_upgrade": True,
-        })
 
-        from selenium.webdriver.chrome.service import Service as ChromeService
-        from webdriver_manager.chrome import ChromeDriverManager
-        os.environ['SE_MANAGER_ENABLED'] = 'false'
-        # webdriver_manager descarga el chromedriver correcto para la versión instalada
-        _wdm_path = ChromeDriverManager().install()
-        log(f"ChromeDriver: {_wdm_path}")
-        service = ChromeService(executable_path=_wdm_path)
-        driver = webdriver.Chrome(service=service, options=opts)
-        wait = WebDriverWait(driver, 20)
+        MESES_MAP = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
+                     'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12}
 
-        def click(by, val):
-            el = wait.until(EC.element_to_be_clickable((by, val)))
-            driver.execute_script("arguments[0].click();", el)
-
-        def fill(by, val, text):
-            el = wait.until(EC.presence_of_element_located((by, val)))
-            el.clear(); el.send_keys(text)
-
-        # Login PreviRed
-        log("Accediendo a PreviRed...")
-        driver.get("https://www.previred.com/wEmpresas/CtrlFce")
-        fill(By.ID, 'web_rut', rut_login)
-        fill(By.ID, 'web_clave', clave)
-        click(By.ID, 'web_btn_login')
-        time.sleep(4)
-
-        if 'login' in driver.current_url.lower() or 'Login' in driver.page_source:
-            job['status'] = 'error'
-            job['error'] = 'Credenciales PreviRed incorrectas'
-            driver.quit()
-            return
-
-        log("Login OK")
-
-        for w in workers:
-            rut_e = w['rut_empresa']
-            rut_num = rut_e.replace('.','').replace('-','').split('-')[0]
-            if '-' in rut_e:
-                rut_num = rut_e.replace('.','').split('-')[0]
-
-            log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")
-
-            # Navegar a movimiento
-            driver.get("https://www.previred.com/wEmpresas/CtrlFce")
-            time.sleep(3)
-
-            # Scroll para cargar empresas
-            for _ in range(10):
-                driver.execute_script("window.scrollBy(0, 400);")
-                time.sleep(0.2)
-            driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(1)
-
-            # Buscar empresa
-            btns = driver.find_elements(By.XPATH, "//button[contains(@id,'empresa#')]")
-            emp_btn = next((b for b in btns if rut_num in (b.get_attribute('id') or '')), None)
-            if not emp_btn:
-                log(f"⚠ Empresa {rut_e} no encontrada")
-                job['resultados'][w['rut_trabajador']] = 'error_empresa'
-                continue
-
-            driver.execute_script("arguments[0].scrollIntoView(true);", emp_btn)
-            driver.execute_script("arguments[0].click();", emp_btn)
-            time.sleep(2)
-
-            # Click en Regulariza
-            reg_id = emp_btn.get_attribute('id').replace('empresa#','regulariza#')
-            try:
-                reg_btn = driver.find_element(By.ID, reg_id)
-                driver.execute_script("arguments[0].click();", reg_btn)
-            except:
-                click(By.XPATH, "//a[contains(@id,'regulariza')]")
-            time.sleep(2)
-
-            # Ingreso Manual
-            click(By.XPATH, "//input[@id='regularizacion_manual'] | //label[contains(text(),'Ingreso Manual')]")
-            time.sleep(1)
-            click(By.XPATH, "//button[contains(text(),'Continuar')] | //input[@value='Continuar']")
-            time.sleep(3)
-
-            # Rellenar formulario
-            fill(By.XPATH, "//input[contains(@id,'web_rut_trabajador') or contains(@name,'rut_trabajador')]",
-                 '', )
-            rut_t = w['rut_trabajador'].replace('.','').replace(' ','')
-            rut_field = driver.find_elements(By.XPATH,
-                "//input[@type='text'][not(contains(@id,'empresa'))]")
-            if rut_field:
-                rut_field[0].clear(); rut_field[0].send_keys(rut_t)
-            time.sleep(1)
-
-            # AFP
-            try:
-                inst = w.get('institucion','').strip()
-                sel_afp = Select(driver.find_element(By.ID,'web_combo_codigo_afp'))
-                opciones = [o.text.strip() for o in sel_afp.options]
-                match = next((o for o in opciones if inst.upper() in o.upper() or o.upper() in inst.upper()), None)
-                if match: sel_afp.select_by_visible_text(match)
-            except: pass
-
-            # Salud
-            try:
-                Select(driver.find_element(By.ID,'web_combo_codigo_salud')).select_by_visible_text(w.get('salud','FONASA'))
-            except: pass
-
-            # Causa
-            try:
-                Select(driver.find_element(By.ID,'web_combo_movimiento_personal')).select_by_visible_text(w.get('causa',''))
-            except: pass
-
-            # Fecha cese si hay
-            if w.get('fecha_cese'):
+        def parse_periodos(w):
+            result = []
+            for p in w.get('periodos_sel', []):
                 try:
-                    fc = w['fecha_cese']
-                    driver.execute_script(f"var el=document.getElementById('web_fec_cese');if(el){{el.removeAttribute('readonly');el.value='{fc}';}}")
+                    parts = str(p).lower().split('-')
+                    m = MESES_MAP.get(parts[0][:3], 0)
+                    a = int(parts[1]) + 2000 if len(parts[1]) <= 2 else int(parts[1])
+                    if m: result.append((a, m))
+                except: pass
+            return result
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'],
+                downloads_path=tmp_dir,
+            )
+            ctx = browser.new_context(
+                accept_downloads=True,
+                viewport={'width': 1280, 'height': 900},
+            )
+            page = ctx.new_page()
+            page.set_default_timeout(25000)
+
+            def click(selector):
+                try:
+                    page.locator(selector).first.scroll_into_view_if_needed()
+                    page.locator(selector).first.click()
                 except: pass
 
-            es_ausentismo = 'ausentismo' in (w.get('causa') or '').lower()
-            periodos_parsed = []
+            def fill(selector, text):
+                try:
+                    page.locator(selector).first.fill(text)
+                except: pass
 
-            if es_ausentismo:
-                MESES_MAP = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
-                             'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12}
-                for p in w.get('periodos_sel', []):
+            def select_opt(selector, text):
+                try:
+                    page.locator(selector).first.select_option(label=text)
+                except: pass
+
+            def select_contains(selector, text):
+                try:
+                    opts = page.locator(f'{selector} option').all()
+                    for o in opts:
+                        t = o.inner_text().strip()
+                        if text.upper() in t.upper() or t.upper() in text.upper():
+                            page.locator(selector).first.select_option(label=t)
+                            return t
+                except: pass
+                return None
+
+            def continuar():
+                for sel in ["button:has-text('Continuar')", "input[value='Continuar']"]:
                     try:
-                        parts = str(p).lower().split('-')
-                        m = MESES_MAP.get(parts[0][:3], 0)
-                        a = int(parts[1]) + 2000 if len(parts[1]) <= 2 else int(parts[1])
-                        if m: periodos_parsed.append((a, m))
+                        page.locator(sel).first.click()
+                        return
                     except: pass
 
-                if periodos_parsed:
-                    # Período 0 — ingresar fechas antes del primer Continuar
+            def finalizar():
+                for sel in ["a:has-text('Finalizar')", "input[value='Finalizar']"]:
+                    try:
+                        page.locator(sel).first.click()
+                        return
+                    except: pass
+
+            def set_fecha_js(field_id, fecha_val):
+                page.evaluate(f"""
+                    var el = document.getElementById('{field_id}');
+                    if (el) {{
+                        el.removeAttribute('readonly');
+                        el.removeAttribute('disabled');
+                        el.value = '{fecha_val}';
+                        try {{ jQuery('#{field_id}').datepicker('setDate', '{fecha_val}'); }} catch(e) {{}}
+                    }}
+                """)
+
+            # ── Login ─────────────────────────────────────────────────────────
+            log("Accediendo a PreviRed...")
+            page.goto("https://www.previred.com/wEmpresas/CtrlFce", wait_until='domcontentloaded')
+            page.wait_for_timeout(2000)
+            fill('#web_rut', rut_login)
+            fill('#web_clave', clave)
+            page.locator('#web_btn_login').click()
+            page.wait_for_timeout(4000)
+
+            if 'login' in page.url.lower() or page.locator('text=Ingresa tu RUT').count() > 0:
+                job['status'] = 'error'
+                job['error'] = 'Credenciales PreviRed incorrectas'
+                browser.close()
+                return
+
+            log("Login OK")
+
+            # ── Procesar cada trabajador ───────────────────────────────────────
+            for w in workers:
+                rut_e = w['rut_empresa']
+                rut_num = rut_e.replace('.','').split('-')[0].strip()
+                rut_t = w['rut_trabajador'].replace('.','').replace(' ','')
+                inst = w.get('institucion','').strip()
+                es_ausentismo = 'ausentismo' in (w.get('causa') or '').lower()
+                periodos_parsed = parse_periodos(w) if es_ausentismo else []
+
+                log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")
+
+                page.goto("https://www.previred.com/wEmpresas/CtrlFce", wait_until='domcontentloaded')
+                page.wait_for_timeout(2000)
+
+                # Scroll para cargar empresas
+                for _ in range(8):
+                    page.evaluate("window.scrollBy(0, 400)")
+                    page.wait_for_timeout(150)
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(800)
+
+                # Buscar empresa por RUT
+                emp_btn = page.locator(f"button[id*='empresa#{rut_num}']")
+                if emp_btn.count() == 0:
+                    log(f"⚠ Empresa {rut_e} no encontrada")
+                    job['resultados'][w['rut_trabajador']] = 'error_empresa'
+                    continue
+
+                emp_btn.first.scroll_into_view_if_needed()
+                emp_id = emp_btn.first.get_attribute('id')
+                emp_btn.first.click()
+                page.wait_for_timeout(1500)
+
+                # Regulariza
+                reg_id = emp_id.replace('empresa#', 'regulariza#')
+                try:
+                    page.locator(f"#{reg_id}").click()
+                except:
+                    click("a[id*='regulariza']")
+                page.wait_for_timeout(1500)
+
+                # Ingreso Manual
+                click("#regularizacion_manual")
+                page.wait_for_timeout(500)
+                continuar()
+                page.wait_for_timeout(2500)
+
+                # RUT trabajador
+                rut_inputs = page.locator("input[type='text']:not([id*='empresa'])").all()
+                if rut_inputs:
+                    rut_inputs[0].fill(rut_t)
+                page.wait_for_timeout(800)
+
+                # AFP / Institución
+                select_contains('#web_combo_codigo_afp', inst)
+                # Salud
+                try:
+                    select_opt('#web_combo_codigo_salud', w.get('salud','FONASA'))
+                except: pass
+                # Causa
+                try:
+                    select_opt('#web_combo_movimiento_personal', w.get('causa',''))
+                except: pass
+                # Fecha cese
+                if w.get('fecha_cese'):
+                    set_fecha_js('web_fec_cese', w['fecha_cese'])
+
+                # Fechas ausentismo período 0
+                if es_ausentismo and periodos_parsed:
                     anio0, mes0 = periodos_parsed[0]
                     ult0 = calendar.monthrange(anio0, mes0)[1]
-                    desde0 = f"01/{mes0:02d}/{anio0}"
-                    hasta0 = f"{ult0}/{mes0:02d}/{anio0}"
-                    for fid, fval in [('start_date', desde0), ('end_date', hasta0)]:
-                        try:
-                            driver.execute_script(f"jQuery('#{fid}').datepicker('setDate', '{fval}');")
-                        except: pass
+                    set_fecha_js('start_date', f"01/{mes0:02d}/{anio0}")
+                    set_fecha_js('end_date', f"{ult0}/{mes0:02d}/{anio0}")
 
-            # Continuar → confirmación
-            click(By.XPATH,"//button[contains(text(),'Continuar')] | //input[@value='Continuar']")
-            time.sleep(3)
+                continuar()
+                page.wait_for_timeout(2500)
 
-            # Checkbox confirmación
-            try:
-                cb = wait.until(EC.presence_of_element_located((By.XPATH,"//input[@type='checkbox']")))
-                if not cb.is_selected(): driver.execute_script("arguments[0].click();", cb)
-                time.sleep(1)
-            except: pass
-
-            # Continuar → comprobante
-            click(By.XPATH,"//button[contains(text(),'Continuar')] | //input[@value='Continuar']")
-            time.sleep(4)
-
-            if es_ausentismo and len(periodos_parsed) > 1:
-                # Períodos 2+
-                for pi, (anio, mes) in enumerate(periodos_parsed[1:], 1):
-                    es_ultimo = (pi == len(periodos_parsed) - 1)
-                    ult = calendar.monthrange(anio, mes)[1]
-                    desde = f"01/{mes:02d}/{anio}"
-                    hasta = f"{ult}/{mes:02d}/{anio}"
-
-                    # Volver a Ingreso Movimiento
-                    if not es_ultimo:
-                        click(By.XPATH,"//button[contains(text(),'Continuar')] | //input[@value='Continuar']")
-                        time.sleep(3)
-                    else:
-                        # Finalizar en el último
-                        for xp in ["//a[contains(text(),'Finalizar')]","//input[@value='Finalizar']"]:
-                            els = driver.find_elements(By.XPATH, xp)
-                            if els: driver.execute_script("arguments[0].click();", els[0]); break
-                        time.sleep(3)
-                        break
-
-                    # Rellenar formulario períodos 2+
-                    rut_field2 = driver.find_elements(By.XPATH,"//input[@type='text']")
-                    if rut_field2: rut_field2[0].clear(); rut_field2[0].send_keys(rut_t)
-                    time.sleep(1)
-
-                    # AFP, salud, causa
-                    try:
-                        inst = w.get('institucion','').strip()
-                        sel2 = Select(driver.find_element(By.ID,'web_combo_codigo_afp'))
-                        ops2 = [o.text.strip() for o in sel2.options]
-                        m2 = next((o for o in ops2 if inst.upper() in o.upper()), None)
-                        if m2: sel2.select_by_visible_text(m2)
-                    except: pass
-                    try:
-                        Select(driver.find_element(By.ID,'web_combo_codigo_salud')).select_by_visible_text(w.get('salud','FONASA'))
-                    except: pass
-                    try:
-                        Select(driver.find_element(By.ID,'web_combo_movimiento_personal')).select_by_visible_text(w.get('causa',''))
-                    except: pass
-
-                    # Fechas
-                    for fid, fval in [('start_date', desde), ('end_date', hasta)]:
-                        try:
-                            driver.execute_script(f"jQuery('#{fid}').datepicker('setDate', '{fval}');")
-                        except: pass
-
-                    # Continuar formulario
-                    click(By.XPATH,"//button[contains(text(),'Continuar')] | //input[@value='Continuar']")
-                    time.sleep(2)
-
-                    # Checkbox confirmación
-                    try:
-                        cb2 = wait.until(EC.presence_of_element_located((By.XPATH,"//input[@type='checkbox']")))
-                        if not cb2.is_selected(): driver.execute_script("arguments[0].click();", cb2)
-                        time.sleep(1)
-                    except: pass
-
-                    # Continuar comprobante
-                    click(By.XPATH,"//button[contains(text(),'Continuar')] | //input[@value='Continuar']")
-                    time.sleep(3)
-
-            else:
-                # Finalizar
-                for xp in ["//a[contains(text(),'Finalizar')]","//input[@value='Finalizar']"]:
-                    els = driver.find_elements(By.XPATH, xp)
-                    if els:
-                        driver.execute_script("arguments[0].click();", els[0])
-                        break
-                time.sleep(3)
-
-            # Comprobante por Trabajador
-            log(f"Generando comprobante para {w['rut_trabajador']}...")
-            try:
-                import datetime as _dt
-                hoy = _dt.date.today().strftime('%d/%m/%Y')
-                cpt_xp = "//span[@id='cert_trabajador'] | //a[contains(text(),'Comprobante por Trabajador')]"
-                cpt_el = wait.until(EC.element_to_be_clickable((By.XPATH, cpt_xp)))
-                driver.execute_script("arguments[0].click();", cpt_el)
-                time.sleep(4)
-
-                # RUT
-                rf = wait.until(EC.presence_of_element_located((By.ID, 'web_rut2')))
-                driver.execute_script("arguments[0].value='';", rf)
-                rf.send_keys(rut_t)
-                time.sleep(1)
-
-                # AFP
+                # Checkbox confirmación
                 try:
-                    inst = w.get('institucion','').strip()
-                    sel3 = Select(driver.find_element(By.ID, 'web_combo_codigo_afp'))
-                    ops3 = [o.text.strip() for o in sel3.options]
-                    m3 = next((o for o in ops3 if inst.upper() in o.upper()), None)
-                    if m3: sel3.select_by_visible_text(m3)
+                    cb = page.locator("input[type='checkbox']").first
+                    if not cb.is_checked():
+                        cb.click()
+                    page.wait_for_timeout(800)
                 except: pass
 
-                # Fechas
-                for fid in ['web_desde', 'web_hasta']:
-                    js = (f"var el=document.getElementById('{fid}');"
-                          f"if(el){{el.removeAttribute('readonly');el.removeAttribute('disabled');el.value='{hoy}';}}"
-                          f"try{{jQuery('#{fid}').datepicker('setDate','{hoy}');}}catch(e){{}}")
-                    driver.execute_script(js)
-                time.sleep(1)
+                continuar()
+                page.wait_for_timeout(3000)
 
-                # Click Generar
-                for xp2 in ["//button[contains(@class,'submitBtn')]","//button[@value='submit']","//input[@type='submit']"]:
-                    els2 = driver.find_elements(By.XPATH, xp2)
-                    if els2:
-                        driver.execute_script("arguments[0].click();", els2[0])
-                        break
-                time.sleep(4)
+                # Períodos ausentismo 2+
+                if es_ausentismo and len(periodos_parsed) > 1:
+                    for pi, (anio, mes) in enumerate(periodos_parsed[1:], 1):
+                        es_ultimo = (pi == len(periodos_parsed) - 1)
+                        ult = calendar.monthrange(anio, mes)[1]
 
-                # Esperar descarga del PDF
-                import glob, time as t2
-                deadline = t2.time() + 30
-                pdf_file = None
-                while t2.time() < deadline:
-                    pdfs = glob.glob(os.path.join(tmp_dir, '*.pdf'))
-                    pdfs = [p for p in pdfs if not p.endswith('.crdownload')]
-                    if pdfs:
-                        pdf_file = pdfs[0]
-                        break
-                    t2.sleep(1)
+                        if es_ultimo:
+                            finalizar()
+                            page.wait_for_timeout(2500)
+                            break
 
-                if pdf_file:
-                    # Guardar en DATA_DIR
-                    data_dir = current_app.config.get('DATA_DIR', 'adjuntos')
-                    dest = os.path.join(data_dir, f"MOV_PER_{rut_t}.pdf")
-                    shutil.copy2(pdf_file, dest)
+                        continuar()
+                        page.wait_for_timeout(2500)
+
+                        rut_inputs2 = page.locator("input[type='text']").all()
+                        if rut_inputs2: rut_inputs2[0].fill(rut_t)
+                        page.wait_for_timeout(600)
+
+                        select_contains('#web_combo_codigo_afp', inst)
+                        try: select_opt('#web_combo_codigo_salud', w.get('salud','FONASA'))
+                        except: pass
+                        try: select_opt('#web_combo_movimiento_personal', w.get('causa',''))
+                        except: pass
+
+                        set_fecha_js('start_date', f"01/{mes:02d}/{anio}")
+                        set_fecha_js('end_date', f"{ult}/{mes:02d}/{anio}")
+
+                        continuar()
+                        page.wait_for_timeout(2000)
+                        try:
+                            cb2 = page.locator("input[type='checkbox']").first
+                            if not cb2.is_checked(): cb2.click()
+                            page.wait_for_timeout(600)
+                        except: pass
+                        continuar()
+                        page.wait_for_timeout(2500)
+                else:
+                    finalizar()
+                    page.wait_for_timeout(2500)
+
+                # ── Comprobante por Trabajador ─────────────────────────────────
+                log(f"Generando comprobante para {rut_t}...")
+                try:
+                    hoy = _dt.date.today().strftime('%d/%m/%Y')
+                    for sel in ["#cert_trabajador", "a:has-text('Comprobante por Trabajador')"]:
+                        try:
+                            page.locator(sel).first.click()
+                            break
+                        except: pass
+                    page.wait_for_timeout(3000)
+
+                    fill('#web_rut2', rut_t)
+                    page.wait_for_timeout(600)
+                    select_contains('#web_combo_codigo_afp', inst)
+
+                    for fid in ['web_desde', 'web_hasta']:
+                        set_fecha_js(fid, hoy)
+                    page.wait_for_timeout(600)
+
+                    # Descargar PDF
+                    with page.expect_download(timeout=30000) as dl_info:
+                        for sel in ["button.submitBtn", "button[value='submit']", "input[type='submit']"]:
+                            try:
+                                page.locator(sel).first.click()
+                                break
+                            except: pass
+                    download = dl_info.value
+                    pdf_dest = os.path.join(current_app.config.get('DATA_DIR','adjuntos'), f"MOV_PER_{rut_t}.pdf")
+                    download.save_as(pdf_dest)
                     job['resultados'][w['rut_trabajador']] = f"MOV_PER_{rut_t}.pdf"
                     log(f"✅ PDF guardado: MOV_PER_{rut_t}.pdf")
-                else:
-                    log(f"⚠ PDF no descargado para {rut_t}")
+
+                except Exception as e:
+                    log(f"⚠ Error comprobante {rut_t}: {e}")
                     job['resultados'][w['rut_trabajador']] = 'sin_pdf'
 
-            except Exception as e:
-                log(f"Error comprobante: {e}")
-                job['resultados'][w['rut_trabajador']] = 'error_comprobante'
-
-        driver.quit()
+            browser.close()
         shutil.rmtree(tmp_dir, ignore_errors=True)
         job['status'] = 'done'
         log("✅ Bot finalizado")

@@ -403,7 +403,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     log(f"(sin captura: {se})")
 
             page.goto("https://www.previred.com/wPortal/login/login.jsp", wait_until='domcontentloaded')
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(2000)
             log(f"URL actual: {page.url}")
             save_screenshot(f'bot_login_{job_id[:8]}.png')
 
@@ -459,7 +459,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_nologin_{job_id[:8]}.png')
                 raise Exception("No se encontró el botón de login en PreviRed. Ver captura para diagnóstico.")
 
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(2000)
             save_screenshot(f'bot_postlogin_{job_id[:8]}.png')
             log(f"URL post-login: {page.url}")
 
@@ -478,22 +478,21 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         el = page.locator(sel).first
                         if el.count() > 0:
                             el.click()
-                            page.wait_for_timeout(3000)
+                            page.wait_for_timeout(1500)
                             return
                     except: pass
                 # Si nada funciona, volver atrás en historial
                 try:
                     page.go_back(wait_until='domcontentloaded', timeout=8000)
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(1000)
                 except: pass
 
             def ir_a_empresas():
                 """Hace click en el menú/tile Empresas desde la página actual."""
-                # Si la página muestra error de PreviRed, intentar volver al inicio
                 if page.locator("text=Elemento no encontrado").count() > 0:
                     log("⚠ PreviRed mostró error — volviendo al inicio...")
                     ir_a_inicio()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(1000)
 
                 for sel in ["li#empresa > a", "li#empresa", "a:has-text('Empresas')", "span:has-text('Empresas')"]:
                     try:
@@ -502,7 +501,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                             el.scroll_into_view_if_needed()
                             el.click()
                             log(f"✓ Click en Empresas: {sel}")
-                            page.wait_for_timeout(4000)
+                            page.wait_for_timeout(2000)
                             return
                     except: pass
                 log("⚠ No se encontró el botón Empresas")
@@ -522,14 +521,6 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")
                 ir_a_empresas()
-
-                # Scroll para cargar lista de empresas
-                for _ in range(10):
-                    page.evaluate("window.scrollBy(0, 300)")
-                    page.wait_for_timeout(200)
-                page.evaluate("window.scrollTo(0, 0)")
-                page.wait_for_timeout(1000)
-
                 save_screenshot(f'bot_empresas_{job_id[:8]}.png')
                 log(f"URL empresas: {page.url}")
 
@@ -564,48 +555,43 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     job['resultados'][w['rut_trabajador']] = 'error_empresa'
                     continue
 
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(1500)
                 save_screenshot(f'bot_dentro_empresa_{job_id[:8]}.png')
                 log(f"URL dentro empresa: {page.url}")
 
                 # Ir a Regularización / Movimiento Personal
                 click("a[id*='regulariza']")
                 if page.locator("a[id*='regulariza']").count() == 0:
-                    # Nuevo UI: buscar enlace por texto
                     for sel in ["a:has-text('Regulariz')", "a:has-text('Movimiento')", "li:has-text('Regulariz') a"]:
                         try:
                             page.locator(sel).first.click()
                             break
                         except: pass
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(800)
 
                 # Ingreso Manual
                 click("#regularizacion_manual")
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(300)
                 continuar()
-                page.wait_for_timeout(2500)
+                page.wait_for_timeout(1500)
 
                 # RUT trabajador
                 rut_inputs = page.locator("input[type='text']:not([id*='empresa'])").all()
                 if rut_inputs:
                     rut_inputs[0].fill(rut_t)
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(400)
 
                 # AFP / Institución
                 select_contains('#web_combo_codigo_afp', inst)
-                # Salud
                 try:
                     select_opt('#web_combo_codigo_salud', w.get('salud','FONASA'))
                 except: pass
-                # Causa
                 try:
                     select_opt('#web_combo_movimiento_personal', w.get('causa',''))
                 except: pass
-                # Fecha cese
                 if w.get('fecha_cese'):
                     set_fecha_js('web_fec_cese', w['fecha_cese'])
 
-                # Fechas ausentismo período 0
                 if es_ausentismo and periodos_parsed:
                     anio0, mes0 = periodos_parsed[0]
                     ult0 = calendar.monthrange(anio0, mes0)[1]
@@ -613,20 +599,18 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     set_fecha_js('end_date', f"{ult0}/{mes0:02d}/{anio0}")
 
                 continuar()
-                page.wait_for_timeout(2500)
+                page.wait_for_timeout(1500)
 
-                # Checkbox confirmación
                 try:
                     cb = page.locator("input[type='checkbox']").first
                     if not cb.is_checked():
                         cb.click()
-                    page.wait_for_timeout(800)
+                    page.wait_for_timeout(400)
                 except: pass
 
                 continuar()
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(1500)
 
-                # Períodos ausentismo 2+
                 if es_ausentismo and len(periodos_parsed) > 1:
                     for pi, (anio, mes) in enumerate(periodos_parsed[1:], 1):
                         es_ultimo = (pi == len(periodos_parsed) - 1)
@@ -634,15 +618,15 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                         if es_ultimo:
                             finalizar()
-                            page.wait_for_timeout(2500)
+                            page.wait_for_timeout(1500)
                             break
 
                         continuar()
-                        page.wait_for_timeout(2500)
+                        page.wait_for_timeout(1500)
 
                         rut_inputs2 = page.locator("input[type='text']").all()
                         if rut_inputs2: rut_inputs2[0].fill(rut_t)
-                        page.wait_for_timeout(600)
+                        page.wait_for_timeout(300)
 
                         select_contains('#web_combo_codigo_afp', inst)
                         try: select_opt('#web_combo_codigo_salud', w.get('salud','FONASA'))
@@ -654,17 +638,17 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         set_fecha_js('end_date', f"{ult}/{mes:02d}/{anio}")
 
                         continuar()
-                        page.wait_for_timeout(2000)
+                        page.wait_for_timeout(1200)
                         try:
                             cb2 = page.locator("input[type='checkbox']").first
                             if not cb2.is_checked(): cb2.click()
-                            page.wait_for_timeout(600)
+                            page.wait_for_timeout(300)
                         except: pass
                         continuar()
-                        page.wait_for_timeout(2500)
+                        page.wait_for_timeout(1500)
                 else:
                     finalizar()
-                    page.wait_for_timeout(2500)
+                    page.wait_for_timeout(1500)
 
                 # ── Comprobante por Trabajador ─────────────────────────────────
                 log(f"Generando comprobante para {rut_t}...")
@@ -675,15 +659,15 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                             page.locator(sel).first.click()
                             break
                         except: pass
-                    page.wait_for_timeout(3000)
+                    page.wait_for_timeout(1500)
 
                     fill('#web_rut2', rut_t)
-                    page.wait_for_timeout(600)
+                    page.wait_for_timeout(300)
                     select_contains('#web_combo_codigo_afp', inst)
 
                     for fid in ['web_desde', 'web_hasta']:
                         set_fecha_js(fid, hoy)
-                    page.wait_for_timeout(600)
+                    page.wait_for_timeout(300)
 
                     # Descargar PDF
                     with page.expect_download(timeout=30000) as dl_info:

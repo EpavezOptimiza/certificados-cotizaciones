@@ -685,42 +685,44 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_post_continuar2_{job_id[:8]}.png')
                 log(f"URL post-continuar2: {page.url}")
 
+                # Para ausentismo con múltiples períodos: registrar cada período por separado
                 if es_ausentismo and len(periodos_parsed) > 1:
                     for pi, (anio, mes) in enumerate(periodos_parsed[1:], 1):
                         es_ultimo = (pi == len(periodos_parsed) - 1)
                         ult = calendar.monthrange(anio, mes)[1]
+                        log(f"📅 Período {pi+1}/{len(periodos_parsed)}: {mes:02d}/{anio}")
 
-                        if es_ultimo:
-                            finalizar()
-                            page.wait_for_timeout(1500)
-                            break
-
+                        # Continuar en la página de confirmación → vuelve al formulario
                         continuar()
                         page.wait_for_timeout(1500)
 
-                        rut_inputs2 = page.locator("input[type='text']").all()
-                        if rut_inputs2: rut_inputs2[0].fill(rut_t)
-                        page.wait_for_timeout(300)
-
+                        # Llenar formulario para este período
+                        try:
+                            page.locator("#web_rut_trabajador2").fill(rut_t)
+                            page.locator("#web_rut_trabajador2").press('Tab')
+                            page.wait_for_timeout(500)
+                        except: pass
                         select_contains('#web_combo_codigo_afp', inst)
                         try: select_opt('#web_combo_codigo_salud', w.get('salud','FONASA'))
                         except: pass
                         try: select_opt('#web_combo_movimiento_personal', w.get('causa',''))
                         except: pass
-
                         set_fecha_js('start_date', f"01/{mes:02d}/{anio}")
                         set_fecha_js('end_date', f"{ult}/{mes:02d}/{anio}")
 
                         continuar()
                         page.wait_for_timeout(1200)
                         try:
-                            cb2 = page.locator("input[type='checkbox']").first
-                            if not cb2.is_checked(): cb2.click()
+                            cb2 = page.locator("#web_chk_declaracion")
+                            if cb2.count() > 0 and not cb2.is_checked(): cb2.click()
                             page.wait_for_timeout(300)
                         except: pass
                         continuar()
                         page.wait_for_timeout(1500)
-                else:
+                        log(f"✓ Período {mes:02d}/{anio} registrado")
+                        # Último período: caer al bloque de comprobante (no finalizar)
+
+                # Comprobante — corre siempre después de registrar todos los períodos
                     page.wait_for_timeout(800)
                     log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
                     job['resultados'][w['rut_trabajador']] = 'completado'

@@ -596,20 +596,44 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_ingreso_manual_{job_id[:8]}.png')
                 log(f"URL ingreso manual: {page.url}")
 
-                # RUT trabajador
-                rut_inputs = page.locator("input[type='text']:not([id*='empresa'])").all()
-                if rut_inputs:
-                    rut_inputs[0].fill(rut_t)
-                page.wait_for_timeout(400)
+                # RUT trabajador — llenar y Tab para autocompletar nombre
+                for sel in ["#web_rut_trabajador", "input[name*='rut']", "input[type='text']"]:
+                    try:
+                        el = page.locator(sel).first
+                        if el.count() > 0:
+                            el.fill(rut_t)
+                            el.press('Tab')
+                            log(f"✓ RUT trabajador llenado: {rut_t}")
+                            break
+                    except: pass
+                page.wait_for_timeout(1000)
 
-                # AFP / Institución
-                select_contains('#web_combo_codigo_afp', inst)
-                try:
-                    select_opt('#web_combo_codigo_salud', w.get('salud','FONASA'))
-                except: pass
-                try:
-                    select_opt('#web_combo_movimiento_personal', w.get('causa',''))
-                except: pass
+                # AFP
+                for sel in ['#web_combo_codigo_afp', 'select[id*="afp"]', 'select[name*="afp"]']:
+                    try:
+                        if page.locator(sel).count() > 0:
+                            select_contains(sel, inst)
+                            log(f"✓ AFP seleccionada: {inst}")
+                            break
+                    except: pass
+
+                # Salud
+                for sel in ['#web_combo_codigo_salud', 'select[id*="salud"]', 'select[name*="salud"]']:
+                    try:
+                        if page.locator(sel).count() > 0:
+                            select_opt(sel, w.get('salud', 'FONASA'))
+                            break
+                    except: pass
+
+                # Causa
+                for sel in ['#web_combo_movimiento_personal', 'select[id*="causa"]', 'select[id*="movimiento"]', 'select[name*="causa"]']:
+                    try:
+                        if page.locator(sel).count() > 0:
+                            select_contains(sel, w.get('causa', ''))
+                            log(f"✓ Causa seleccionada: {w.get('causa','')}")
+                            break
+                    except: pass
+
                 if w.get('fecha_cese'):
                     set_fecha_js('web_fec_cese', w['fecha_cese'])
 
@@ -619,6 +643,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     set_fecha_js('start_date', f"01/{mes0:02d}/{anio0}")
                     set_fecha_js('end_date', f"{ult0}/{mes0:02d}/{anio0}")
 
+                save_screenshot(f'bot_form_{job_id[:8]}.png')
                 continuar()
                 page.wait_for_timeout(1500)
 

@@ -625,14 +625,35 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                             break
                     except: pass
 
-                # Causa
-                for sel in ['#web_combo_movimiento_personal', 'select[id*="causa"]', 'select[id*="movimiento"]', 'select[name*="causa"]']:
+                # Causa — buscar el select que tenga "Seleccione una Causa" como opción
+                causa_val = w.get('causa', '')
+                causa_ok = False
+                for sel in ['#web_combo_movimiento_personal', 'select[id*="causa"]', 'select[id*="movimiento"]', 'select[name*="causa"]', 'select[name*="movimiento"]']:
                     try:
                         if page.locator(sel).count() > 0:
-                            select_contains(sel, w.get('causa', ''))
-                            log(f"✓ Causa seleccionada: {w.get('causa','')}")
-                            break
+                            r = select_contains(sel, causa_val)
+                            if r:
+                                log(f"✓ Causa seleccionada: {r}")
+                                causa_ok = True
+                                break
                     except: pass
+                if not causa_ok:
+                    # Buscar cualquier select con opción "Seleccione una Causa"
+                    try:
+                        todos = page.locator('select').all()
+                        for sel_el in todos:
+                            opts = sel_el.locator('option').all_inner_texts()
+                            if any('Causa' in o or 'Movimiento' in o for o in opts):
+                                sel_id = sel_el.get_attribute('id') or sel_el.get_attribute('name') or ''
+                                if sel_id:
+                                    r = select_contains(f'#{sel_id}' if sel_el.get_attribute('id') else f'[name="{sel_id}"]', causa_val)
+                                    if r:
+                                        log(f"✓ Causa seleccionada (auto): {r}")
+                                        causa_ok = True
+                                        break
+                    except: pass
+                if not causa_ok:
+                    log(f"⚠ No se pudo seleccionar causa: {causa_val}")
 
                 if w.get('fecha_cese'):
                     set_fecha_js('web_fec_cese', w['fecha_cese'])

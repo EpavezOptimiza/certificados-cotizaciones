@@ -768,8 +768,8 @@ function renderPreviRedWorkers() {
         <td>${w.nombre}</td>
         <td>${w.rut_trabajador}</td>
         <td>${w.institucion}</td>
-        <td><select onchange="seleccionados['${w.rut_trabajador}'].causa=this.value;seleccionados['${w.rut_trabajador}'].checked=seleccionados['${w.rut_trabajador}'].checked" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;width:100%">${opsCausa}</select></td>
-        <td>${!/licencia|subsidio/i.test(causaActual) ? `<input type="date" value="${fechaTerm}" onchange="(function(v,r){var dd=v.split('-').reverse().join('/');seleccionados[r].fecha_termino=v;seleccionados[r].fecha_cese=dd;var el=document.getElementById('f-fecha-cese');if(el)el.value=dd;})(this.value,'${w.rut_trabajador}')" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px">` : `<span style="color:#94a3b8;font-size:12px;font-style:italic">No aplica</span>`}</td>
+        <td><select onchange="(function(v,r){seleccionados[r].causa=v;var fi=document.getElementById('ft-'+r);if(fi){var dis=/licencia|subsidio/i.test(v);fi.disabled=dis;fi.style.opacity=dis?'0.35':'1';}})(this.value,'${w.rut_trabajador}')" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;width:100%">${opsCausa}</select></td>
+        <td><input type="date" id="ft-${w.rut_trabajador}" value="${fechaTerm}" ${/licencia|subsidio/i.test(causaActual)?'disabled style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;opacity:0.35"':'style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px"'} onchange="(function(v,r){var dd=v.split('-').reverse().join('/');seleccionados[r].fecha_termino=v;seleccionados[r].fecha_cese=dd;var el=document.getElementById('f-fecha-cese');if(el)el.value=dd;})(this.value,'${w.rut_trabajador}')"></td>
         <td>${(sel.periodos_sel||w.periodos||[]).join(', ')}</td>
       </tr>`;
     }).join('')}</tbody>

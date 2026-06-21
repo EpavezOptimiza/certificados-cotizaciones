@@ -610,6 +610,11 @@ function renderMotivos() {
 }
 
 function setMotivo(m) {
+  const sel = currentRut ? seleccionados[currentRut] : null;
+  const fecha = sel ? (sel.fecha_cese || '') : '';
+  if (m.toLowerCase().includes('con fecha') && fecha) {
+    m = m + ' ' + fecha;
+  }
   document.getElementById('f-motivo').value = m;
   guardarForm();
 }
@@ -643,7 +648,7 @@ function verPreview() {
   const fechaTxt = `Santiago, ${MESES_ES[parseInt(mesN)]||''} ${anio||''}`;
   const inst = document.getElementById('f-inst').value;
   const motivo = sel.motivo || '[MOTIVO]';
-  const fechaCese = sel.fecha_cese ? ' ' + sel.fecha_cese : '';
+  const fechaCese = (sel.fecha_cese && !motivo.includes(sel.fecha_cese)) ? ' ' + sel.fecha_cese : '';
 
   const preview = `${fechaTxt}
 

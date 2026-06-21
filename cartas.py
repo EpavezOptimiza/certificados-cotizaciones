@@ -258,7 +258,7 @@ def generar_carta_pdf(carta_data, firma_data):
     if not motivo:
         motivo = carta_data.get('motivo_deuda', '[MOTIVO]')
     fecha_cese = carta_data.get('fecha_cese', '')
-    if fecha_cese and motivo and '[MOTIVO]' not in motivo:
+    if fecha_cese and motivo and '[MOTIVO]' not in motivo and fecha_cese not in motivo:
         motivo_final = motivo + ' ' + fecha_cese
     else:
         motivo_final = motivo or '[MOTIVO]'

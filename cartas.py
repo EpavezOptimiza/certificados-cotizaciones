@@ -793,7 +793,22 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                     page.wait_for_timeout(800)
 
-                    # Click Generar Comprobante → capturar nueva página/popup → PDF oficial
+                    # Interceptar el PDF real que sirve CtrlPdf antes de hacer click
+                    pdf_capturado = []
+
+                    def capturar_pdf(route):
+                        try:
+                            response = route.fetch()
+                            body = response.body()
+                            if body and len(body) > 1000:
+                                pdf_capturado.append(body)
+                                log(f"📥 PDF capturado: {len(body)} bytes")
+                            route.fulfill(response=response)
+                        except Exception:
+                            route.continue_()
+
+                    ctx.route('**/CtrlPdf**', capturar_pdf)
+
                     try:
                         with ctx.expect_page(timeout=25000) as new_page_info:
                             page.evaluate("""() => {
@@ -802,20 +817,25 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                                     var txt = (el.textContent || el.value || '').trim();
                                     if (txt.indexOf('Generar') !== -1) {
                                         (el.tagName === 'SPAN' ? el.parentElement : el).click();
-                                        return txt;
+                                        return;
                                     }
                                 }
                             }""")
                         popup = new_page_info.value
                         popup.wait_for_load_state('networkidle', timeout=20000)
-                        popup.wait_for_timeout(2000)
-                        pdf_bytes = popup.pdf(format='A4', print_background=True)
+                        popup.wait_for_timeout(1000)
                         popup.close()
-                        job['comprobante_bytes'] = pdf_bytes
-                        job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                        log(f"✅ Comprobante oficial: MOV_PER_{rut_t}.pdf ({len(pdf_bytes)} bytes)")
                     except Exception as e:
-                        log(f"⚠ Error generando comprobante: {e}")
+                        log(f"⚠ Error popup: {e}")
+
+                    ctx.unroute('**/CtrlPdf**')
+
+                    if pdf_capturado:
+                        job['comprobante_bytes'] = pdf_capturado[0]
+                        job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
+                        log(f"✅ Comprobante real: MOV_PER_{rut_t}.pdf ({len(pdf_capturado[0])} bytes)")
+                    else:
+                        log("⚠ No se capturó el PDF de CtrlPdf")
 
             ctx.close()
             browser.close()

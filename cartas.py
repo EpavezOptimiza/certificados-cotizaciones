@@ -610,74 +610,37 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_ingreso_manual_{job_id[:8]}.png')
                 log(f"URL ingreso manual: {page.url}")
 
-                # Diagnóstico: loguear todos los inputs/selects del formulario
+                # RUT trabajador — campo visible es web_rut_trabajador2
                 try:
-                    inputs = page.locator('input, select, textarea').all()
-                    for inp in inputs:
-                        iid = inp.get_attribute('id') or ''
-                        iname = inp.get_attribute('name') or ''
-                        itype = inp.get_attribute('type') or inp.evaluate('el => el.tagName')
-                        log(f"  campo: id={iid!r} name={iname!r} type={itype!r}")
-                except Exception as de:
-                    log(f"  (diagnóstico fallido: {de})")
-
-                # RUT trabajador — llenar y Tab para autocompletar nombre
-                for sel in ["#web_rut_trabajador", "input[name*='rut']", "input[type='text']"]:
-                    try:
-                        el = page.locator(sel).first
-                        if el.count() > 0:
-                            el.fill(rut_t)
-                            el.press('Tab')
-                            log(f"✓ RUT trabajador llenado: {rut_t}")
-                            break
-                    except: pass
-                page.wait_for_timeout(1000)
+                    el = page.locator("#web_rut_trabajador2")
+                    el.wait_for(state='visible', timeout=5000)
+                    el.fill(rut_t)
+                    el.press('Tab')
+                    page.wait_for_timeout(800)
+                    log(f"✓ RUT trabajador llenado: {rut_t}")
+                except Exception as e:
+                    log(f"⚠ No se pudo llenar RUT trabajador: {e}")
 
                 # AFP
-                for sel in ['#web_combo_codigo_afp', 'select[id*="afp"]', 'select[name*="afp"]']:
-                    try:
-                        if page.locator(sel).count() > 0:
-                            select_contains(sel, inst)
-                            log(f"✓ AFP seleccionada: {inst}")
-                            break
-                    except: pass
+                try:
+                    select_contains('#web_combo_codigo_afp', inst)
+                    log(f"✓ AFP seleccionada: {inst}")
+                except: pass
 
                 # Salud
-                for sel in ['#web_combo_codigo_salud', 'select[id*="salud"]', 'select[name*="salud"]']:
-                    try:
-                        if page.locator(sel).count() > 0:
-                            select_opt(sel, w.get('salud', 'FONASA'))
-                            break
-                    except: pass
+                try:
+                    select_opt('#web_combo_codigo_salud', w.get('salud', 'FONASA'))
+                except: pass
 
-                # Causa — buscar el select que tenga "Seleccione una Causa" como opción
+                # Causa
                 causa_val = w.get('causa', '')
-                causa_ok = False
-                for sel in ['#web_combo_movimiento_personal', 'select[id*="causa"]', 'select[id*="movimiento"]', 'select[name*="causa"]', 'select[name*="movimiento"]']:
-                    try:
-                        if page.locator(sel).count() > 0:
-                            r = select_contains(sel, causa_val)
-                            if r:
-                                log(f"✓ Causa seleccionada: {r}")
-                                causa_ok = True
-                                break
-                    except: pass
-                if not causa_ok:
-                    # Buscar cualquier select con opción "Seleccione una Causa"
-                    try:
-                        todos = page.locator('select').all()
-                        for sel_el in todos:
-                            opts = sel_el.locator('option').all_inner_texts()
-                            if any('Causa' in o or 'Movimiento' in o for o in opts):
-                                sel_id = sel_el.get_attribute('id') or sel_el.get_attribute('name') or ''
-                                if sel_id:
-                                    r = select_contains(f'#{sel_id}' if sel_el.get_attribute('id') else f'[name="{sel_id}"]', causa_val)
-                                    if r:
-                                        log(f"✓ Causa seleccionada (auto): {r}")
-                                        causa_ok = True
-                                        break
-                    except: pass
-                if not causa_ok:
+                try:
+                    r = select_contains('#web_combo_movimiento_personal', causa_val)
+                    if r:
+                        log(f"✓ Causa seleccionada: {r}")
+                    else:
+                        log(f"⚠ No se pudo seleccionar causa: {causa_val}")
+                except:
                     log(f"⚠ No se pudo seleccionar causa: {causa_val}")
 
                 # Fecha de término — primero el valor editado en UI, luego el del Excel
@@ -687,52 +650,8 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     if '-' in fecha_term and fecha_term.count('-') == 2 and len(fecha_term) == 10:
                         partes = fecha_term.split('-')
                         fecha_term = f"{partes[2]}/{partes[1]}/{partes[0]}"
-                    # Intentar varios IDs posibles para el campo "Hasta"
-                    fecha_ids = ['web_fec_cese', 'web_fec_hasta', 'web_fecha_hasta', 'fec_hasta', 'hasta', 'end_date']
-                    fecha_ok = False
-                    for fid in fecha_ids:
-                        result = page.evaluate(f"""
-                            (function() {{
-                                var el = document.getElementById('{fid}');
-                                if (el) {{
-                                    el.removeAttribute('readonly');
-                                    el.removeAttribute('disabled');
-                                    el.value = '{fecha_term}';
-                                    try {{ jQuery('#{fid}').datepicker('setDate', '{fecha_term}'); }} catch(e) {{}}
-                                    return el.id;
-                                }}
-                                return null;
-                            }})()
-                        """)
-                        if result:
-                            log(f"✓ Fecha término en campo #{result}: {fecha_term}")
-                            fecha_ok = True
-                            break
-                    if not fecha_ok:
-                        # Último recurso: buscar input de fecha cerca del label "Hasta"
-                        try:
-                            result2 = page.evaluate(f"""
-                                (function() {{
-                                    var labels = document.querySelectorAll('label, td, th, span');
-                                    for (var i=0; i<labels.length; i++) {{
-                                        if (labels[i].textContent.trim().toLowerCase() === 'hasta') {{
-                                            var inp = labels[i].nextElementSibling || labels[i].querySelector('input') || document.querySelector('input[id*="hasta"], input[name*="hasta"], input[id*="cese"], input[name*="cese"]');
-                                            if (inp) {{
-                                                inp.removeAttribute('readonly');
-                                                inp.value = '{fecha_term}';
-                                                return inp.id || inp.name || 'found';
-                                            }}
-                                        }}
-                                    }}
-                                    return null;
-                                }})()
-                            """)
-                            if result2:
-                                log(f"✓ Fecha término (label Hasta) en #{result2}: {fecha_term}")
-                                fecha_ok = True
-                        except: pass
-                    if not fecha_ok:
-                        log(f"⚠ No se pudo llenar fecha término: campo no encontrado. Fecha: {fecha_term}")
+                    set_fecha_js('end_date', fecha_term)
+                    log(f"✓ Fecha término (Hasta): {fecha_term}")
 
                 if es_ausentismo and periodos_parsed:
                     anio0, mes0 = periodos_parsed[0]
@@ -742,17 +661,17 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 save_screenshot(f'bot_form_{job_id[:8]}.png')
                 continuar()
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(800)
 
                 try:
-                    cb = page.locator("input[type='checkbox']").first
-                    if not cb.is_checked():
+                    cb = page.locator("#web_chk_declaracion")
+                    if cb.count() > 0 and not cb.is_checked():
                         cb.click()
-                    page.wait_for_timeout(400)
+                    page.wait_for_timeout(300)
                 except: pass
 
                 continuar()
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(800)
 
                 if es_ausentismo and len(periodos_parsed) > 1:
                     for pi, (anio, mes) in enumerate(periodos_parsed[1:], 1):

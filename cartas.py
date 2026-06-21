@@ -725,52 +725,55 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
                     job['resultados'][w['rut_trabajador']] = 'completado'
 
-                    # PreviRed redirige automáticamente a CtrlFce después del movimiento
-                    # Esperar a que la página cargue completamente
-                    page.wait_for_load_state('networkidle', timeout=15000)
-                    page.wait_for_timeout(1000)
-                    url_actual = page.url
-                    log(f"URL para comprobante: {url_actual}")
+                    # Hacer click en "Comprobante por Trabajador" del menú lateral (igual que el usuario)
+                    log("📄 Buscando menú Comprobante por Trabajador...")
+                    try:
+                        comp_menu = page.locator("text='Comprobante por Trabajador'").first
+                        comp_menu.wait_for(state='visible', timeout=8000)
+                        comp_menu.click()
+                        page.wait_for_timeout(2000)
+                        log("✓ Click Comprobante por Trabajador")
+                    except Exception as e:
+                        log(f"⚠ Menú no encontrado: {e}")
+                        # Diagnóstico: listar todos los textos clickeables del menú
+                        menu_items = page.evaluate("""() => Array.from(document.querySelectorAll('a, li, span, div')).filter(e => {
+                            const t = e.textContent.trim();
+                            return t.length > 3 && t.length < 60 && e.offsetHeight > 0;
+                        }).map(e => e.tagName + ': ' + e.textContent.trim()).slice(0, 30)""")
+                        log(f"Elementos visibles: {menu_items}")
 
-                    # Si no está en CtrlFce, navegar allá
-                    if 'CtrlFce' not in url_actual:
-                        try:
-                            page.locator("a:has-text('Finalizar'), button:has-text('Finalizar')").first.click()
-                            page.wait_for_timeout(800)
-                            log("✓ Finalizar")
-                        except: pass
-                        page.goto('https://www.previred.com/wEmpresas/CtrlFce', wait_until='networkidle', timeout=20000)
-                        page.wait_for_timeout(1000)
-                        log("✓ Navegado a CtrlFce")
+                    # Diagnóstico: ver inputs visibles del formulario
+                    inputs_visibles = page.evaluate("""() => Array.from(document.querySelectorAll('input:not([type=hidden])')).map(i => i.id + '|' + i.name + '|' + i.type + '|' + i.value)""")
+                    log(f"Inputs visibles: {inputs_visibles}")
 
-                    # Volcar IDs de los inputs para diagnóstico
-                    inputs_info = page.evaluate("""() => Array.from(document.querySelectorAll('input')).map(i => i.id + '|' + i.name + '|' + i.type + '|' + i.value)""")
-                    log(f"Inputs CtrlFce: {inputs_info}")
-
-                    # Si el RUT no está pre-llenado, llenarlo
                     import datetime as _dt2
                     hoy = _dt2.date.today().strftime('%d/%m/%Y')
+
+                    # Llenar RUT del trabajador en el formulario
                     try:
-                        rut_inp = page.locator("input[id*='rut' i], input[name*='rut' i]").first
-                        val_rut = rut_inp.input_value()
-                        if not val_rut:
+                        rut_inp = page.locator("input:not([type=hidden])[id*='rut' i], input:not([type=hidden])[name*='rut' i]").first
+                        val = rut_inp.input_value(timeout=5000)
+                        if not val:
                             rut_inp.fill(rut_t)
                             log(f"✓ RUT llenado: {rut_t}")
                         else:
-                            log(f"✓ RUT ya está: {val_rut}")
+                            log(f"✓ RUT ya tiene: {val}")
                     except Exception as e:
                         log(f"⚠ RUT field: {e}")
 
-                    # Fecha Desde = hoy (si no está ya)
+                    # Llenar Fecha Desde
                     try:
-                        fecha_inp = page.locator("input[id*='desde' i], input[name*='desde' i], input[id*='ini' i]").first
-                        if not fecha_inp.input_value():
+                        fecha_inp = page.locator("input:not([type=hidden])[id*='desde' i], input:not([type=hidden])[name*='desde' i]").first
+                        val_f = fecha_inp.input_value(timeout=5000)
+                        if not val_f:
                             fecha_inp.fill(hoy)
                             log(f"✓ Fecha desde: {hoy}")
+                        else:
+                            log(f"✓ Fecha desde ya tiene: {val_f}")
                     except Exception as e:
                         log(f"⚠ Fecha field: {e}")
 
-                    # Click Generar Comprobante — abre popup con el PDF oficial
+                    # Click Generar Comprobante → popup → PDF oficial
                     try:
                         with page.expect_popup(timeout=20000) as popup_info:
                             page.locator("button:has-text('Generar Comprobante'), input[value*='Generar']").first.click()
@@ -781,7 +784,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         popup.close()
                         job['comprobante_bytes'] = pdf_bytes
                         job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                        log(f"✅ Comprobante oficial descargado: MOV_PER_{rut_t}.pdf ({len(pdf_bytes)} bytes)")
+                        log(f"✅ Comprobante oficial: MOV_PER_{rut_t}.pdf ({len(pdf_bytes)} bytes)")
                     except Exception as e:
                         log(f"⚠ Error generando comprobante: {e}")
 

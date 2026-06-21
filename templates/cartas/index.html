@@ -525,6 +525,7 @@ function selectWorker(rut) {
   if (!seleccionados[rut]) {
     seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
   }
+  seleccionados[rut].checked = true;
   renderSidebar();
   renderCartaForm();
   switchTab('carta');

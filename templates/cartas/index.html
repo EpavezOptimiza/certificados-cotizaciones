@@ -425,6 +425,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab')[['visor','carta','previred','estado'].indexOf(tab)].classList.add('active');
   if (tab === 'estado') renderEstado();
   if (tab === 'previred') renderPreviRedWorkers();
+  if (tab === 'carta' && currentRut) cargarWorker(currentRut);
 }
 
 // ── Upload Excel ──────────────────────────────────────────────────────────────

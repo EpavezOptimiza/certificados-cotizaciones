@@ -721,50 +721,32 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         continuar()
                         page.wait_for_timeout(1500)
                 else:
-                    finalizar()
-                    page.wait_for_timeout(1500)
+                    # Página de comprobante — guardar screenshot y click Imprimir
+                    page.wait_for_timeout(800)
+                    save_screenshot(f'bot_comprobante_{job_id[:8]}.png')
+                    log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
+                    job['resultados'][w['rut_trabajador']] = 'completado'
 
-                # ── Comprobante por Trabajador ─────────────────────────────────
-                # Movimiento registrado exitosamente
-                job['resultados'][w['rut_trabajador']] = 'completado'
-                log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
-                save_screenshot(f'bot_resultado_{job_id[:8]}.png')
+                    # Click Imprimir para descargar comprobante PDF
+                    try:
+                        with page.expect_popup(timeout=8000) as popup_info:
+                            page.locator("a:has-text('Imprimir'), button:has-text('Imprimir')").first.click()
+                        popup = popup_info.value
+                        popup.wait_for_load_state('load', timeout=8000)
+                        pdf_bytes = popup.pdf()
+                        job['comprobante_bytes'] = pdf_bytes
+                        job['comprobante_name'] = f"Comprobante_{rut_t}.pdf"
+                        log(f"✅ Comprobante descargado: Comprobante_{rut_t}.pdf")
+                        popup.close()
+                    except Exception as e:
+                        log(f"ℹ Comprobante no descargado: {e}")
 
-                # Intentar comprobante (opcional — no bloquea si falla)
-                try:
-                    log(f"Generando comprobante para {rut_t}...")
-                    hoy = _dt.date.today().strftime('%d/%m/%Y')
-                    for sel in ["#cert_trabajador", "a:has-text('Comprobante por Trabajador')"]:
-                        try:
-                            el = page.locator(sel)
-                            if el.count() > 0:
-                                el.first.click()
-                                log(f"✓ Click comprobante: {sel}")
-                                break
-                        except: pass
-                    page.wait_for_timeout(1000)
-
-                    fill('#web_rut2', rut_t)
-                    page.wait_for_timeout(200)
-                    select_contains('#web_combo_codigo_afp', inst)
-
-                    for fid in ['web_desde', 'web_hasta']:
-                        set_fecha_js(fid, hoy)
-                    page.wait_for_timeout(200)
-
-                    with page.expect_download(timeout=10000) as dl_info:
-                        for sel in ["button.submitBtn", "button[value='submit']", "input[type='submit']"]:
-                            try:
-                                if page.locator(sel).count() > 0:
-                                    page.locator(sel).first.click()
-                                    break
-                            except: pass
-                    download = dl_info.value
-                    pdf_dest = os.path.join(current_app.config.get('DATA_DIR','adjuntos'), f"MOV_PER_{rut_t}.pdf")
-                    download.save_as(pdf_dest)
-                    log(f"✅ Comprobante PDF: MOV_PER_{rut_t}.pdf")
-                except Exception as e:
-                    log(f"ℹ Comprobante no descargado (movimiento igual registrado): {e}")
+                    # Click Finalizar
+                    try:
+                        page.locator("a:has-text('Finalizar'), button:has-text('Finalizar')").first.click()
+                        page.wait_for_timeout(800)
+                        log("✓ Finalizar")
+                    except: pass
 
             ctx.close()
             browser.close()
@@ -862,6 +844,18 @@ def ver_video(job_id):
     return Response(job['video_bytes'], mimetype='video/webm',
                     headers={'Content-Disposition': f'inline; filename="{job.get("video","bot_video.webm")}"'})
 
+@cartas_bp.route("/api/comprobante/<job_id>")
+@cartas_login_required
+def ver_comprobante(job_id):
+    """Sirve el comprobante PDF del bot desde memoria."""
+    job = _jobs.get(job_id)
+    if not job or not job.get('comprobante_bytes'):
+        return "Comprobante no disponible", 404
+    from flask import Response
+    nombre = job.get('comprobante_name', 'Comprobante.pdf')
+    return Response(job['comprobante_bytes'], mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="{nombre}"'})
+
 @cartas_bp.route("/api/descargar/<filename>")
 @cartas_login_required
 def descargar(filename):
@@ -925,6 +919,8 @@ def estado_bot(job_id):
         "screenshot_label": job.get('screenshot_label'),
         "has_video": bool(job.get('video_bytes')),
         "video_name": job.get('video'),
+        "has_comprobante": bool(job.get('comprobante_bytes')),
+        "comprobante_name": job.get('comprobante_name'),
     })
 
 @cartas_bp.route("/api/marcar_gestion", methods=["POST"])

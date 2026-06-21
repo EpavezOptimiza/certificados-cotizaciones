@@ -857,7 +857,7 @@ async function pollBot() {
   }
 
   // Mostrar captura y video si están disponibles
-  if (data.screenshot_b64 || data.video) {
+  if (data.screenshot_b64 || data.video || data.has_comprobante) {
     let diagEl = document.getElementById('bot-diagnostico');
     if (!diagEl) {
       diagEl = document.createElement('div');
@@ -880,6 +880,15 @@ async function pollBot() {
           🎥 Ver video del bot
         </a>
         <span style="font-size:11px;color:#64748b;margin-left:8px">${data.video_name||''}</span>
+      </div>`;
+    }
+    if (data.has_comprobante) {
+      html += `<div style="margin-top:8px">
+        <a href="/cartas/api/comprobante/${jobId}" target="_blank"
+           style="display:inline-block;padding:7px 16px;background:#059669;color:white;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600">
+          📄 Descargar Comprobante
+        </a>
+        <span style="font-size:11px;color:#64748b;margin-left:8px">${data.comprobante_name||''}</span>
       </div>`;
     }
     diagEl.innerHTML = html;

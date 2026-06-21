@@ -749,7 +749,11 @@ def index():
     if not user:
         from flask import redirect
         return redirect("/login")
-    resp = make_response(render_template("cartas/index.html", user=user))
+    previred_rut = os.environ.get('PREVIRED_RUT', '')
+    previred_clave = os.environ.get('PREVIRED_CLAVE', '')
+    resp = make_response(render_template("cartas/index.html", user=user,
+                                         previred_rut=previred_rut,
+                                         previred_clave=previred_clave))
     resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
     return resp
 

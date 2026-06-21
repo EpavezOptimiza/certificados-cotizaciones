@@ -373,11 +373,11 @@ textarea{resize:vertical;min-height:70px}
       <div id="modal-error" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 12px;color:#b91c1c;font-size:12px;margin-bottom:8px"></div>
       <div class="form-group">
         <label>RUT (sin puntos ni guión)</label>
-        <input type="text" id="modal-rut" placeholder="20200699k">
+        <input type="text" id="modal-rut" placeholder="20200699k" value="{{ previred_rut }}">
       </div>
       <div class="form-group">
         <label>Clave</label>
-        <input type="password" id="modal-clave">
+        <input type="password" id="modal-clave" value="{{ previred_clave }}">
       </div>
     </div>
     <div class="modal-footer">

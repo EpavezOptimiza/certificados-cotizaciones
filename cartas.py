@@ -541,6 +541,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 inst = w.get('institucion','').strip()
                 es_ausentismo = any(k in (w.get('causa') or '').lower() for k in ('ausentismo', 'licencia', 'subsidio'))
                 periodos_parsed = parse_periodos(w) if es_ausentismo else []
+                log(f"causa={w.get('causa')} | es_ausentismo={es_ausentismo} | periodos_sel={w.get('periodos_sel')} | periodos_parsed={periodos_parsed}")
 
                 log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")
                 ir_a_empresas()
@@ -651,6 +652,11 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         log(f"⚠ No se pudo seleccionar causa: {causa_val}")
                 except:
                     log(f"⚠ No se pudo seleccionar causa: {causa_val}")
+
+                # Diagnóstico: ver inputs del formulario tras seleccionar causa
+                page.wait_for_timeout(600)
+                inputs_form = page.evaluate("""() => Array.from(document.querySelectorAll('input:not([type=hidden])')).map(i => i.id+'|'+i.name+'|'+i.value)""")
+                log(f"Inputs tras causa: {inputs_form}")
 
                 # Fecha de término — primero el valor editado en UI, luego el del Excel
                 fecha_term = w.get('fecha_termino') or w.get('fecha_cese') or ''

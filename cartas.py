@@ -350,6 +350,8 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
             )
             page = ctx.new_page()
             page.set_default_timeout(45000)
+            # Auto-aceptar cualquier alert/confirm de PreviRed (validaciones, errores)
+            page.on('dialog', lambda d: d.accept())
 
             def click(selector):
                 try:
@@ -537,7 +539,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 rut_num = rut_e.replace('.','').split('-')[0].strip()
                 rut_t = rut_t_raw.replace('.','').replace(' ','')
                 inst = w.get('institucion','').strip()
-                es_ausentismo = 'ausentismo' in (w.get('causa') or '').lower()
+                es_ausentismo = any(k in (w.get('causa') or '').lower() for k in ('ausentismo', 'licencia', 'subsidio'))
                 periodos_parsed = parse_periodos(w) if es_ausentismo else []
 
                 log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")

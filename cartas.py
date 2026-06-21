@@ -793,11 +793,20 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                     page.wait_for_timeout(800)
 
-                    # Click Generar Comprobante → popup → PDF oficial
+                    # Click Generar Comprobante → capturar nueva página/popup → PDF oficial
                     try:
-                        with page.expect_popup(timeout=20000) as popup_info:
-                            page.locator("button:has-text('Generar Comprobante'), input[value*='Generar']").first.click()
-                        popup = popup_info.value
+                        with ctx.expect_page(timeout=25000) as new_page_info:
+                            page.evaluate("""() => {
+                                var all = Array.from(document.querySelectorAll('button, input[type=submit], a, span'));
+                                for (var el of all) {
+                                    var txt = (el.textContent || el.value || '').trim();
+                                    if (txt.indexOf('Generar') !== -1) {
+                                        (el.tagName === 'SPAN' ? el.parentElement : el).click();
+                                        return txt;
+                                    }
+                                }
+                            }""")
+                        popup = new_page_info.value
                         popup.wait_for_load_state('networkidle', timeout=20000)
                         popup.wait_for_timeout(2000)
                         pdf_bytes = popup.pdf(format='A4', print_background=True)

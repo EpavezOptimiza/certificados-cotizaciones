@@ -757,13 +757,24 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     except Exception as e:
                         log(f"⚠ RUT: {e}")
 
-                    # 2. Institución Previsional → la AFP del trabajador
+                    # 2. Institución Previsional → la AFP del trabajador (select #web_combo_codigo_afp)
                     try:
-                        inst_sel = page.locator("select[id*='institucion' i], select[name*='institucion' i], select[id*='inst' i]").first
-                        inst_sel.select_option(label=inst, timeout=5000)
-                        log(f"✓ Institución: {inst}")
+                        inst_limpia = inst.upper().replace('AFP ', '').replace('AFP', '').strip()
+                        page.evaluate("""(afp) => {
+                            var sel = document.getElementById('web_combo_codigo_afp');
+                            if (!sel) return;
+                            for (var i = 0; i < sel.options.length; i++) {
+                                if (sel.options[i].text.toUpperCase().indexOf(afp) !== -1) {
+                                    sel.selectedIndex = i;
+                                    sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                    break;
+                                }
+                            }
+                        }""", inst_limpia)
+                        log(f"✓ Institución: {inst_limpia}")
                     except Exception as e:
                         log(f"⚠ Institución: {e}")
+                    page.wait_for_timeout(500)
 
                     # 3 y 4. Fecha Desde y Hasta → hoy, vía JS porque el campo es readonly
                     page.evaluate("""(fecha) => {

@@ -719,6 +719,16 @@ async function generarPDF() {
 }
 
 // ── PreviRed ──────────────────────────────────────────────────────────────────
+const CAUSAS_PREVIRED = [
+  'Retiro (Cese trabajador)',
+  'Subsidios (Licencia Médica)',
+  'Permiso sin Goce de Sueldo',
+  'Accidente del Trabajo',
+  'Cese de Cotización de Afiliado Voluntario',
+  'Otros Movimientos (Ausentismo)',
+  'Reliquidación premio o bono posterior al finiquito',
+];
+
 function renderPreviRedWorkers() {
   const cont = document.getElementById('previred-workers-list');
   const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
@@ -730,12 +740,19 @@ function renderPreviRedWorkers() {
     ${marcados.length} trabajador(es) seleccionado(s): ${marcados.map(w=>w.nombre.split(' ')[0]).join(', ')}
   </div>
   <table class="tabla-estado">
-    <thead><tr><th>Trabajador</th><th>RUT</th><th>AFP</th><th>Causa</th><th>Períodos</th></tr></thead>
+    <thead><tr><th>Trabajador</th><th>RUT</th><th>AFP</th><th>Causa</th><th>Fecha Término</th><th>Períodos</th></tr></thead>
     <tbody>${marcados.map(w => {
       const sel = seleccionados[w.rut_trabajador] || {};
+      const causaActual = sel.causa || w.causa || 'Otros Movimientos (Ausentismo)';
+      const fechaTerm = sel.fecha_termino || '';
+      const opsCausa = CAUSAS_PREVIRED.map(c =>
+        `<option value="${c}" ${c===causaActual?'selected':''}>${c}</option>`).join('');
       return `<tr>
-        <td>${w.nombre}</td><td>${w.rut_trabajador}</td>
-        <td>${w.institucion}</td><td>${sel.causa||''}</td>
+        <td>${w.nombre}</td>
+        <td>${w.rut_trabajador}</td>
+        <td>${w.institucion}</td>
+        <td><select onchange="seleccionados['${w.rut_trabajador}'].causa=this.value" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;width:100%">${opsCausa}</select></td>
+        <td><input type="date" value="${fechaTerm}" onchange="seleccionados['${w.rut_trabajador}'].fecha_termino=this.value" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px"></td>
         <td>${(sel.periodos_sel||w.periodos||[]).join(', ')}</td>
       </tr>`;
     }).join('')}</tbody>

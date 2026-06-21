@@ -655,8 +655,15 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 if not causa_ok:
                     log(f"⚠ No se pudo seleccionar causa: {causa_val}")
 
-                if w.get('fecha_cese'):
-                    set_fecha_js('web_fec_cese', w['fecha_cese'])
+                # Fecha de término — primero el valor editado en UI, luego el del Excel
+                fecha_term = w.get('fecha_termino') or w.get('fecha_cese') or ''
+                if fecha_term:
+                    # Convertir formato HTML (YYYY-MM-DD) a DD/MM/YYYY si es necesario
+                    if '-' in fecha_term and fecha_term.count('-') == 2 and len(fecha_term) == 10:
+                        partes = fecha_term.split('-')
+                        fecha_term = f"{partes[2]}/{partes[1]}/{partes[0]}"
+                    set_fecha_js('web_fec_cese', fecha_term)
+                    log(f"✓ Fecha término: {fecha_term}")
 
                 if es_ausentismo and periodos_parsed:
                     anio0, mes0 = periodos_parsed[0]

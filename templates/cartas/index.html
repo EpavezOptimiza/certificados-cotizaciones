@@ -758,7 +758,7 @@ function renderPreviRedWorkers() {
         <td>${w.rut_trabajador}</td>
         <td>${w.institucion}</td>
         <td><select onchange="seleccionados['${w.rut_trabajador}'].causa=this.value;seleccionados['${w.rut_trabajador}'].checked=seleccionados['${w.rut_trabajador}'].checked" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;width:100%">${opsCausa}</select></td>
-        <td><input type="date" value="${fechaTerm}" onchange="seleccionados['${w.rut_trabajador}'].fecha_termino=this.value;seleccionados['${w.rut_trabajador}'].fecha_cese=this.value.split('-').reverse().join('/')" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px"></td>
+        <td><input type="date" value="${fechaTerm}" onchange="(function(v,r){var dd=v.split('-').reverse().join('/');seleccionados[r].fecha_termino=v;seleccionados[r].fecha_cese=dd;var el=document.getElementById('f-fecha-cese');if(el)el.value=dd;})(this.value,'${w.rut_trabajador}')" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px"></td>
         <td>${(sel.periodos_sel||w.periodos||[]).join(', ')}</td>
       </tr>`;
     }).join('')}</tbody>

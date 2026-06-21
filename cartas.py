@@ -742,36 +742,45 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         }).map(e => e.tagName + ': ' + e.textContent.trim()).slice(0, 30)""")
                         log(f"Elementos visibles: {menu_items}")
 
-                    # Diagnóstico: ver inputs visibles del formulario
-                    inputs_visibles = page.evaluate("""() => Array.from(document.querySelectorAll('input:not([type=hidden])')).map(i => i.id + '|' + i.name + '|' + i.type + '|' + i.value)""")
-                    log(f"Inputs visibles: {inputs_visibles}")
-
                     import datetime as _dt2
                     hoy = _dt2.date.today().strftime('%d/%m/%Y')
 
-                    # Llenar RUT del trabajador en el formulario
-                    try:
-                        rut_inp = page.locator("input:not([type=hidden])[id*='rut' i], input:not([type=hidden])[name*='rut' i]").first
-                        val = rut_inp.input_value(timeout=5000)
-                        if not val:
-                            rut_inp.fill(rut_t)
-                            log(f"✓ RUT llenado: {rut_t}")
-                        else:
-                            log(f"✓ RUT ya tiene: {val}")
-                    except Exception as e:
-                        log(f"⚠ RUT field: {e}")
+                    # Diagnóstico: ver selects e inputs visibles
+                    selects_info = page.evaluate("""() => Array.from(document.querySelectorAll('select')).map(s => s.id + '|' + s.name + '|' + Array.from(s.options).map(o => o.value+':'+o.text).join(','))""")
+                    log(f"Selects: {selects_info}")
 
-                    # Llenar Fecha Desde
+                    # 1. RUT trabajador
                     try:
-                        fecha_inp = page.locator("input:not([type=hidden])[id*='desde' i], input:not([type=hidden])[name*='desde' i]").first
-                        val_f = fecha_inp.input_value(timeout=5000)
-                        if not val_f:
-                            fecha_inp.fill(hoy)
-                            log(f"✓ Fecha desde: {hoy}")
-                        else:
-                            log(f"✓ Fecha desde ya tiene: {val_f}")
+                        rut_inp = page.locator("#web_rut2").first
+                        rut_inp.fill(rut_t, timeout=5000)
+                        log(f"✓ RUT: {rut_t}")
                     except Exception as e:
-                        log(f"⚠ Fecha field: {e}")
+                        log(f"⚠ RUT: {e}")
+
+                    # 2. Institución Previsional → la AFP del trabajador
+                    try:
+                        inst_sel = page.locator("select[id*='institucion' i], select[name*='institucion' i], select[id*='inst' i]").first
+                        inst_sel.select_option(label=inst, timeout=5000)
+                        log(f"✓ Institución: {inst}")
+                    except Exception as e:
+                        log(f"⚠ Institución: {e}")
+
+                    # 3 y 4. Fecha Desde y Hasta → hoy, vía JS porque el campo es readonly
+                    page.evaluate("""(fecha) => {
+                        ['web_desde', 'web_hasta'].forEach(function(id) {
+                            var el = document.getElementById(id);
+                            if (el) {
+                                el.removeAttribute('disabled');
+                                el.removeAttribute('readonly');
+                                el.value = fecha;
+                                el.dispatchEvent(new Event('change', {bubbles: true}));
+                                el.dispatchEvent(new Event('blur', {bubbles: true}));
+                            }
+                        });
+                    }""", hoy)
+                    log(f"✓ Fecha Desde y Hasta: {hoy}")
+
+                    page.wait_for_timeout(800)
 
                     # Click Generar Comprobante → popup → PDF oficial
                     try:

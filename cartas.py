@@ -584,10 +584,17 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 log(f"URL movimiento personal: {page.url}")
 
                 # Ingreso Manual
-                click("#regularizacion_manual")
-                page.wait_for_timeout(300)
-                continuar()
+                for sel in ["#regularizacion_manual", "a:has-text('Ingreso Manual')", "button:has-text('Ingreso Manual')", "input[value*='Manual']"]:
+                    try:
+                        el = page.locator(sel)
+                        if el.count() > 0:
+                            el.first.click()
+                            log(f"✓ Click Ingreso Manual: {sel}")
+                            break
+                    except: pass
                 page.wait_for_timeout(1500)
+                save_screenshot(f'bot_ingreso_manual_{job_id[:8]}.png')
+                log(f"URL ingreso manual: {page.url}")
 
                 # RUT trabajador
                 rut_inputs = page.locator("input[type='text']:not([id*='empresa'])").all()

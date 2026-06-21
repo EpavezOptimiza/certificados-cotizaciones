@@ -658,21 +658,25 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 inputs_form = page.evaluate("""() => Array.from(document.querySelectorAll('input:not([type=hidden])')).map(i => i.id+'|'+i.name+'|'+i.value)""")
                 log(f"Inputs tras causa: {inputs_form}")
 
-                # Fecha de término — primero el valor editado en UI, luego el del Excel
-                fecha_term = w.get('fecha_termino') or w.get('fecha_cese') or ''
-                if fecha_term:
-                    # Convertir formato HTML (YYYY-MM-DD) a DD/MM/YYYY si es necesario
-                    if '-' in fecha_term and fecha_term.count('-') == 2 and len(fecha_term) == 10:
-                        partes = fecha_term.split('-')
-                        fecha_term = f"{partes[2]}/{partes[1]}/{partes[0]}"
-                    set_fecha_js('end_date', fecha_term)
-                    log(f"✓ Fecha término (Hasta): {fecha_term}")
-
-                if es_ausentismo and periodos_parsed:
-                    anio0, mes0 = periodos_parsed[0]
-                    ult0 = calendar.monthrange(anio0, mes0)[1]
-                    set_fecha_js('start_date', f"01/{mes0:02d}/{anio0}")
-                    set_fecha_js('end_date', f"{ult0}/{mes0:02d}/{anio0}")
+                if es_ausentismo:
+                    # Licencia médica: usar fechas del primer período (inicio y fin de mes)
+                    if periodos_parsed:
+                        anio0, mes0 = periodos_parsed[0]
+                        ult0 = calendar.monthrange(anio0, mes0)[1]
+                        set_fecha_js('start_date', f"01/{mes0:02d}/{anio0}")
+                        set_fecha_js('end_date', f"{ult0}/{mes0:02d}/{anio0}")
+                        log(f"📅 Fechas período 1: 01/{mes0:02d}/{anio0} → {ult0}/{mes0:02d}/{anio0}")
+                    else:
+                        log(f"⚠ es_ausentismo=True pero periodos_parsed vacío — periodos_sel={w.get('periodos_sel')}")
+                else:
+                    # Otros movimientos: fecha de término del trabajador
+                    fecha_term = w.get('fecha_termino') or w.get('fecha_cese') or ''
+                    if fecha_term:
+                        if '-' in fecha_term and fecha_term.count('-') == 2 and len(fecha_term) == 10:
+                            partes = fecha_term.split('-')
+                            fecha_term = f"{partes[2]}/{partes[1]}/{partes[0]}"
+                        set_fecha_js('end_date', fecha_term)
+                        log(f"✓ Fecha término (Hasta): {fecha_term}")
 
                 save_screenshot(f'bot_form_{job_id[:8]}.png')
                 continuar()

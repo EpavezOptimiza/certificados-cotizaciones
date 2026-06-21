@@ -726,24 +726,46 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
                     job['resultados'][w['rut_trabajador']] = 'completado'
 
-                    # Click Imprimir — abre popup con comprobante limpio
+                    # Extraer datos del comprobante y generar PDF limpio
                     try:
-                        with page.expect_popup(timeout=8000) as popup_info:
-                            page.locator("a:has-text('Imprimir')").first.click()
-                        popup = popup_info.value
-                        popup.wait_for_load_state('networkidle', timeout=8000)
-                        pdf_bytes = popup.pdf(format='A4', print_background=True)
+                        comp_data = page.evaluate("""() => {
+                            const title = document.querySelector('h2,h1')?.textContent?.trim() || 'Comprobante';
+                            const subtitle = '';
+                            let rows = [];
+                            document.querySelectorAll('table tr').forEach(tr => {
+                                const cells = Array.from(tr.querySelectorAll('td,th')).map(c => c.textContent.trim());
+                                if (cells.length) rows.push(cells);
+                            });
+                            const fecha = document.body.innerText.match(/Con fecha[^,]+,\\s*[^.]+\\./)?.[0] || '';
+                            return {title, rows, fecha};
+                        }""")
+
+                        filas_html = ''.join(
+                            f"<tr>{''.join(f'<td style=\"padding:8px 16px;border-bottom:1px solid #e2e8f0\">{c}</td>' for c in fila)}</tr>"
+                            for fila in comp_data.get('rows', [])
+                        )
+                        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+                        <style>
+                            body {{font-family:Arial,sans-serif;padding:48px;color:#1e293b}}
+                            h2 {{color:#6b21a8;margin-bottom:8px}}
+                            p {{color:#475569;margin-bottom:24px}}
+                            table {{border-collapse:collapse;width:100%;margin-top:16px}}
+                            tr:first-child td {{font-weight:600;background:#f8fafc}}
+                        </style></head><body>
+                        <h2>{comp_data.get('title','Comprobante de Ingreso de Movimiento de Personal')}</h2>
+                        <p>{comp_data.get('fecha','')}</p>
+                        <table>{filas_html}</table>
+                        </body></html>"""
+
+                        new_page = ctx.new_page()
+                        new_page.set_content(html, wait_until='load')
+                        pdf_bytes = new_page.pdf(format='A4', print_background=True)
+                        new_page.close()
                         job['comprobante_bytes'] = pdf_bytes
                         job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                        log(f"✅ Comprobante PDF: MOV_PER_{rut_t}.pdf")
-                        popup.close()
+                        log(f"✅ Comprobante PDF generado: MOV_PER_{rut_t}.pdf")
                     except Exception as e:
-                        log(f"⚠ No se pudo obtener comprobante desde popup ({e}) — usando página actual")
-                        try:
-                            pdf_bytes = page.pdf(format='A4', print_background=True)
-                            job['comprobante_bytes'] = pdf_bytes
-                            job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                        except: pass
+                        log(f"⚠ Error generando comprobante: {e}")
 
                     save_screenshot(f'bot_comprobante_{job_id[:8]}.png')
 

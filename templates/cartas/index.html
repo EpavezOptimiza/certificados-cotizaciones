@@ -616,6 +616,10 @@ function setMotivo(m) {
   if (m.toLowerCase().includes('con fecha') && fecha) {
     m = m + ' ' + fecha;
   }
+  if (m.toLowerCase().includes('licencia medica desde') && sel) {
+    const primer = (sel.periodos_sel && sel.periodos_sel.length > 0) ? sel.periodos_sel[0] : '';
+    if (primer) m = m + primer;
+  }
   document.getElementById('f-motivo').value = m;
   guardarForm();
 }

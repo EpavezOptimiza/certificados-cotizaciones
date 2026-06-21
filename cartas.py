@@ -379,11 +379,18 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 return None
 
             def continuar():
-                for sel in ["button:has-text('Continuar')", "input[value='Continuar']"]:
+                sels = ["button:has-text('Continuar')", "input[value='Continuar']",
+                        "input[value*='ontinuar']", "button[type='submit']", "input[type='submit']"]
+                for sel in sels:
                     try:
-                        page.locator(sel).first.click()
-                        return
+                        el = page.locator(sel).first
+                        if el.count() > 0:
+                            el.scroll_into_view_if_needed()
+                            el.click()
+                            log(f"✓ Click Continuar: {sel}")
+                            return
                     except: pass
+                log("⚠ No se encontró botón Continuar")
 
             def finalizar():
                 for sel in ["a:has-text('Finalizar')", "input[value='Finalizar']"]:

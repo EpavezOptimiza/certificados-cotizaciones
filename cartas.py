@@ -721,61 +721,69 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         continuar()
                         page.wait_for_timeout(1500)
                 else:
-                    # Página de comprobante — generar PDF directo de la página
                     page.wait_for_timeout(800)
                     log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
                     job['resultados'][w['rut_trabajador']] = 'completado'
 
-                    # Extraer datos del comprobante y generar PDF limpio
+                    # PreviRed redirige automáticamente a CtrlFce después del movimiento
+                    # Esperar a que la página cargue completamente
+                    page.wait_for_load_state('networkidle', timeout=15000)
+                    page.wait_for_timeout(1000)
+                    url_actual = page.url
+                    log(f"URL para comprobante: {url_actual}")
+
+                    # Si no está en CtrlFce, navegar allá
+                    if 'CtrlFce' not in url_actual:
+                        try:
+                            page.locator("a:has-text('Finalizar'), button:has-text('Finalizar')").first.click()
+                            page.wait_for_timeout(800)
+                            log("✓ Finalizar")
+                        except: pass
+                        page.goto('https://www.previred.com/wEmpresas/CtrlFce', wait_until='networkidle', timeout=20000)
+                        page.wait_for_timeout(1000)
+                        log("✓ Navegado a CtrlFce")
+
+                    # Volcar IDs de los inputs para diagnóstico
+                    inputs_info = page.evaluate("""() => Array.from(document.querySelectorAll('input')).map(i => i.id + '|' + i.name + '|' + i.type + '|' + i.value)""")
+                    log(f"Inputs CtrlFce: {inputs_info}")
+
+                    # Si el RUT no está pre-llenado, llenarlo
+                    import datetime as _dt2
+                    hoy = _dt2.date.today().strftime('%d/%m/%Y')
                     try:
-                        comp_data = page.evaluate("""() => {
-                            const title = document.querySelector('h2,h1')?.textContent?.trim() || 'Comprobante';
-                            const subtitle = '';
-                            let rows = [];
-                            document.querySelectorAll('table tr').forEach(tr => {
-                                const cells = Array.from(tr.querySelectorAll('td,th')).map(c => c.textContent.trim());
-                                if (cells.length) rows.push(cells);
-                            });
-                            const fecha = document.body.innerText.match(/Con fecha[^,]+,\\s*[^.]+\\./)?.[0] || '';
-                            return {title, rows, fecha};
-                        }""")
+                        rut_inp = page.locator("input[id*='rut' i], input[name*='rut' i]").first
+                        val_rut = rut_inp.input_value()
+                        if not val_rut:
+                            rut_inp.fill(rut_t)
+                            log(f"✓ RUT llenado: {rut_t}")
+                        else:
+                            log(f"✓ RUT ya está: {val_rut}")
+                    except Exception as e:
+                        log(f"⚠ RUT field: {e}")
 
-                        td_style = 'padding:8px 16px;border-bottom:1px solid #e2e8f0'
-                        filas_html = ''
-                        for fila in comp_data.get('rows', []):
-                            celdas = ''.join(f'<td style="{td_style}">{c}</td>' for c in fila)
-                            filas_html += f'<tr>{celdas}</tr>'
-                        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-                        <style>
-                            body {{font-family:Arial,sans-serif;padding:48px;color:#1e293b}}
-                            h2 {{color:#6b21a8;margin-bottom:8px}}
-                            p {{color:#475569;margin-bottom:24px}}
-                            table {{border-collapse:collapse;width:100%;margin-top:16px}}
-                            tr:first-child td {{font-weight:600;background:#f8fafc}}
-                        </style></head><body>
-                        <h2>{comp_data.get('title','Comprobante de Ingreso de Movimiento de Personal')}</h2>
-                        <p>{comp_data.get('fecha','')}</p>
-                        <table>{filas_html}</table>
-                        </body></html>"""
+                    # Fecha Desde = hoy (si no está ya)
+                    try:
+                        fecha_inp = page.locator("input[id*='desde' i], input[name*='desde' i], input[id*='ini' i]").first
+                        if not fecha_inp.input_value():
+                            fecha_inp.fill(hoy)
+                            log(f"✓ Fecha desde: {hoy}")
+                    except Exception as e:
+                        log(f"⚠ Fecha field: {e}")
 
-                        new_page = ctx.new_page()
-                        new_page.set_content(html, wait_until='load')
-                        pdf_bytes = new_page.pdf(format='A4', print_background=True)
-                        new_page.close()
+                    # Click Generar Comprobante — abre popup con el PDF oficial
+                    try:
+                        with page.expect_popup(timeout=20000) as popup_info:
+                            page.locator("button:has-text('Generar Comprobante'), input[value*='Generar']").first.click()
+                        popup = popup_info.value
+                        popup.wait_for_load_state('networkidle', timeout=20000)
+                        popup.wait_for_timeout(2000)
+                        pdf_bytes = popup.pdf(format='A4', print_background=True)
+                        popup.close()
                         job['comprobante_bytes'] = pdf_bytes
                         job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                        log(f"✅ Comprobante PDF generado: MOV_PER_{rut_t}.pdf")
+                        log(f"✅ Comprobante oficial descargado: MOV_PER_{rut_t}.pdf ({len(pdf_bytes)} bytes)")
                     except Exception as e:
                         log(f"⚠ Error generando comprobante: {e}")
-
-                    save_screenshot(f'bot_comprobante_{job_id[:8]}.png')
-
-                    # Click Finalizar
-                    try:
-                        page.locator("a:has-text('Finalizar'), button:has-text('Finalizar')").first.click()
-                        page.wait_for_timeout(800)
-                        log("✓ Finalizar")
-                    except: pass
 
             ctx.close()
             browser.close()

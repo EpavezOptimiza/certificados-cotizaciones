@@ -118,6 +118,20 @@ def parsear_excel(file_bytes):
         if v is None: return ''
         return str(v).strip()
 
+    def gfecha(row, idx):
+        if idx < 0 or idx >= len(row): return ''
+        v = row[idx]
+        if v is None: return ''
+        import datetime as _dt
+        if isinstance(v, (_dt.datetime, _dt.date)):
+            return v.strftime('%d/%m/%Y')
+        s = str(v).strip()
+        if s and s[4:5] == '-':
+            partes = s[:10].split('-')
+            if len(partes) == 3:
+                return f"{partes[2]}/{partes[1]}/{partes[0]}"
+        return s
+
     def fmt_periodo(v):
         if v is None: return ''
         if hasattr(v, 'month'):
@@ -151,7 +165,7 @@ def parsear_excel(file_bytes):
             'monto_nominal': g(row, iMontoN),
             'monto_interes': g(row, iMontoI),
             'fee':          g(row, iFee),
-            'fecha_cese':   g(row, iFecha),
+            'fecha_cese':   gfecha(row, iFecha),
             'analisis':     g(row, iAnalisis),
             'motivo':       g(row, iMotivo),
             'tipo_documento': g(row, iTipoDoc),

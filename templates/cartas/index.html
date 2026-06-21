@@ -845,6 +845,15 @@ async function pollBot() {
     document.getElementById('bot-spinner').style.display = 'none';
     document.getElementById('bot-prog-fill').style.width = '100%';
     mostrarPDFs(data.resultados);
+    // Descargar comprobante automáticamente
+    if (data.has_comprobante) {
+      const a = document.createElement('a');
+      a.href = `/cartas/api/comprobante/${jobId}`;
+      a.download = data.comprobante_name || 'Comprobante.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
     // Actualizar estado
     Object.keys(data.resultados).forEach(rut => {
       if (seleccionados[rut]) seleccionados[rut].status = 'completado';

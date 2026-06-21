@@ -730,7 +730,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     try:
                         pdf_bytes = page.pdf(format='A4', print_background=True)
                         job['comprobante_bytes'] = pdf_bytes
-                        job['comprobante_name'] = f"Comprobante_{rut_t}.pdf"
+                        job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
                         log(f"✅ Comprobante PDF generado: Comprobante_{rut_t}.pdf")
                     except Exception as e:
                         log(f"⚠ No se pudo generar PDF comprobante: {e}")

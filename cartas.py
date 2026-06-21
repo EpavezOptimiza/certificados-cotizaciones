@@ -610,6 +610,17 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_ingreso_manual_{job_id[:8]}.png')
                 log(f"URL ingreso manual: {page.url}")
 
+                # Diagnóstico: loguear todos los inputs/selects del formulario
+                try:
+                    inputs = page.locator('input, select, textarea').all()
+                    for inp in inputs:
+                        iid = inp.get_attribute('id') or ''
+                        iname = inp.get_attribute('name') or ''
+                        itype = inp.get_attribute('type') or inp.evaluate('el => el.tagName')
+                        log(f"  campo: id={iid!r} name={iname!r} type={itype!r}")
+                except Exception as de:
+                    log(f"  (diagnóstico fallido: {de})")
+
                 # RUT trabajador — llenar y Tab para autocompletar nombre
                 for sel in ["#web_rut_trabajador", "input[name*='rut']", "input[type='text']"]:
                     try:
@@ -676,8 +687,52 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     if '-' in fecha_term and fecha_term.count('-') == 2 and len(fecha_term) == 10:
                         partes = fecha_term.split('-')
                         fecha_term = f"{partes[2]}/{partes[1]}/{partes[0]}"
-                    set_fecha_js('web_fec_cese', fecha_term)
-                    log(f"✓ Fecha término: {fecha_term}")
+                    # Intentar varios IDs posibles para el campo "Hasta"
+                    fecha_ids = ['web_fec_cese', 'web_fec_hasta', 'web_fecha_hasta', 'fec_hasta', 'hasta', 'end_date']
+                    fecha_ok = False
+                    for fid in fecha_ids:
+                        result = page.evaluate(f"""
+                            (function() {{
+                                var el = document.getElementById('{fid}');
+                                if (el) {{
+                                    el.removeAttribute('readonly');
+                                    el.removeAttribute('disabled');
+                                    el.value = '{fecha_term}';
+                                    try {{ jQuery('#{fid}').datepicker('setDate', '{fecha_term}'); }} catch(e) {{}}
+                                    return el.id;
+                                }}
+                                return null;
+                            }})()
+                        """)
+                        if result:
+                            log(f"✓ Fecha término en campo #{result}: {fecha_term}")
+                            fecha_ok = True
+                            break
+                    if not fecha_ok:
+                        # Último recurso: buscar input de fecha cerca del label "Hasta"
+                        try:
+                            result2 = page.evaluate(f"""
+                                (function() {{
+                                    var labels = document.querySelectorAll('label, td, th, span');
+                                    for (var i=0; i<labels.length; i++) {{
+                                        if (labels[i].textContent.trim().toLowerCase() === 'hasta') {{
+                                            var inp = labels[i].nextElementSibling || labels[i].querySelector('input') || document.querySelector('input[id*="hasta"], input[name*="hasta"], input[id*="cese"], input[name*="cese"]');
+                                            if (inp) {{
+                                                inp.removeAttribute('readonly');
+                                                inp.value = '{fecha_term}';
+                                                return inp.id || inp.name || 'found';
+                                            }}
+                                        }}
+                                    }}
+                                    return null;
+                                }})()
+                            """)
+                            if result2:
+                                log(f"✓ Fecha término (label Hasta) en #{result2}: {fecha_term}")
+                                fecha_ok = True
+                        except: pass
+                    if not fecha_ok:
+                        log(f"⚠ No se pudo llenar fecha término: campo no encontrado. Fecha: {fecha_term}")
 
                 if es_ausentismo and periodos_parsed:
                     anio0, mes0 = periodos_parsed[0]

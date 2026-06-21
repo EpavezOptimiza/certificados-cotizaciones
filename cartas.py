@@ -720,40 +720,46 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     page.wait_for_timeout(1500)
 
                 # ── Comprobante por Trabajador ─────────────────────────────────
-                log(f"Generando comprobante para {rut_t}...")
+                # Movimiento registrado exitosamente
+                job['resultados'][w['rut_trabajador']] = 'completado'
+                log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
+                save_screenshot(f'bot_resultado_{job_id[:8]}.png')
+
+                # Intentar comprobante (opcional — no bloquea si falla)
                 try:
+                    log(f"Generando comprobante para {rut_t}...")
                     hoy = _dt.date.today().strftime('%d/%m/%Y')
                     for sel in ["#cert_trabajador", "a:has-text('Comprobante por Trabajador')"]:
                         try:
-                            page.locator(sel).first.click()
-                            break
+                            el = page.locator(sel)
+                            if el.count() > 0:
+                                el.first.click()
+                                log(f"✓ Click comprobante: {sel}")
+                                break
                         except: pass
-                    page.wait_for_timeout(1500)
+                    page.wait_for_timeout(1000)
 
                     fill('#web_rut2', rut_t)
-                    page.wait_for_timeout(300)
+                    page.wait_for_timeout(200)
                     select_contains('#web_combo_codigo_afp', inst)
 
                     for fid in ['web_desde', 'web_hasta']:
                         set_fecha_js(fid, hoy)
-                    page.wait_for_timeout(300)
+                    page.wait_for_timeout(200)
 
-                    # Descargar PDF
-                    with page.expect_download(timeout=30000) as dl_info:
+                    with page.expect_download(timeout=10000) as dl_info:
                         for sel in ["button.submitBtn", "button[value='submit']", "input[type='submit']"]:
                             try:
-                                page.locator(sel).first.click()
-                                break
+                                if page.locator(sel).count() > 0:
+                                    page.locator(sel).first.click()
+                                    break
                             except: pass
                     download = dl_info.value
                     pdf_dest = os.path.join(current_app.config.get('DATA_DIR','adjuntos'), f"MOV_PER_{rut_t}.pdf")
                     download.save_as(pdf_dest)
-                    job['resultados'][w['rut_trabajador']] = f"MOV_PER_{rut_t}.pdf"
-                    log(f"✅ PDF guardado: MOV_PER_{rut_t}.pdf")
-
+                    log(f"✅ Comprobante PDF: MOV_PER_{rut_t}.pdf")
                 except Exception as e:
-                    log(f"⚠ Error comprobante {rut_t}: {e}")
-                    job['resultados'][w['rut_trabajador']] = 'sin_pdf'
+                    log(f"ℹ Comprobante no descargado (movimiento igual registrado): {e}")
 
             ctx.close()
             browser.close()

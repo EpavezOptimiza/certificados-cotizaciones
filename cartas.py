@@ -721,25 +721,21 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         continuar()
                         page.wait_for_timeout(1500)
                 else:
-                    # Página de comprobante — guardar screenshot y click Imprimir
+                    # Página de comprobante — generar PDF directo de la página
                     page.wait_for_timeout(800)
-                    save_screenshot(f'bot_comprobante_{job_id[:8]}.png')
                     log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
                     job['resultados'][w['rut_trabajador']] = 'completado'
 
-                    # Click Imprimir para descargar comprobante PDF
+                    # Generar PDF de la página del comprobante con Playwright
                     try:
-                        with page.expect_popup(timeout=8000) as popup_info:
-                            page.locator("a:has-text('Imprimir'), button:has-text('Imprimir')").first.click()
-                        popup = popup_info.value
-                        popup.wait_for_load_state('load', timeout=8000)
-                        pdf_bytes = popup.pdf()
+                        pdf_bytes = page.pdf(format='A4', print_background=True)
                         job['comprobante_bytes'] = pdf_bytes
                         job['comprobante_name'] = f"Comprobante_{rut_t}.pdf"
-                        log(f"✅ Comprobante descargado: Comprobante_{rut_t}.pdf")
-                        popup.close()
+                        log(f"✅ Comprobante PDF generado: Comprobante_{rut_t}.pdf")
                     except Exception as e:
-                        log(f"ℹ Comprobante no descargado: {e}")
+                        log(f"⚠ No se pudo generar PDF comprobante: {e}")
+
+                    save_screenshot(f'bot_comprobante_{job_id[:8]}.png')
 
                     # Click Finalizar
                     try:

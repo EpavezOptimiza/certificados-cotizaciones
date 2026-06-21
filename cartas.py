@@ -740,10 +740,11 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                             return {title, rows, fecha};
                         }""")
 
-                        filas_html = ''.join(
-                            f"<tr>{''.join(f'<td style=\"padding:8px 16px;border-bottom:1px solid #e2e8f0\">{c}</td>' for c in fila)}</tr>"
-                            for fila in comp_data.get('rows', [])
-                        )
+                        td_style = 'padding:8px 16px;border-bottom:1px solid #e2e8f0'
+                        filas_html = ''
+                        for fila in comp_data.get('rows', []):
+                            celdas = ''.join(f'<td style="{td_style}">{c}</td>' for c in fila)
+                            filas_html += f'<tr>{celdas}</tr>'
                         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
                         <style>
                             body {{font-family:Arial,sans-serif;padding:48px;color:#1e293b}}

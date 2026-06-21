@@ -668,17 +668,22 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 save_screenshot(f'bot_form_{job_id[:8]}.png')
                 continuar()
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(1200)
+                save_screenshot(f'bot_post_continuar1_{job_id[:8]}.png')
+                log(f"URL post-continuar1: {page.url}")
 
                 try:
                     cb = page.locator("#web_chk_declaracion")
                     if cb.count() > 0 and not cb.is_checked():
                         cb.click()
+                        log("✓ Checkbox declaración marcado")
                     page.wait_for_timeout(300)
                 except: pass
 
                 continuar()
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(1200)
+                save_screenshot(f'bot_post_continuar2_{job_id[:8]}.png')
+                log(f"URL post-continuar2: {page.url}")
 
                 if es_ausentismo and len(periodos_parsed) > 1:
                     for pi, (anio, mes) in enumerate(periodos_parsed[1:], 1):

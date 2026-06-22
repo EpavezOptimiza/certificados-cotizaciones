@@ -653,10 +653,39 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 except:
                     log(f"⚠ No se pudo seleccionar causa: {causa_val}")
 
-                # Diagnóstico: ver inputs del formulario tras seleccionar causa
+                # Diagnóstico: ver inputs y selects del formulario tras seleccionar causa
                 page.wait_for_timeout(600)
                 inputs_form = page.evaluate("""() => Array.from(document.querySelectorAll('input:not([type=hidden])')).map(i => i.id+'|'+i.name+'|'+i.value)""")
+                selects_form = page.evaluate("""() => Array.from(document.querySelectorAll('select')).map(s => s.id+'|'+s.name)""")
                 log(f"Inputs tras causa: {inputs_form}")
+                log(f"Selects tras causa: {selects_form}")
+
+                # Entidad Pagadora de Subsidio (aparece solo para Subsidios/Licencia Médica)
+                if es_ausentismo:
+                    salud_val = w.get('salud', 'FONASA')
+                    try:
+                        ep_sel = page.locator("select[id*='isapre'], select[id*='entidad'], select[id*='pagadora'], select[id*='subsidio']").first
+                        if ep_sel.count() > 0:
+                            select_opt(ep_sel, salud_val)
+                            log(f"✓ Entidad Pagadora: {salud_val}")
+                    except: pass
+                    # Fallback por texto parcial en todos los selects
+                    try:
+                        page.evaluate(f"""(val) => {{
+                            var sels = document.querySelectorAll('select');
+                            for (var s of sels) {{
+                                if (s.id && (s.id.toLowerCase().includes('isapre') || s.id.toLowerCase().includes('entidad') || s.id.toLowerCase().includes('pagadora') || s.id.toLowerCase().includes('subsidio'))) {{
+                                    for (var o of s.options) {{
+                                        if (o.text.toUpperCase().includes(val.toUpperCase())) {{
+                                            s.value = o.value;
+                                            s.dispatchEvent(new Event('change', {{bubbles:true}}));
+                                            break;
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}""", salud_val)
+                    except: pass
 
                 if es_ausentismo:
                     # Licencia médica: usar fechas del primer período (inicio y fin de mes)

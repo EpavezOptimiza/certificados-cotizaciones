@@ -846,6 +846,10 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
                     if col_val and str(col_val).strip(): nombre=str(col_val).strip(); break
             nom_f = fnone(*nom_cands)
             act_f = fnone(*act_cands)
+            if nom_f is None:
+                _vals = [(c, ws.cell(r,c).value) for c in range(1, ws.max_column+1) if _es_monto(ws.cell(r,c).value)]
+                if len(_vals) >= 2:
+                    nom_f, act_f = _vals[0][1], _vals[1][1]
             if nom_f is not None and act_f is not None:
                 split_pendiente=None
                 agregar_fila(rut_det,nombre,nom_f,act_f)

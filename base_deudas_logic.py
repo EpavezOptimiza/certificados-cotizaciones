@@ -742,6 +742,12 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
     for r in range(1, ws.max_row+1):
         a = v(1)
         origen_val  = v(COL_ORIGEN)
+        if not origen_val:
+            for _c in range(1, 20):
+                _v = ws.cell(r, _c).value
+                if _v and isinstance(_v, str) and _es_grupo(_v):
+                    origen_val = _v
+                    break
         periodo_val = v(COL_PERIODO)
         adm_val     = v(COL_ADM)
         estado_val  = v(COL_ESTADO)

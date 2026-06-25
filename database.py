@@ -185,6 +185,44 @@ def init_db():
                 valor TEXT NOT NULL DEFAULT ''
             )""")
         except: pass
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS notas (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                titulo      TEXT NOT NULL,
+                contenido   TEXT DEFAULT '',
+                etiqueta    TEXT DEFAULT 'info',
+                color       TEXT DEFAULT 'amarillo',
+                fijada      INTEGER DEFAULT 0,
+                creada      TEXT NOT NULL,
+                actualizada TEXT NOT NULL
+            )""")
+        except: pass
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS tareas (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id    INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                titulo        TEXT NOT NULL,
+                descripcion   TEXT DEFAULT '',
+                prioridad     TEXT DEFAULT 'media',
+                estado        TEXT DEFAULT 'pendiente',
+                fecha_limite  TEXT DEFAULT '',
+                nota_id       INTEGER REFERENCES notas(id) ON DELETE SET NULL,
+                creada        TEXT NOT NULL,
+                completada_en TEXT DEFAULT ''
+            )""")
+        except: pass
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS config_recordatorios (
+                usuario_id     INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+                notas_activo   INTEGER DEFAULT 1,
+                tareas_activo  INTEGER DEFAULT 1,
+                hora_1         TEXT DEFAULT '09:00',
+                hora_2         TEXT DEFAULT '13:00',
+                hora_3         TEXT DEFAULT '17:00',
+                palabras_clave TEXT DEFAULT 'llamar,crear,realizar,revisar,enviar,reunión,pagar,gestionar,solicitar,confirmar,contactar,hacer,subir,mandar,completar,preparar,coordinar'
+            )""")
+        except: pass
         # Crear permisos por defecto para usuarios existentes
         try:
             usuarios = conn.execute("SELECT id, rol FROM usuarios").fetchall()

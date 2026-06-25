@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Notas — Optimiza</title>
+<script src="/static/theme.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#2563eb;--accent-rgb:37,99,235;--sidebar-bg:#0d1b2e}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#f1f5f9;color:#0f172a;min-height:100vh;display:flex;flex-direction:column}
+.topnav{background:var(--sidebar-bg);padding:0 16px;height:50px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-shrink:0;overflow:hidden}
+.topnav::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:var(--themed-bg-image,none);background-size:var(--themed-bg-size,cover);z-index:0}
+.topnav>*{position:relative;z-index:1}
+@keyframes themed-float{0%{background-position:0% 0%,100% 100%,0 0}50%{background-position:8% -6%,92% 106%,0 0}100%{background-position:0% 0%,100% 100%,0 0}}
+[data-theme-style="orbos"] .topnav::before{animation:themed-float 8s ease-in-out infinite alternate}
+.nav-brand{color:#fff;font-weight:700;font-size:14px;text-decoration:none}
+.nav-sep{color:rgba(255,255,255,.3);margin:0 4px}
+.nav-cur{color:#fde68a;font-size:13px;font-weight:500}
+.nav-links{margin-left:auto;display:flex;gap:8px;align-items:center}
+.nav-link{color:rgba(255,255,255,.6);font-size:12px;text-decoration:none;padding:5px 10px;border-radius:6px;transition:all .15s}
+.nav-link:hover{background:rgba(255,255,255,.1);color:#fff}
+.nav-link.active{background:rgba(234,179,8,.15);color:#fde68a}
+.main{flex:1;padding:24px;max-width:1100px;margin:0 auto;width:100%}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.page-title{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}
+.page-title span{font-size:22px}
+.page-sub{font-size:12px;color:#64748b;margin-top:3px}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.btn-ghost:hover{background:#e2e8f0}
+.filter-row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.fpill{padding:5px 14px;font-size:12px;border-radius:20px;border:1px solid #e2e8f0;background:#fff;color:#64748b;cursor:pointer;transition:all .15s;font-weight:500}
+.fpill:hover{border-color:#93c5fd;color:#2563eb}
+.fpill.active{background:#eff6ff;border-color:#93c5fd;color:#1d4ed8;font-weight:600}
+.fsearch{margin-left:auto;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px}
+.fsearch input{border:none;outline:none;background:transparent;font-size:13px;color:#0f172a;width:160px;font-family:inherit}
+.section-lbl{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.notes-section{margin-bottom:28px}
+.notes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.note-card{border-radius:12px;padding:16px;position:relative;min-height:150px;display:flex;flex-direction:column;cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid rgba(0,0,0,.06)}
+.note-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.1)}
+.nc-amarillo{background:#FEF9C3}
+.nc-morado{background:#EDE9FE}
+.nc-azul{background:#DBEAFE}
+.nc-verde{background:#DCFCE7}
+.nc-rosa{background:#FCE7F3}
+.nc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.nc-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px}
+.tag-urgente{background:#fecaca;color:#7f1d1d}
+.tag-pendiente{background:#fde68a;color:#713f12}
+.tag-info{background:#bfdbfe;color:#1e3a5f}
+.tag-ok{background:#bbf7d0;color:#14532d}
+.nc-acts{display:flex;gap:4px}
+.nc-act{background:rgba(0,0,0,.08);border:none;border-radius:5px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:background .15s}
+.nc-act:hover{background:rgba(0,0,0,.18)}
+.nc-title{font-size:13px;font-weight:700;color:#1e293b;line-height:1.4;margin-bottom:6px}
+.nc-body{font-size:12px;color:#475569;line-height:1.6;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.nc-footer{margin-top:10px;display:flex;align-items:center;justify-content:space-between}
+.nc-date{font-size:10px;color:rgba(0,0,0,.4)}
+.nc-auto{font-size:10px;color:#7c3aed;display:flex;align-items:center;gap:3px}
+.empty{text-align:center;padding:48px 20px;color:#94a3b8}
+.empty span{font-size:40px;display:block;margin-bottom:10px;opacity:.4}
+.empty p{font-size:13px}
+/* RECORDATORIO BANNER */
+.rem-banner{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fefce8;border:1px solid #fde68a;border-radius:10px;margin-bottom:16px;font-size:13px;color:#713f12}
+.rem-banner button{margin-left:auto;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #fde68a;background:transparent;color:#713f12;cursor:pointer}
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(2,8,23,.55);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:28px;width:min(480px,92vw);max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.25)}
+.modal h3{font-size:17px;font-weight:800;margin-bottom:18px}
+.modal label{font-size:11px;color:#64748b;display:block;margin-bottom:4px;margin-top:12px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.modal input,.modal textarea,.modal select{width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:9px;font-size:13px;outline:none;background:#f8fafc;font-family:inherit;transition:border-color .2s}
+.modal input:focus,.modal textarea:focus,.modal select:focus{border-color:#2563eb;background:#fff}
+.modal textarea{min-height:80px;resize:vertical}
+.color-row{display:flex;gap:10px;margin-top:6px}
+.cdot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color .15s}
+.cdot.active{border-color:#2563eb}
+.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.btn-danger{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;margin-right:auto}
+.btn-danger:hover{background:#fee2e2}
+/* TOAST */
+#toast{position:fixed;bottom:20px;right:20px;background:#0f172a;color:#fff;padding:12px 20px;border-radius:10px;font-size:12px;display:none;z-index:9999;font-weight:500;border:1px solid rgba(255,255,255,.1)}
+/* CONFIG PANEL */
+.cfg-panel{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #e2e8f0;display:none}
+.cfg-panel.open{display:block}
+.cfg-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f1f5f9}
+.cfg-row:last-child{border-bottom:none;padding-bottom:0}
+.cfg-label{font-size:13px;font-weight:500}
+.cfg-sub{font-size:11px;color:#64748b;margin-top:1px}
+.toggle{position:relative;width:40px;height:22px}
+.toggle input{opacity:0;width:0;height:0}
+.tslider{position:absolute;inset:0;background:#cbd5e1;border-radius:11px;cursor:pointer;transition:.2s}
+.tslider:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.tslider{background:#2563eb}
+.toggle input:checked+.tslider:before{transform:translateX(18px)}
+/* DARK */
+body.dark{background:#060f1e;color:#e2e8f0}
+body.dark .main{color:#e2e8f0}
+body.dark .fpill{background:#0d1b2e;border-color:#1a2d45;color:#64748b}
+body.dark .fpill.active{background:#172554;border-color:#1d4ed8;color:#93c5fd}
+body.dark .fsearch{background:#0d1b2e;border-color:#1a2d45}
+body.dark .fsearch input{color:#e2e8f0}
+body.dark .modal{background:#0d1b2e;color:#e2e8f0}
+body.dark .modal input,.dark .modal textarea,.dark .modal select{background:#060f1e;border-color:#1a2d45;color:#e2e8f0}
+body.dark .btn-ghost{background:#1a2d45;color:#94a3b8;border-color:#1a2d45}
+body.dark .cfg-panel{background:#0d1b2e;border-color:#1a2d45}
+</style>
+</head>
+<body>
+<div class="topnav">
+  <a href="/" class="nav-brand">Optimiza</a>
+  <span class="nav-sep">/</span>
+  <span class="nav-cur">📝 Notas</span>
+  <div class="nav-links">
+    <a href="/tareas" class="nav-link">✅ Tareas</a>
+    <a href="/" class="nav-link">← Volver</a>
+    <a href="/logout" class="nav-link">Salir</a>
+  </div>
+</div>
+
+<div class="main">
+  <div id="rem-container"></div>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title"><span>📝</span> Notas</div>
+      <div class="page-sub">Tus notas personales — las urgentes y pendientes generan tareas automáticamente</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="toggleCfg()">⚙ Configurar</button>
+      <button class="btn btn-primary" onclick="abrirModal()">+ Nueva nota</button>
+    </div>
+  </div>
+
+  <div class="cfg-panel" id="cfg-panel">
+    <div style="font-size:14px;font-weight:700;margin-bottom:14px">⚙ Configuración de recordatorios</div>
+    <div class="cfg-row">
+      <div><div class="cfg-label">Recordatorios de notas activo</div><div class="cfg-sub">Alerta cuando hay notas urgentes o pendientes</div></div>
+      <label class="toggle"><input type="checkbox" id="cfg-notas" checked><span class="tslider"></span></label>
+    </div>
+    <div class="cfg-row">
+      <div style="width:100%">
+        <div class="cfg-label">Horarios diarios (3 al día)</div>
+        <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+          <div><label style="font-size:11px;color:#64748b">Mañana</label><br><input type="time" id="cfg-h1" value="09:00" style="width:110px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:#64748b">Mediodía</label><br><input type="time" id="cfg-h2" value="13:00" style="width:110px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:#64748b">Tarde</label><br><input type="time" id="cfg-h3" value="17:00" style="width:110px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="cfg-row">
+      <div style="width:100%">
+        <div class="cfg-label">Palabras que crean tarea automáticamente</div>
+        <div class="cfg-sub" style="margin-bottom:6px">Separa con comas. Si la nota contiene alguna, se genera una tarea pendiente.</div>
+        <input type="text" id="cfg-palabras" placeholder="llamar,crear,revisar,enviar...">
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost" onclick="toggleCfg()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarConfig()">Guardar configuración</button>
+    </div>
+  </div>
+
+  <div class="filter-row">
+    <span class="fpill active" onclick="setFiltro('',this)">Todas</span>
+    <span class="fpill" onclick="setFiltro('urgente',this)">🔴 Urgente</span>
+    <span class="fpill" onclick="setFiltro('pendiente',this)">🟡 Pendiente</span>
+    <span class="fpill" onclick="setFiltro('info',this)">🔵 Info</span>
+    <span class="fpill" onclick="setFiltro('ok',this)">🟢 Ok</span>
+    <div class="fsearch">🔍 <input type="text" id="buscar" placeholder="Buscar nota..." oninput="render()"></div>
+  </div>
+
+  <div id="pinned-section" class="notes-section">
+    <div class="section-lbl">📌 Fijadas</div>
+    <div class="notes-grid" id="grid-fijadas"></div>
+  </div>
+  <div class="notes-section">
+    <div class="section-lbl">🕐 Recientes</div>
+    <div class="notes-grid" id="grid-recientes"></div>
+  </div>
+  <div id="empty" class="empty" style="display:none"><span>📝</span><p>No hay notas aún. ¡Crea tu primera nota!</p></div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="modal-titulo">Nueva nota</h3>
+    <label>Título</label>
+    <input type="text" id="f-titulo" placeholder="¿De qué trata esta nota?">
+    <label>Contenido</label>
+    <textarea id="f-contenido" placeholder="Escribe aquí..."></textarea>
+    <div class="modal-row">
+      <div>
+        <label>Etiqueta</label>
+        <select id="f-etiqueta">
+          <option value="urgente">🔴 Urgente</option>
+          <option value="pendiente">🟡 Pendiente</option>
+          <option value="info" selected>🔵 Info</option>
+          <option value="ok">🟢 Ok</option>
+        </select>
+      </div>
+      <div>
+        <label>Fijar en panel</label>
+        <select id="f-fijada">
+          <option value="0">No fijar</option>
+          <option value="1">Fijar arriba</option>
+        </select>
+      </div>
+    </div>
+    <label>Color</label>
+    <div class="color-row">
+      <div class="cdot active" style="background:#FEF9C3" data-c="amarillo" onclick="pickColor(this)"></div>
+      <div class="cdot" style="background:#EDE9FE" data-c="morado" onclick="pickColor(this)"></div>
+      <div class="cdot" style="background:#DBEAFE" data-c="azul" onclick="pickColor(this)"></div>
+      <div class="cdot" style="background:#DCFCE7" data-c="verde" onclick="pickColor(this)"></div>
+      <div class="cdot" style="background:#FCE7F3" data-c="rosa" onclick="pickColor(this)"></div>
+    </div>
+    <div id="auto-aviso" style="display:none;margin-top:12px;padding:8px 12px;background:#faf5ff;border:1px solid #ddd6fe;border-radius:8px;font-size:12px;color:#5b21b6">
+      ✨ Esta nota generará una tarea automáticamente por las palabras clave detectadas.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="btn-eliminar" style="display:none" onclick="eliminar()">🗑 Eliminar</button>
+      <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardar()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let notas=[], filtro='', editId=null, colorSel='amarillo';
+let palabrasClave=[];
+
+const TAG={urgente:'🔴 Urgente',pendiente:'🟡 Pendiente',info:'🔵 Info',ok:'🟢 Ok'};
+const TAG_CSS={urgente:'tag-urgente',pendiente:'tag-pendiente',info:'tag-info',ok:'tag-ok'};
+
+async function init(){
+  await cargarConfig();
+  await cargarNotas();
+  mostrarRecordatorio();
+}
+
+async function cargarNotas(){
+  const r=await fetch('/api/notas');
+  notas=await r.json();
+  render();
+}
+
+async function cargarConfig(){
+  const r=await fetch('/api/recordatorios/config');
+  const d=await r.json();
+  document.getElementById('cfg-notas').checked=!!d.notas_activo;
+  document.getElementById('cfg-h1').value=d.hora_1||'09:00';
+  document.getElementById('cfg-h2').value=d.hora_2||'13:00';
+  document.getElementById('cfg-h3').value=d.hora_3||'17:00';
+  document.getElementById('cfg-palabras').value=d.palabras_clave||'';
+  palabrasClave=(d.palabras_clave||'').split(',').map(p=>p.trim().toLowerCase()).filter(Boolean);
+}
+
+async function guardarConfig(){
+  const d={
+    notas_activo:document.getElementById('cfg-notas').checked,
+    hora_1:document.getElementById('cfg-h1').value,
+    hora_2:document.getElementById('cfg-h2').value,
+    hora_3:document.getElementById('cfg-h3').value,
+    palabras_clave:document.getElementById('cfg-palabras').value
+  };
+  await fetch('/api/recordatorios/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+  palabrasClave=d.palabras_clave.split(',').map(p=>p.trim().toLowerCase()).filter(Boolean);
+  toggleCfg();
+  toast('Configuración guardada');
+}
+
+function toggleCfg(){document.getElementById('cfg-panel').classList.toggle('open')}
+
+function detectarTarea(titulo,contenido){
+  const t=(titulo+' '+contenido).toLowerCase();
+  return palabrasClave.some(p=>t.includes(p));
+}
+
+function setFiltro(f,el){
+  filtro=f;
+  document.querySelectorAll('.fpill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function render(){
+  const busq=document.getElementById('buscar').value.toLowerCase();
+  let lista=notas.filter(n=>{
+    const mf=!filtro||n.etiqueta===filtro;
+    const mb=!busq||n.titulo.toLowerCase().includes(busq)||n.contenido.toLowerCase().includes(busq);
+    return mf&&mb;
+  });
+  const fijadas=lista.filter(n=>n.fijada);
+  const recientes=lista.filter(n=>!n.fijada);
+  document.getElementById('pinned-section').style.display=fijadas.length?'block':'none';
+  document.getElementById('grid-fijadas').innerHTML=fijadas.map(cardHTML).join('');
+  document.getElementById('grid-recientes').innerHTML=recientes.map(cardHTML).join('');
+  document.getElementById('empty').style.display=lista.length?'none':'block';
+}
+
+function cardHTML(n){
+  const fecha=formatFecha(n.actualizada||n.creada);
+  const tarea=detectarTarea(n.titulo,n.contenido);
+  return `<div class="note-card nc-${n.color||'amarillo'}" onclick="editarNota(${n.id})">
+    <div class="nc-header">
+      <span class="nc-tag ${TAG_CSS[n.etiqueta]||'tag-info'}">${TAG[n.etiqueta]||n.etiqueta}</span>
+      <div class="nc-acts">
+        ${n.fijada?'<button class="nc-act" title="Fijada">📌</button>':''}
+        <button class="nc-act" onclick="event.stopPropagation();editarNota(${n.id})">✏️</button>
+      </div>
+    </div>
+    <div class="nc-title">${esc(n.titulo)}</div>
+    <div class="nc-body">${esc(n.contenido)}</div>
+    <div class="nc-footer">
+      <span class="nc-date">${fecha}</span>
+      ${tarea?'<span class="nc-auto">✨ Tarea</span>':''}
+    </div>
+  </div>`;
+}
+
+function abrirModal(id=null){
+  editId=id;
+  colorSel='amarillo';
+  document.getElementById('btn-eliminar').style.display=id?'inline-flex':'none';
+  document.getElementById('modal-titulo').textContent=id?'Editar nota':'Nueva nota';
+  if(id){
+    const n=notas.find(x=>x.id===id);
+    document.getElementById('f-titulo').value=n.titulo;
+    document.getElementById('f-contenido').value=n.contenido;
+    document.getElementById('f-etiqueta').value=n.etiqueta;
+    document.getElementById('f-fijada').value=n.fijada?'1':'0';
+    colorSel=n.color||'amarillo';
+  } else {
+    document.getElementById('f-titulo').value='';
+    document.getElementById('f-contenido').value='';
+    document.getElementById('f-etiqueta').value='info';
+    document.getElementById('f-fijada').value='0';
+  }
+  document.querySelectorAll('.cdot').forEach(d=>d.classList.toggle('active',d.dataset.c===colorSel));
+  actualizarAviso();
+  document.getElementById('modal').classList.add('open');
+  setTimeout(()=>document.getElementById('f-titulo').focus(),50);
+}
+
+function actualizarAviso(){
+  const titulo=document.getElementById('f-titulo').value;
+  const contenido=document.getElementById('f-contenido').value;
+  document.getElementById('auto-aviso').style.display=detectarTarea(titulo,contenido)?'block':'none';
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('f-titulo').addEventListener('input',actualizarAviso);
+  document.getElementById('f-contenido').addEventListener('input',actualizarAviso);
+});
+
+function cerrarModal(){document.getElementById('modal').classList.remove('open')}
+function pickColor(el){
+  document.querySelectorAll('.cdot').forEach(d=>d.classList.remove('active'));
+  el.classList.add('active');
+  colorSel=el.dataset.c;
+}
+
+async function guardar(){
+  const titulo=document.getElementById('f-titulo').value.trim();
+  if(!titulo){document.getElementById('f-titulo').focus();return}
+  const d={titulo,contenido:document.getElementById('f-contenido').value.trim(),
+    etiqueta:document.getElementById('f-etiqueta').value,
+    fijada:document.getElementById('f-fijada').value==='1',color:colorSel};
+  let resp;
+  if(editId){
+    resp=await fetch(`/api/notas/${editId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    toast('Nota actualizada');
+  } else {
+    resp=await fetch('/api/notas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    const r=await resp.json();
+    if(r.tarea_creada) toast('✨ Nota guardada y tarea creada automáticamente');
+    else toast('Nota guardada');
+  }
+  cerrarModal();
+  await cargarNotas();
+}
+
+async function editarNota(id){abrirModal(id)}
+
+async function eliminar(){
+  if(!confirm('¿Eliminar esta nota?'))return;
+  await fetch(`/api/notas/${editId}`,{method:'DELETE'});
+  cerrarModal();
+  toast('Nota eliminada');
+  await cargarNotas();
+}
+
+function mostrarRecordatorio(){
+  const urgentes=notas.filter(n=>n.etiqueta==='urgente'||n.etiqueta==='pendiente');
+  if(!urgentes.length)return;
+  document.getElementById('rem-container').innerHTML=`
+    <div class="rem-banner">
+      ⚠️ Tienes <strong>${urgentes.length}</strong> nota(s) urgente(s) o pendiente(s): ${urgentes.slice(0,2).map(n=>`<em>"${esc(n.titulo)}"</em>`).join(', ')}${urgentes.length>2?'...':''}
+      <button onclick="this.parentElement.remove()">Cerrar</button>
+    </div>`;
+}
+
+function formatFecha(s){
+  if(!s)return '';
+  const d=new Date(s),now=new Date();
+  const diff=(now-d)/1000;
+  if(diff<3600*8)return 'hoy '+d.toTimeString().slice(0,5);
+  if(diff<3600*32)return 'ayer '+d.toTimeString().slice(0,5);
+  return d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function toast(msg,t=3000){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',t)}
+
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))cerrarModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
+
+init();
+</script>
+</body>
+</html>

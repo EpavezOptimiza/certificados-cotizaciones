@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tareas — Optimiza</title>
+<script src="/static/theme.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#16a34a}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#f1f5f9;color:#0f172a;min-height:100vh;display:flex;flex-direction:column}
+.topnav{background:#0d1b2e;padding:0 16px;height:50px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-shrink:0;overflow:hidden}
+.topnav::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:var(--themed-bg-image,none);background-size:var(--themed-bg-size,cover);z-index:0}
+.topnav>*{position:relative;z-index:1}
+.nav-brand{color:#fff;font-weight:700;font-size:14px;text-decoration:none}
+.nav-sep{color:rgba(255,255,255,.3);margin:0 4px}
+.nav-cur{color:#bbf7d0;font-size:13px;font-weight:500}
+.nav-links{margin-left:auto;display:flex;gap:8px;align-items:center}
+.nav-link{color:rgba(255,255,255,.6);font-size:12px;text-decoration:none;padding:5px 10px;border-radius:6px;transition:all .15s}
+.nav-link:hover{background:rgba(255,255,255,.1);color:#fff}
+.main{flex:1;padding:24px;max-width:1000px;margin:0 auto;width:100%}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.page-title{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}
+.page-sub{font-size:12px;color:#64748b;margin-top:3px}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.btn-primary{background:#16a34a;color:#fff}
+.btn-primary:hover{background:#15803d}
+.btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.btn-ghost:hover{background:#e2e8f0}
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:#fff;border-radius:12px;padding:14px 16px;border:1px solid #e2e8f0;display:flex;align-items:center;gap:10px}
+.stat-icon{font-size:22px;flex-shrink:0}
+.stat-n{font-size:22px;font-weight:800;line-height:1}
+.stat-lbl{font-size:11px;color:#64748b;margin-top:2px}
+/* FILTERS */
+.filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.fpill{padding:5px 14px;font-size:12px;border-radius:20px;border:1px solid #e2e8f0;background:#fff;color:#64748b;cursor:pointer;transition:all .15s;font-weight:500}
+.fpill:hover{border-color:#86efac;color:#16a34a}
+.fpill.active{background:#f0fdf4;border-color:#86efac;color:#15803d;font-weight:600}
+.fsearch{margin-left:auto;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px}
+.fsearch input{border:none;outline:none;background:transparent;font-size:13px;color:#0f172a;width:150px;font-family:inherit}
+/* CONFIG PANEL */
+.cfg-panel{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #e2e8f0;display:none}
+.cfg-panel.open{display:block}
+.cfg-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f1f5f9}
+.cfg-row:last-child{border-bottom:none;padding-bottom:0}
+.cfg-label{font-size:13px;font-weight:500}
+.cfg-sub{font-size:11px;color:#64748b;margin-top:1px}
+.toggle{position:relative;width:40px;height:22px}
+.toggle input{opacity:0;width:0;height:0}
+.tslider{position:absolute;inset:0;background:#cbd5e1;border-radius:11px;cursor:pointer;transition:.2s}
+.tslider:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.tslider{background:#16a34a}
+.toggle input:checked+.tslider:before{transform:translateX(18px)}
+/* TASK LIST */
+.tasks-list{display:flex;flex-direction:column;gap:8px}
+.task-item{background:#fff;border-radius:12px;padding:14px 16px;border:1px solid #e2e8f0;display:flex;align-items:flex-start;gap:12px;transition:all .15s;position:relative}
+.task-item:hover{box-shadow:0 4px 12px rgba(0,0,0,.07)}
+.task-item.completada{opacity:.55}
+.task-item.completada .task-title{text-decoration:line-through;color:#94a3b8}
+.task-check{width:20px;height:20px;border-radius:50%;border:2px solid #cbd5e1;cursor:pointer;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .15s}
+.task-check:hover{border-color:#16a34a}
+.task-check.done{background:#16a34a;border-color:#16a34a;color:#fff}
+.task-body{flex:1;min-width:0}
+.task-title{font-size:13px;font-weight:600;color:#1e293b;line-height:1.4;margin-bottom:4px}
+.task-desc{font-size:12px;color:#64748b;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.task-meta{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;text-transform:uppercase;letter-spacing:.3px}
+.prio-alta{background:#fee2e2;color:#7f1d1d}
+.prio-media{background:#fef3c7;color:#713f12}
+.prio-baja{background:#eff6ff;color:#1e3a5f}
+.tag-auto{background:#f3e8ff;color:#6b21a8;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600}
+.task-date{font-size:10px;color:#94a3b8;display:flex;align-items:center;gap:3px}
+.task-date.vencida{color:#ef4444;font-weight:600}
+.task-acts{display:flex;gap:4px;flex-shrink:0}
+.task-act{background:#f1f5f9;border:none;border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:background .15s}
+.task-act:hover{background:#e2e8f0}
+/* AUTO BADGE */
+.auto-badge{display:inline-flex;align-items:center;gap:5px;background:#faf5ff;border:1px solid #ddd6fe;border-radius:8px;padding:6px 12px;font-size:12px;color:#5b21b6;font-weight:500;margin-bottom:12px}
+/* EMPTY */
+.empty{text-align:center;padding:48px 20px;color:#94a3b8}
+.empty span{font-size:40px;display:block;margin-bottom:10px;opacity:.4}
+.empty p{font-size:13px}
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(2,8,23,.55);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:28px;width:min(460px,92vw);max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.25)}
+.modal h3{font-size:17px;font-weight:800;margin-bottom:18px}
+.modal label{font-size:11px;color:#64748b;display:block;margin-bottom:4px;margin-top:12px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.modal input,.modal textarea,.modal select{width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:9px;font-size:13px;outline:none;background:#f8fafc;font-family:inherit;transition:border-color .2s}
+.modal input:focus,.modal textarea:focus,.modal select:focus{border-color:#16a34a;background:#fff}
+.modal textarea{min-height:70px;resize:vertical}
+.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.btn-danger{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;margin-right:auto}
+.btn-danger:hover{background:#fee2e2}
+/* TOAST */
+#toast{position:fixed;bottom:20px;right:20px;background:#0f172a;color:#fff;padding:12px 20px;border-radius:10px;font-size:12px;display:none;z-index:9999;font-weight:500;border:1px solid rgba(255,255,255,.1)}
+/* DARK */
+body.dark{background:#060f1e;color:#e2e8f0}
+body.dark .stat-card,.dark .task-item,.dark .modal,.dark .cfg-panel{background:#0d1b2e;border-color:#1a2d45}
+body.dark .fpill{background:#0d1b2e;border-color:#1a2d45;color:#64748b}
+body.dark .fpill.active{background:#052e16;border-color:#166534;color:#86efac}
+body.dark .fsearch{background:#0d1b2e;border-color:#1a2d45}
+body.dark .fsearch input{color:#e2e8f0}
+body.dark .task-act{background:#1a2d45}
+body.dark .modal input,.dark .modal textarea,.dark .modal select{background:#060f1e;border-color:#1a2d45;color:#e2e8f0}
+body.dark .btn-ghost{background:#1a2d45;color:#94a3b8;border-color:#1a2d45}
+</style>
+</head>
+<body>
+<div class="topnav">
+  <a href="/" class="nav-brand">Optimiza</a>
+  <span class="nav-sep">/</span>
+  <span class="nav-cur">✅ Tareas</span>
+  <div class="nav-links">
+    <a href="/notas" class="nav-link">📝 Notas</a>
+    <a href="/" class="nav-link">← Volver</a>
+    <a href="/logout" class="nav-link">Salir</a>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title"><span>✅</span> Tareas pendientes</div>
+      <div class="page-sub">Las tareas marcadas con ✨ fueron detectadas automáticamente desde tus notas</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="toggleCfg()">⚙ Configurar</button>
+      <button class="btn btn-primary" onclick="abrirModal()">+ Nueva tarea</button>
+    </div>
+  </div>
+
+  <div class="cfg-panel" id="cfg-panel">
+    <div style="font-size:14px;font-weight:700;margin-bottom:14px">⚙ Configuración de recordatorios</div>
+    <div class="cfg-row">
+      <div><div class="cfg-label">Recordatorios de tareas activo</div><div class="cfg-sub">Alerta cuando hay tareas pendientes</div></div>
+      <label class="toggle"><input type="checkbox" id="cfg-tareas" checked><span class="tslider"></span></label>
+    </div>
+    <div class="cfg-row">
+      <div style="width:100%">
+        <div class="cfg-label">Horarios diarios (3 al día)</div>
+        <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+          <div><label style="font-size:11px;color:#64748b">Mañana</label><br><input type="time" id="cfg-h1" value="09:00" style="width:110px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:#64748b">Mediodía</label><br><input type="time" id="cfg-h2" value="13:00" style="width:110px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:#64748b">Tarde</label><br><input type="time" id="cfg-h3" value="17:00" style="width:110px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px"></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost" onclick="toggleCfg()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarConfig()">Guardar</button>
+    </div>
+  </div>
+
+  <div class="stats-row" id="stats-row"></div>
+
+  <div id="auto-info" style="display:none" class="auto-badge">✨ <span id="auto-count"></span> tarea(s) detectadas automáticamente desde tus notas</div>
+
+  <div class="filter-row">
+    <span class="fpill active" onclick="setFiltro('',this)">Todas</span>
+    <span class="fpill" onclick="setFiltro('pendiente',this)">🕐 Pendientes</span>
+    <span class="fpill" onclick="setFiltro('completada',this)">✅ Completadas</span>
+    <span class="fpill" onclick="setFiltro('alta',this)">🔴 Alta prioridad</span>
+    <span class="fpill" onclick="setFiltro('vencida',this)">⚠ Vencidas</span>
+    <div class="fsearch">🔍 <input type="text" id="buscar" placeholder="Buscar tarea..." oninput="render()"></div>
+  </div>
+
+  <div class="tasks-list" id="tasks-list"></div>
+  <div id="empty" class="empty" style="display:none"><span>✅</span><p>No hay tareas. ¡Todo al día!</p></div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="modal-titulo">Nueva tarea</h3>
+    <label>Título</label>
+    <input type="text" id="f-titulo" placeholder="¿Qué hay que hacer?">
+    <label>Descripción (opcional)</label>
+    <textarea id="f-desc" placeholder="Detalles adicionales..."></textarea>
+    <div class="modal-row">
+      <div>
+        <label>Prioridad</label>
+        <select id="f-prio">
+          <option value="alta">🔴 Alta</option>
+          <option value="media" selected>🟡 Media</option>
+          <option value="baja">🔵 Baja</option>
+        </select>
+      </div>
+      <div>
+        <label>Fecha límite</label>
+        <input type="date" id="f-fecha">
+      </div>
+    </div>
+    <div id="f-estado-row" style="display:none">
+      <label>Estado</label>
+      <select id="f-estado">
+        <option value="pendiente">🕐 Pendiente</option>
+        <option value="completada">✅ Completada</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="btn-eliminar" style="display:none" onclick="eliminar()">🗑 Eliminar</button>
+      <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardar()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let tareas=[], filtro='', editId=null;
+
+async function init(){
+  await cargarConfig();
+  await cargarTareas();
+  iniciarRecordatorios();
+}
+
+async function cargarTareas(){
+  const r=await fetch('/api/tareas');
+  tareas=await r.json();
+  render();
+}
+
+async function cargarConfig(){
+  const r=await fetch('/api/recordatorios/config');
+  const d=await r.json();
+  document.getElementById('cfg-tareas').checked=!!d.tareas_activo;
+  document.getElementById('cfg-h1').value=d.hora_1||'09:00';
+  document.getElementById('cfg-h2').value=d.hora_2||'13:00';
+  document.getElementById('cfg-h3').value=d.hora_3||'17:00';
+}
+
+async function guardarConfig(){
+  const d={
+    tareas_activo:document.getElementById('cfg-tareas').checked,
+    hora_1:document.getElementById('cfg-h1').value,
+    hora_2:document.getElementById('cfg-h2').value,
+    hora_3:document.getElementById('cfg-h3').value
+  };
+  await fetch('/api/recordatorios/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+  toggleCfg();
+  toast('Configuración guardada');
+  iniciarRecordatorios();
+}
+
+function toggleCfg(){document.getElementById('cfg-panel').classList.toggle('open')}
+
+function isVencida(t){
+  if(!t.fecha_limite||t.estado==='completada')return false;
+  return new Date(t.fecha_limite)<new Date();
+}
+
+function setFiltro(f,el){
+  filtro=f;
+  document.querySelectorAll('.fpill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function render(){
+  const busq=document.getElementById('buscar').value.toLowerCase();
+  let lista=tareas.filter(t=>{
+    if(filtro==='pendiente') return t.estado==='pendiente';
+    if(filtro==='completada') return t.estado==='completada';
+    if(filtro==='alta') return t.prioridad==='alta'&&t.estado==='pendiente';
+    if(filtro==='vencida') return isVencida(t);
+    return true;
+  }).filter(t=>!busq||t.titulo.toLowerCase().includes(busq)||(t.descripcion||'').toLowerCase().includes(busq));
+
+  // stats
+  const pend=tareas.filter(t=>t.estado==='pendiente').length;
+  const comp=tareas.filter(t=>t.estado==='completada').length;
+  const alta=tareas.filter(t=>t.prioridad==='alta'&&t.estado==='pendiente').length;
+  const venc=tareas.filter(t=>isVencida(t)).length;
+  const auto=tareas.filter(t=>t.nota_id).length;
+  document.getElementById('stats-row').innerHTML=`
+    <div class="stat-card"><div class="stat-icon">🕐</div><div><div class="stat-n">${pend}</div><div class="stat-lbl">Pendientes</div></div></div>
+    <div class="stat-card"><div class="stat-icon">✅</div><div><div class="stat-n">${comp}</div><div class="stat-lbl">Completadas</div></div></div>
+    <div class="stat-card"><div class="stat-icon">🔴</div><div><div class="stat-n">${alta}</div><div class="stat-lbl">Alta prioridad</div></div></div>
+    <div class="stat-card"><div class="stat-icon">⚠️</div><div><div class="stat-n">${venc}</div><div class="stat-lbl">Vencidas</div></div></div>
+    <div class="stat-card"><div class="stat-icon">✨</div><div><div class="stat-n">${auto}</div><div class="stat-lbl">Auto-notas</div></div></div>
+  `;
+
+  const ai=document.getElementById('auto-info');
+  if(auto>0){ai.style.display='inline-flex';document.getElementById('auto-count').textContent=auto}
+  else ai.style.display='none';
+
+  document.getElementById('tasks-list').innerHTML=lista.map(itemHTML).join('');
+  document.getElementById('empty').style.display=lista.length?'none':'block';
+}
+
+const PRIO_BADGE={alta:'prio-alta',media:'prio-media',baja:'prio-baja'};
+const PRIO_LBL={alta:'🔴 Alta',media:'🟡 Media',baja:'🔵 Baja'};
+
+function itemHTML(t){
+  const done=t.estado==='completada';
+  const venc=isVencida(t);
+  const fechaStr=t.fecha_limite?`<span class="task-date${venc?' vencida':''}">📅 ${formatFecha(t.fecha_limite)}${venc?' (vencida)':''}</span>`:'';
+  const autoTag=t.nota_id?'<span class="tag-auto">✨ desde nota</span>':'';
+  return `<div class="task-item${done?' completada':''}">
+    <div class="task-check${done?' done':''}" onclick="toggleEstado(${t.id})">${done?'✓':''}</div>
+    <div class="task-body">
+      <div class="task-title">${esc(t.titulo)}</div>
+      ${t.descripcion?`<div class="task-desc">${esc(t.descripcion)}</div>`:''}
+      <div class="task-meta">
+        <span class="badge ${PRIO_BADGE[t.prioridad]||'prio-media'}">${PRIO_LBL[t.prioridad]||t.prioridad}</span>
+        ${fechaStr}
+        ${autoTag}
+        <span style="font-size:10px;color:#cbd5e1;margin-left:auto">${formatFecha(t.creada)}</span>
+      </div>
+    </div>
+    <div class="task-acts">
+      <button class="task-act" onclick="abrirModal(${t.id})" title="Editar">✏️</button>
+    </div>
+  </div>`;
+}
+
+async function toggleEstado(id){
+  const t=tareas.find(x=>x.id===id);
+  const nuevo=t.estado==='completada'?'pendiente':'completada';
+  await fetch(`/api/tareas/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({estado:nuevo})});
+  toast(nuevo==='completada'?'✅ Tarea completada':'Tarea marcada como pendiente');
+  await cargarTareas();
+}
+
+function abrirModal(id=null){
+  editId=id;
+  document.getElementById('btn-eliminar').style.display=id?'inline-flex':'none';
+  document.getElementById('f-estado-row').style.display=id?'block':'none';
+  document.getElementById('modal-titulo').textContent=id?'Editar tarea':'Nueva tarea';
+  if(id){
+    const t=tareas.find(x=>x.id===id);
+    document.getElementById('f-titulo').value=t.titulo;
+    document.getElementById('f-desc').value=t.descripcion||'';
+    document.getElementById('f-prio').value=t.prioridad;
+    document.getElementById('f-fecha').value=t.fecha_limite||'';
+    document.getElementById('f-estado').value=t.estado;
+  } else {
+    document.getElementById('f-titulo').value='';
+    document.getElementById('f-desc').value='';
+    document.getElementById('f-prio').value='media';
+    document.getElementById('f-fecha').value='';
+  }
+  document.getElementById('modal').classList.add('open');
+  setTimeout(()=>document.getElementById('f-titulo').focus(),50);
+}
+
+function cerrarModal(){document.getElementById('modal').classList.remove('open')}
+
+async function guardar(){
+  const titulo=document.getElementById('f-titulo').value.trim();
+  if(!titulo){document.getElementById('f-titulo').focus();return}
+  const d={titulo,descripcion:document.getElementById('f-desc').value.trim(),
+    prioridad:document.getElementById('f-prio').value,
+    fecha_limite:document.getElementById('f-fecha').value};
+  if(editId) d.estado=document.getElementById('f-estado').value;
+  if(editId){
+    await fetch(`/api/tareas/${editId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    toast('Tarea actualizada');
+  } else {
+    await fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    toast('Tarea creada');
+  }
+  cerrarModal();
+  await cargarTareas();
+}
+
+async function eliminar(){
+  if(!confirm('¿Eliminar esta tarea?'))return;
+  await fetch(`/api/tareas/${editId}`,{method:'DELETE'});
+  cerrarModal();
+  toast('Tarea eliminada');
+  await cargarTareas();
+}
+
+// Recordatorios browser
+let remTimer=null;
+function iniciarRecordatorios(){
+  clearInterval(remTimer);
+  remTimer=setInterval(()=>{
+    const activo=document.getElementById('cfg-tareas').checked;
+    if(!activo)return;
+    const h1=document.getElementById('cfg-h1').value;
+    const h2=document.getElementById('cfg-h2').value;
+    const h3=document.getElementById('cfg-h3').value;
+    const now=new Date();
+    const hm=now.toTimeString().slice(0,5);
+    if(hm===h1||hm===h2||hm===h3){
+      const pend=tareas.filter(t=>t.estado==='pendiente').length;
+      if(pend>0) notificar(`Tienes ${pend} tarea(s) pendiente(s)`);
+    }
+  },60000);
+}
+
+function notificar(msg){
+  if(Notification.permission==='granted'){
+    new Notification('Optimiza — Tareas',{body:msg,icon:'/static/favicon.ico'});
+  } else if(Notification.permission!=='denied'){
+    Notification.requestPermission().then(p=>{if(p==='granted')notificar(msg)});
+  }
+  toast('🔔 '+msg,5000);
+}
+
+function formatFecha(s){
+  if(!s)return '';
+  const d=new Date(s),now=new Date();
+  if(!s.includes('T')&&!s.includes(' ')){
+    // solo fecha (fecha_limite)
+    return d.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'});
+  }
+  const diff=(now-d)/1000;
+  if(diff<3600*8)return 'hoy '+d.toTimeString().slice(0,5);
+  if(diff<3600*32)return 'ayer';
+  return d.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function toast(msg,t=3000){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',t)}
+
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))cerrarModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
+
+init();
+</script>
+</body>
+</html>

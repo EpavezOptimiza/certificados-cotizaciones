@@ -360,6 +360,16 @@ body.dark .pref-label{color:#e2e8f0}
         <div style="font-size:10px;opacity:.65;font-weight:400">Pendientes y atendidas</div>
       </div>
     </a>
+    <a href="/notas" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(234,179,8,.1);color:#fde68a;border-color:rgba(234,179,8,.2)">
+        <span style="font-size:15px">📝</span>
+        <div><div>Notas</div><div style="font-size:10px;opacity:.65;font-weight:400">Notas rápidas</div></div>
+        <span id="badge-notas" style="margin-left:auto;font-size:10px;background:rgba(234,179,8,.3);color:#fde68a;padding:2px 6px;border-radius:10px;display:none"></span>
+    </a>
+    <a href="/tareas" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(34,197,94,.1);color:#86efac;border-color:rgba(34,197,94,.2)">
+        <span style="font-size:15px">✅</span>
+        <div><div>Tareas</div><div style="font-size:10px;opacity:.65;font-weight:400">Pendientes</div></div>
+        <span id="badge-tareas" style="margin-left:auto;font-size:10px;background:rgba(239,68,68,.3);color:#fca5a5;padding:2px 6px;border-radius:10px;display:none"></span>
+    </a>
     <a href="#" onclick="abrirCartas();return false" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(139,92,246,.1);color:#c4b5fd;border-color:rgba(139,92,246,.2)">
       <span style="font-size:15px">✉</span>
       <div>
@@ -1977,6 +1987,21 @@ async function optiSend(){
 }
 
 // Input listener — cambiar a escuchando mientras escribe
+// Cargar badges de notas y tareas
+async function cargarBadges(){
+  try{
+    const r = await fetch('/api/recordatorios/pendientes');
+    if(!r.ok) return;
+    const d = await r.json();
+    const bn = document.getElementById('badge-notas');
+    const bt = document.getElementById('badge-tareas');
+    if(bn && d.notas_urgentes > 0){ bn.textContent = d.notas_urgentes; bn.style.display='inline'; }
+    if(bt && d.tareas_pendientes > 0){ bt.textContent = d.tareas_vencidas > 0 ? '⚠ '+d.tareas_vencidas : d.tareas_pendientes; bt.style.display='inline'; }
+  }catch(e){}
+}
+cargarBadges();
+setInterval(cargarBadges, 60000);
+
 document.addEventListener('DOMContentLoaded', ()=>{
   const inp = document.getElementById('opti-input');
   if(inp){

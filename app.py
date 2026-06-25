@@ -1804,6 +1804,202 @@ def previred_iniciar():
     return jsonify({"task_id": tid})
 
 
+# ============================================================
+#  NOTAS
+# ============================================================
+
+PALABRAS_TAREA_DEFAULT = [
+    'llamar','crear','realizar','revisar','enviar','reunión','reunion',
+    'pagar','gestionar','solicitar','confirmar','contactar','hacer',
+    'subir','mandar','completar','preparar','coordinar','agendar','verificar'
+]
+
+def _detectar_tareas(texto, palabras):
+    tl = texto.lower()
+    return any(p.lower() in tl for p in palabras)
+
+@app.route("/notas")
+@login_required
+def notas_page():
+    return render_template("notas.html")
+
+@app.route("/tareas")
+@login_required
+def tareas_page():
+    return render_template("tareas.html")
+
+@app.route("/api/notas")
+@api_login_required
+def get_notas():
+    user = get_current_user()
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notas WHERE usuario_id=? ORDER BY fijada DESC, actualizada DESC",
+            (user["id"],)).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/notas", methods=["POST"])
+@api_login_required
+def crear_nota():
+    user = get_current_user()
+    d = request.json or {}
+    titulo = d.get("titulo","").strip()
+    if not titulo:
+        return jsonify({"error":"Título requerido"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO notas(usuario_id,titulo,contenido,etiqueta,color,fijada,creada,actualizada) VALUES(?,?,?,?,?,?,?,?)",
+            (user["id"], titulo, d.get("contenido",""), d.get("etiqueta","info"),
+             d.get("color","amarillo"), 1 if d.get("fijada") else 0, now, now))
+        nid = cur.lastrowid
+        # Auto-detectar tarea
+        cfg = conn.execute("SELECT palabras_clave FROM config_recordatorios WHERE usuario_id=?", (user["id"],)).fetchone()
+        palabras = (cfg["palabras_clave"].split(",") if cfg and cfg["palabras_clave"] else PALABRAS_TAREA_DEFAULT)
+        texto_completo = titulo + " " + d.get("contenido","")
+        tarea_id = None
+        if _detectar_tareas(texto_completo, palabras):
+            prioridad = "alta" if d.get("etiqueta") == "urgente" else "media"
+            cur2 = conn.execute(
+                "INSERT INTO tareas(usuario_id,titulo,descripcion,prioridad,estado,nota_id,creada) VALUES(?,?,?,?,?,?,?)",
+                (user["id"], titulo, d.get("contenido",""), prioridad, "pendiente", nid, now))
+            tarea_id = cur2.lastrowid
+    return jsonify({"id": nid, "tarea_creada": tarea_id is not None, "tarea_id": tarea_id}), 201
+
+@app.route("/api/notas/<int:nid>", methods=["PUT"])
+@api_login_required
+def editar_nota(nid):
+    user = get_current_user()
+    d = request.json or {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        nota = conn.execute("SELECT * FROM notas WHERE id=? AND usuario_id=?", (nid, user["id"])).fetchone()
+        if not nota:
+            return jsonify({"error":"No encontrada"}), 404
+        conn.execute(
+            "UPDATE notas SET titulo=?,contenido=?,etiqueta=?,color=?,fijada=?,actualizada=? WHERE id=?",
+            (d.get("titulo", nota["titulo"]), d.get("contenido", nota["contenido"]),
+             d.get("etiqueta", nota["etiqueta"]), d.get("color", nota["color"]),
+             1 if d.get("fijada") else 0, now, nid))
+    return jsonify({"ok": True})
+
+@app.route("/api/notas/<int:nid>", methods=["DELETE"])
+@api_login_required
+def eliminar_nota(nid):
+    user = get_current_user()
+    with get_conn() as conn:
+        conn.execute("DELETE FROM notas WHERE id=? AND usuario_id=?", (nid, user["id"]))
+    return jsonify({"ok": True})
+
+# ============================================================
+#  TAREAS
+# ============================================================
+
+@app.route("/api/tareas")
+@api_login_required
+def get_tareas():
+    user = get_current_user()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT t.*, n.titulo as nota_titulo
+            FROM tareas t LEFT JOIN notas n ON n.id = t.nota_id
+            WHERE t.usuario_id=?
+            ORDER BY CASE t.prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,
+                     t.estado, t.creada DESC""",
+            (user["id"],)).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/tareas", methods=["POST"])
+@api_login_required
+def crear_tarea():
+    user = get_current_user()
+    d = request.json or {}
+    titulo = d.get("titulo","").strip()
+    if not titulo:
+        return jsonify({"error":"Título requerido"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO tareas(usuario_id,titulo,descripcion,prioridad,estado,fecha_limite,nota_id,creada) VALUES(?,?,?,?,?,?,?,?)",
+            (user["id"], titulo, d.get("descripcion",""), d.get("prioridad","media"),
+             "pendiente", d.get("fecha_limite",""), d.get("nota_id"), now))
+    return jsonify({"id": cur.lastrowid}), 201
+
+@app.route("/api/tareas/<int:tid>", methods=["PUT"])
+@api_login_required
+def editar_tarea(tid):
+    user = get_current_user()
+    d = request.json or {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        t = conn.execute("SELECT * FROM tareas WHERE id=? AND usuario_id=?", (tid, user["id"])).fetchone()
+        if not t:
+            return jsonify({"error":"No encontrada"}), 404
+        completada_en = now if d.get("estado") == "completada" and t["estado"] != "completada" else t["completada_en"]
+        conn.execute(
+            "UPDATE tareas SET titulo=?,descripcion=?,prioridad=?,estado=?,fecha_limite=?,completada_en=? WHERE id=?",
+            (d.get("titulo", t["titulo"]), d.get("descripcion", t["descripcion"]),
+             d.get("prioridad", t["prioridad"]), d.get("estado", t["estado"]),
+             d.get("fecha_limite", t["fecha_limite"]), completada_en, tid))
+    return jsonify({"ok": True})
+
+@app.route("/api/tareas/<int:tid>", methods=["DELETE"])
+@api_login_required
+def eliminar_tarea(tid):
+    user = get_current_user()
+    with get_conn() as conn:
+        conn.execute("DELETE FROM tareas WHERE id=? AND usuario_id=?", (tid, user["id"]))
+    return jsonify({"ok": True})
+
+# ── Config recordatorios ──────────────────────────────────────
+
+@app.route("/api/recordatorios/config")
+@api_login_required
+def get_config_recordatorios():
+    user = get_current_user()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM config_recordatorios WHERE usuario_id=?", (user["id"],)).fetchone()
+    if row:
+        return jsonify(dict(row))
+    return jsonify({
+        "usuario_id": user["id"], "notas_activo": 1, "tareas_activo": 1,
+        "hora_1": "09:00", "hora_2": "13:00", "hora_3": "17:00",
+        "palabras_clave": ",".join(PALABRAS_TAREA_DEFAULT)
+    })
+
+@app.route("/api/recordatorios/config", methods=["POST"])
+@api_login_required
+def set_config_recordatorios():
+    user = get_current_user()
+    d = request.json or {}
+    with get_conn() as conn:
+        conn.execute("""INSERT INTO config_recordatorios(usuario_id,notas_activo,tareas_activo,hora_1,hora_2,hora_3,palabras_clave)
+            VALUES(?,?,?,?,?,?,?)
+            ON CONFLICT(usuario_id) DO UPDATE SET
+                notas_activo=excluded.notas_activo, tareas_activo=excluded.tareas_activo,
+                hora_1=excluded.hora_1, hora_2=excluded.hora_2, hora_3=excluded.hora_3,
+                palabras_clave=excluded.palabras_clave""",
+            (user["id"], 1 if d.get("notas_activo",True) else 0,
+             1 if d.get("tareas_activo",True) else 0,
+             d.get("hora_1","09:00"), d.get("hora_2","13:00"), d.get("hora_3","17:00"),
+             d.get("palabras_clave", ",".join(PALABRAS_TAREA_DEFAULT))))
+    return jsonify({"ok": True})
+
+@app.route("/api/recordatorios/pendientes")
+@api_login_required
+def get_pendientes_resumen():
+    user = get_current_user()
+    with get_conn() as conn:
+        notas_count = conn.execute(
+            "SELECT COUNT(*) FROM notas WHERE usuario_id=? AND etiqueta IN ('urgente','pendiente')", (user["id"],)).fetchone()[0]
+        tareas_count = conn.execute(
+            "SELECT COUNT(*) FROM tareas WHERE usuario_id=? AND estado='pendiente'", (user["id"],)).fetchone()[0]
+        tareas_vencidas = conn.execute(
+            "SELECT COUNT(*) FROM tareas WHERE usuario_id=? AND estado='pendiente' AND fecha_limite != '' AND fecha_limite < ?",
+            (user["id"], datetime.now().strftime("%Y-%m-%d"))).fetchone()[0]
+    return jsonify({"notas_urgentes": notas_count, "tareas_pendientes": tareas_count, "tareas_vencidas": tareas_vencidas})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

@@ -265,6 +265,10 @@ NOTA_TRIGGER_RE = re.compile(
     r'^(?:opti[,:]?\s*)?(?:nota|anota|an[oó]tame|apunta|recu[eé]rdame|recuerdame|guarda esto|crea una nota)[:,]?\s+(.+)',
     re.IGNORECASE)
 
+ERROR_TRIGGER_RE = re.compile(
+    r'^(?:opti[,:]?\s*)?(?:informar error|reportar error|report error|hay un error|error|falla|bug)[:,]?\s+(.+)',
+    re.IGNORECASE)
+
 @app.route("/api/opti_chat", methods=["POST"])
 @api_login_required
 def opti_chat():
@@ -282,6 +286,17 @@ def opti_chat():
         resp_txt = f'📝 Listo, creé la nota: "{texto[:60]}{"..." if len(texto) > 60 else ""}"'
         if tarea_id:
             resp_txt += "\n✅ También detecté una tarea y la agregué a tus pendientes."
+        return jsonify({"respuesta": resp_txt})
+
+    me = ERROR_TRIGGER_RE.match(mensaje.strip())
+    if me:
+        user = get_current_user()
+        texto_error = me.group(1).strip()
+        enviado = send_email_error_opti(user["nombre"], user.get("email",""), texto_error)
+        if enviado:
+            resp_txt = "🚨 Listo, le avisé al administrador por correo con el detalle del error. ¡Gracias por reportarlo!"
+        else:
+            resp_txt = "🚨 Anoté tu reporte, pero no pude enviar el correo automático. Avísale directo al administrador por favor."
         return jsonify({"respuesta": resp_txt})
 
     api_key = os.environ.get("OPENAI_API_KEY","")
@@ -1152,6 +1167,60 @@ def send_email_solicitud(to_email, to_nombre, data):
         print(f"[EMAIL] Enviado a {to_email}")
     except Exception as e:
         print(f"[EMAIL] Error: {e}")
+
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "epavez@optimizaco.cl")
+
+def send_email_error_opti(usuario_nombre, usuario_email, texto):
+    """Envía al administrador un error reportado a Opti vía chat."""
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        smtp_user = os.environ.get("SMTP_USER","")
+        smtp_pass = os.environ.get("SMTP_PASS","")
+        if not smtp_user or not smtp_pass:
+            print(f"[EMAIL] Sin configuración SMTP — reporte de error de {usuario_nombre}")
+            return False
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"🚨 Error reportado por {usuario_nombre} — Opti"
+        msg["From"]    = smtp_user
+        msg["To"]      = ADMIN_EMAIL
+
+        fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
+        html = f"""
+        <div style="font-family:sans-serif;max-width:520px;margin:auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+          <div style="background:#7f1d1d;padding:20px">
+            <h2 style="color:#fff;margin:0">🚨 Error reportado vía Opti</h2>
+          </div>
+          <div style="padding:20px">
+            <table style="width:100%;border-collapse:collapse">
+              <tr><td style="padding:8px;color:#64748b;width:140px">Usuario</td><td style="padding:8px;font-weight:600">{usuario_nombre}</td></tr>
+              <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Email</td><td style="padding:8px">{usuario_email}</td></tr>
+              <tr><td style="padding:8px;color:#64748b">Fecha</td><td style="padding:8px">{fecha}</td></tr>
+            </table>
+            <div style="margin-top:14px;padding:14px;background:#fef2f2;border-left:4px solid #dc2626;border-radius:4px">
+              <p style="margin:0;white-space:pre-wrap">{texto}</p>
+            </div>
+            <div style="margin-top:20px;text-align:center">
+              <a href="{os.environ.get('APP_URL','https://web-production-286542.up.railway.app')}"
+                 style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
+                Ver en la app →
+              </a>
+            </div>
+          </div>
+        </div>"""
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+            s.login(smtp_user, smtp_pass)
+            s.sendmail(smtp_user, ADMIN_EMAIL, msg.as_string())
+        print(f"[EMAIL] Reporte de error enviado a {ADMIN_EMAIL}")
+        return True
+    except Exception as e:
+        print(f"[EMAIL] Error enviando reporte: {e}")
+        return False
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def certs_default(conn, empresa_id):

@@ -1825,7 +1825,7 @@ function toggleOpti(){
         const nombre = (currentUser && currentUser.nombre) ? currentUser.nombre.split(' ')[0] : '';
         const msg = document.createElement('div');
         msg.className = 'opti-msg bot';
-        msg.innerHTML = `¡Hola ${nombre}! 👋 Soy <strong>Opti</strong>, tu asistente.<br>¿En qué te puedo ayudar? <br><span style="font-size:10px;color:#94a3b8">Tip: escríbeme "NOTA ..." y te la dejo guardada y redactada 📝</span>`;
+        msg.innerHTML = `¡Hola ${nombre}! 👋 Soy <strong>Opti</strong>, tu asistente.<br>¿En qué te puedo ayudar? <br><span style="font-size:10px;color:#94a3b8">Tip: escríbeme "NOTA ..." y te la dejo guardada y redactada 📝<br>O "ERROR ..." para avisarle directo al administrador 🚨</span>`;
         document.getElementById('opti-msgs').appendChild(msg);
         optiShowOptions();
         setOptiImg('talk');

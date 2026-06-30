@@ -105,8 +105,8 @@ RE_GRUPO_PDF     = re.compile(
     r"^(PLANILLAS COMPLEMENTARIAS|DECL\.?\s*Y NO PAGO\s*AUTOM\.?\s*\(?DNPA\)?|COBRO\s+POR\s+DIFERENCIA|COB\.?\s*POR\s+DIF\.?)\s+"
     r"\d+\s+(\d{2}/\d{4})\s+([\d\.]+)\s+([\d\.]+)\s+", re.IGNORECASE)
 RE_DETALLE_PDF   = re.compile(r"^(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s+.+?\s+([\d\.]+)\s+([\d\.]+)\s*$")
-RUT_RE           = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
-RUT_CON_NOMBRE   = re.compile(r"^(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s+(.+)")
+RUT_RE           = re.compile(r"^\d{1,2}[.,]\d{3}[.,]\d{3}-[\dKk]$")
+RUT_CON_NOMBRE   = re.compile(r"^(\d{1,2}[.,]\d{3}[.,]\d{3}-[\dKk])\s+(.+)")
 RE_NUD_HDR       = re.compile(r'n[uú]mero\s+\w+(?:\s+de)?\s+deuda[^0-9]*(\d{6,})', re.IGNORECASE)
 RE_RUT_HDR       = re.compile(r"^r\.u\.t\.", re.IGNORECASE)
 RE_RUT_EMP       = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
@@ -758,7 +758,9 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
         if isinstance(origen_val,str) and _es_stop(origen_val): break
         if isinstance(a,str) and _es_stop(a): break
         if isinstance(a,str) and _es_ruido(a): split_pendiente=None; continue
-        if isinstance(a,str) and len(a)>60 and not RUT_RE.match(str(a)): split_pendiente=None; continue
+        if (isinstance(a,str) and len(a)>60 and not RUT_RE.match(str(a))
+                and not _es_grupo(a) and not RUT_CON_NOMBRE.match(a)):
+            split_pendiente=None; continue
 
         if _es_grupo(origen_val):
             if grupo_fila_pendiente is not None and len(filas)==filas_antes_grupo:
@@ -774,6 +776,15 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
                         periodo_raw = _cv; break
                     if isinstance(_cv, str) and re.match(r'^\d{2}/\d{4}$', _cv.strip()):
                         periodo_raw = _cv.strip(); break
+            if not periodo_raw:
+                # Última opción: la fila vino "apretada" en una sola celda (Adobe
+                # a veces no separa columnas) — buscar MM/YYYY embebido en el texto.
+                for _cc in range(1, ws.max_column+1):
+                    _cv = ws.cell(r, _cc).value
+                    if isinstance(_cv, str):
+                        _m_emb = re.search(r'(\d{2}/\d{4})', _cv)
+                        if _m_emb:
+                            periodo_raw = _m_emb.group(1); break
             grupo = {
                 "origen":  _norm_origen(origen_val),
                 "adm":     adm_val,
@@ -834,10 +845,10 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
 
         rut_det=None; nombre_en_a=""
         if isinstance(a,str):
-            if RUT_RE.match(a): rut_det=a
+            if RUT_RE.match(a): rut_det=a.replace(",",".")
             else:
                 m2 = RUT_CON_NOMBRE.match(a)
-                if m2: rut_det=m2.group(1); nombre_en_a=m2.group(2).strip()
+                if m2: rut_det=m2.group(1).replace(",","."); nombre_en_a=m2.group(2).strip()
 
         if rut_det:
             nombre = nombre_en_a or ""
@@ -850,6 +861,12 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
                 _vals = [(c, ws.cell(r,c).value) for c in range(1, ws.max_column+1) if _es_monto(ws.cell(r,c).value)]
                 if len(_vals) >= 2:
                     nom_f, act_f = _vals[0][1], _vals[1][1]
+            if nom_f is None and nombre_en_a:
+                # Fila "apretada" en una sola celda: "<nombre>  <nom>  <act>" embebido
+                _m_emb = re.match(r'^(.*?)\s+([\d\.]+)\s+([\d\.]+)\s*$', nombre_en_a)
+                if _m_emb:
+                    nombre = _m_emb.group(1).strip()
+                    nom_f, act_f = _m_emb.group(2), _m_emb.group(3)
             if nom_f is not None and act_f is not None:
                 split_pendiente=None
                 agregar_fila(rut_det,nombre,nom_f,act_f)

@@ -59,6 +59,11 @@ RE_RUT_EMPRESA_ISAPRE  = re.compile(r"[Ee]mpresa\s+.+?\s+[Rr]ut\s*:\s*(\d{1,2}\.
 RE_RAZON_EMPRESA_ISAPRE = re.compile(r"[Ee]mpresa\s+([A-ZÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ0-9\s\.,]+?)\s+[Rr]ut\s*:", re.IGNORECASE)
 RE_PERIODO_STR   = re.compile(r"^(\d{2})/(\d{4})")
 
+def _normalizar_rut_detectado(rut_raw: str) -> str:
+    """Corrige confusiones de OCR/Adobe en un RUT ya con formato XX.XXX.XXX-X:
+    coma en vez de punto, y guion confundido con en-dash/em-dash/punto medio."""
+    return re.sub(r"[-–—·]{1,2}", "-", rut_raw.replace(",", "."))
+
 def _normalizar_rut_sin_puntos(rut_raw: str) -> str:
     """'76003477-0' → '76.003.477-0', '7003477-0' → '7.003.477-0'"""
     parts = rut_raw.split("-")
@@ -105,8 +110,8 @@ RE_GRUPO_PDF     = re.compile(
     r"^(PLANILLAS COMPLEMENTARIAS|DECL\.?\s*Y NO PAGO\s*AUTOM\.?\s*\(?DNPA\)?|COBRO\s+POR\s+DIFERENCIA|COB\.?\s*POR\s+DIF\.?)\s+"
     r"\d+\s+(\d{2}/\d{4})\s+([\d\.]+)\s+([\d\.]+)\s+", re.IGNORECASE)
 RE_DETALLE_PDF   = re.compile(r"^(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s+.+?\s+([\d\.]+)\s+([\d\.]+)\s*$")
-RUT_RE           = re.compile(r"^\d{1,2}[.,]\d{3}[.,]\d{3}-[\dKk]$")
-RUT_CON_NOMBRE   = re.compile(r"^(\d{1,2}[.,]\d{3}[.,]\d{3}-[\dKk])\s+(.+)")
+RUT_RE           = re.compile(r"^\d{1,2}[.,]\d{3}[.,]\d{3}[-–—·]{1,2}[\dKk]$")
+RUT_CON_NOMBRE   = re.compile(r"^(\d{1,2}[.,]\d{3}[.,]\d{3}[-–—·]{1,2}[\dKk])\s+(.+)")
 RE_NUD_HDR       = re.compile(r'n[uú]mero\s+\w+(?:\s+de)?\s+deuda[^0-9]*(\d{6,})', re.IGNORECASE)
 RE_RUT_HDR       = re.compile(r"^r\.u\.t\.", re.IGNORECASE)
 RE_RUT_EMP       = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
@@ -183,7 +188,7 @@ def _es_stop(val: str) -> bool:
 
 def _es_grupo(b_val) -> bool:
     if not isinstance(b_val, str): return False
-    return any(x in b_val.upper() for x in ["PLANILLAS","PAGO AUTOM","ECL.","DECL.","DNPA","COB","DIFERENCIA"])
+    return any(x in b_val.upper() for x in ["PLANILLAS","LANILLAS","PAGO AUTOM","ECL.","DECL.","DNPA","COB","DIFERENCIA"])
 
 def _norm_estado(estado: str) -> str:
     upper = estado.upper()
@@ -659,6 +664,146 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     return filas, [], ws
 
 
+# ── Parseo Excel Adobe genérico (sin columnas fijas) ──────────────────────────
+# Algunos exports de Adobe (ej. AFP Provida) desplazan las columnas según el
+# ancho del texto de cada fila, por lo que la detección por posición de columna
+# (usada en _parsear_excel) falla. Este parser escanea cada fila completa sin
+# asumir en qué columna cae cada dato.
+
+RUT_EMBED_RE = re.compile(
+    r'(\d{1,2}[.,]\d{3}[.,]\d{3}(?:[-–—·.]{1,2}[\dKk\)\}\{J]|�))\s*(.*)', re.DOTALL)
+
+def _filas_virtuales(ws, r):
+    """Adobe a veces combina dos filas lógicas (ej: un deudor + el encabezado
+    del grupo siguiente) en una sola fila física, separadas por '\\n' dentro
+    de cada celda. Esto las separa en sub-filas alineadas por índice."""
+    raw = [(c, ws.cell(r, c).value) for c in range(1, ws.max_column + 1)]
+    partes = {}
+    maxn = 1
+    for c, v in raw:
+        if isinstance(v, str) and "\n" in v:
+            partes[c] = v.split("\n")
+            maxn = max(maxn, len(partes[c]))
+    if maxn == 1:
+        yield raw
+        return
+    for i in range(maxn):
+        fila = []
+        for c, v in raw:
+            if c in partes:
+                ps = partes[c]
+                fila.append((c, ps[i].strip() if i < len(ps) else None))
+            else:
+                fila.append((c, v if i == 0 else None))
+        yield fila
+
+def _parsear_excel_generico(ws) -> tuple:
+    filas = []
+    advertencias = []
+    grupo = {"origen": "", "adm": None, "periodo": "", "estado": "", "abogado": ""}
+    pendiente = None  # {"rut","nombre","monto"} esperando el 2do monto en la fila siguiente
+
+    detener = False
+    for r in range(1, ws.max_row + 1):
+      if detener: break
+      for cels in _filas_virtuales(ws, r):
+        strs = [(c, v) for c, v in cels if isinstance(v, str) and v.strip()]
+        if not strs:
+            continue
+
+        texto_fila = " ".join(v for _, v in strs)
+        if _es_stop(texto_fila):
+            detener = True; break
+        if _es_ruido(texto_fila):
+            continue
+
+        # 1) ¿Es encabezado de grupo? (DNPA / PLANILLAS / COB DIF en alguna celda)
+        grupo_texto = next((v for _, v in strs if _es_grupo(v)), None)
+        if grupo_texto is not None:
+            m_per = re.search(r'(\d{2}/\d{4})', texto_fila)
+            estado_g = ""
+            up = texto_fila.upper()
+            for kw in ["SIN GESTION", "PREJUDICIAL", "JUICIO", "RESOLUCION", "INGRESADA"]:
+                if kw in up:
+                    estado_g = _norm_estado(kw); break
+            grupo = {
+                "origen":  _norm_origen(grupo_texto),
+                "adm":     None,
+                "periodo": _periodo(m_per.group(1)) if m_per else grupo.get("periodo", ""),
+                "estado":  estado_g,
+                "abogado": "",
+            }
+            pendiente = None
+            # A veces el encabezado de grupo trae también un deudor embebido
+            # en la misma línea (ej: "...09/2023 24.187.811-2  CAMPO TASCON...")
+            m_rut_emb = RUT_EMBED_RE.search(grupo_texto)
+            if m_rut_emb:
+                rut_g = _normalizar_rut_detectado(m_rut_emb.group(1))
+                nombre_g = m_rut_emb.group(2).strip()
+                montos_g = [v for c, v in cels if _es_monto(v)]
+                if len(montos_g) >= 2:
+                    filas.append({"rut": rut_g, "nombre": nombre_g,
+                                  "monto_nom": _convertir_monto(montos_g[0]),
+                                  "monto_act": _convertir_monto(montos_g[1]),
+                                  "_fila_excel": r, **grupo})
+            continue
+
+        # 2) ¿Es fila de detalle? (RUT embebido en alguna celda string)
+        rut_det = None; nombre = ""; rut_col = None
+        for c, v in strs:
+            m = RUT_EMBED_RE.match(v.strip())
+            if m:
+                rut_det = _normalizar_rut_detectado(m.group(1))
+                nombre  = m.group(2).strip()
+                rut_col = c
+                break
+        if not rut_det:
+            continue
+
+        if not nombre:
+            for c, v in strs:
+                if c != rut_col and not _es_monto(v):
+                    nombre = v.strip(); break
+
+        montos = []
+        for c, v in cels:
+            if c == rut_col:
+                continue
+            if isinstance(v, str):
+                # Adobe a veces mete los dos montos en una sola celda separados
+                # por varios espacios (ej: "592                 1.585")
+                m_dos = re.match(r'^([\d.,]+)\s{2,}([\d.,]+)\s*$', v.strip())
+                if m_dos:
+                    montos.append(m_dos.group(1)); montos.append(m_dos.group(2))
+                    continue
+            if _es_monto(v):
+                montos.append(v)
+        if not montos:
+            # Formato "apretado": nombre y montos embebidos en el mismo texto
+            m_emb = re.match(r'^(.*?)\s+([\d.,]+)\s+([\d.,]+)\s*$', nombre)
+            if m_emb:
+                nombre = m_emb.group(1).strip()
+                montos = [m_emb.group(2), m_emb.group(3)]
+
+        if len(montos) >= 2:
+            filas.append({"rut": rut_det, "nombre": nombre,
+                          "monto_nom": _convertir_monto(montos[0]),
+                          "monto_act": _convertir_monto(montos[1]),
+                          "_fila_excel": r, **grupo})
+            pendiente = None
+        elif len(montos) == 1:
+            if pendiente and pendiente["rut"] == rut_det:
+                filas.append({"rut": rut_det, "nombre": nombre or pendiente["nombre"],
+                              "monto_nom": pendiente["monto"],
+                              "monto_act": _convertir_monto(montos[0]),
+                              "_fila_excel": r, **grupo})
+                pendiente = None
+            else:
+                pendiente = {"rut": rut_det, "nombre": nombre, "monto": _convertir_monto(montos[0])}
+
+    return filas, advertencias, ws
+
+
 # ── Parseo Excel Adobe general ────────────────────────────────────────────────
 
 def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
@@ -845,10 +990,10 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
 
         rut_det=None; nombre_en_a=""
         if isinstance(a,str):
-            if RUT_RE.match(a): rut_det=a.replace(",",".")
+            if RUT_RE.match(a): rut_det=_normalizar_rut_detectado(a)
             else:
                 m2 = RUT_CON_NOMBRE.match(a)
-                if m2: rut_det=m2.group(1).replace(",","."); nombre_en_a=m2.group(2).strip()
+                if m2: rut_det=_normalizar_rut_detectado(m2.group(1)); nombre_en_a=m2.group(2).strip()
 
         if rut_det:
             nombre = nombre_en_a or ""
@@ -1150,6 +1295,17 @@ def procesar_lote(pares: list, log=None) -> bytes:
                     inst = "ISAPRE NUEVA MASVIDA"
             else:
                 filas, advertencias, ws_adobe2 = _parsear_excel(wb_adobe, {})
+                # Algunos exports de Adobe (ej. AFP Provida) desplazan columnas
+                # de forma irregular y el parser por columnas fijas pierde filas.
+                # Si el parser genérico (que no asume columnas) rescata más
+                # deuda, se prefiere su resultado.
+                try:
+                    filas_gen, _, _ = _parsear_excel_generico(ws)
+                    if sum(f["monto_act"] for f in filas_gen) > sum(f["monto_act"] for f in filas):
+                        filas = filas_gen
+                        advertencias.append("[INFO] Se usó el parser genérico (más completo para este formato)")
+                except Exception as _e:
+                    print(f"[BASE_DEUDAS] Parser genérico falló, se mantiene el resultado original: {_e}")
 
             if not filas:
                 # Tabla vacía con empresa reconocida = certificado sin deuda

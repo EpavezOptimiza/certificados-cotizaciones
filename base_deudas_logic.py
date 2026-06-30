@@ -667,9 +667,11 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
 # ── Parseo Excel exportado con ABBYY FineReader ───────────────────────────────
 
 def _es_abbyy(ws) -> bool:
-    """Detecta si el Excel fue generado por ABBYY (columnas tabulares limpias
-    con encabezados 'Origen de Deuda', 'Periodo Pago', 'Monto Nominal', etc.)"""
-    for r in range(1, min(25, ws.max_row + 1)):
+    """Detecta si el Excel fue generado por ABBYY FineReader.
+    ABBYY incluye un bloque de texto introductorio largo antes del encabezado
+    de tabla, por lo que los keywords de columna aparecen en fila 10+.
+    Adobe en cambio coloca el encabezado en las primeras filas (< 10)."""
+    for r in range(10, min(25, ws.max_row + 1)):  # ABBYY: header en fila 10+
         row_vals = [str(ws.cell(r, c).value or "").lower() for c in range(1, ws.max_column + 1)]
         if any("origen" in v and "deuda" in v for v in row_vals) and \
            any("periodo" in v or "período" in v for v in row_vals) and \

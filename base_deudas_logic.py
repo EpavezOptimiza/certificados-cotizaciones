@@ -855,6 +855,13 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
             if not nombre:
                 for col_val in [v(c) for c in range(2,10)]:
                     if col_val and str(col_val).strip(): nombre=str(col_val).strip(); break
+            else:
+                # El nombre puede venir cortado en col1 (ej: "IA") y continuar en col2
+                # (ej: "ITURRIETA ENRIQUE NANETTE DEL C...") cuando Adobe lo separa en celdas.
+                col2_val = v(2)
+                if (isinstance(col2_val, str) and col2_val.strip()
+                        and not _es_monto(col2_val) and col2_val.strip() not in nombre):
+                    nombre = f"{nombre} {col2_val.strip()}".strip()
             nom_f = fnone(*nom_cands)
             act_f = fnone(*act_cands)
             if nom_f is None:

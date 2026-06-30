@@ -1959,6 +1959,27 @@ async function optiSend(){
       }
       setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
     }, 1500);
+  } else if(input.dataset.mode === 'nota_pendiente' || input.dataset.mode === 'error_pendiente'){
+    const prefijo = input.dataset.mode === 'nota_pendiente' ? 'NOTA: ' : 'ERROR: ';
+    input.dataset.mode = '';
+    input.placeholder = 'Escribe tu mensaje...';
+    optiShowTyping();
+    setOptiImg('think');
+    try {
+      const r = await fetch('/api/opti_chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mensaje: prefijo + text, historial: optiHistorial})
+      });
+      const d = await r.json();
+      optiHideTyping();
+      setOptiImg('talk');
+      optiAddMsg('bot', d.respuesta);
+    } catch(e) {
+      optiHideTyping();
+      optiAddMsg('bot', 'Tuve un problema. ¿Puedes intentarlo de nuevo?');
+    }
+    setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
   } else {
     optiShowTyping();
     setOptiImg('think');
@@ -1973,10 +1994,15 @@ async function optiSend(){
       optiHideTyping();
       setOptiImg('talk');
       optiAddMsg('bot', d.respuesta);
-      // Guardar en historial
-      optiHistorial.push({role:'user', content:text});
-      optiHistorial.push({role:'assistant', content:d.respuesta});
-      if(optiHistorial.length > 12) optiHistorial = optiHistorial.slice(-12);
+      if(d.modo === 'nota_pendiente' || d.modo === 'error_pendiente'){
+        input.dataset.mode = d.modo;
+        input.placeholder = d.modo === 'nota_pendiente' ? 'Escribe la nota...' : 'Describe el error...';
+      } else {
+        // Guardar en historial solo si fue conversación normal con IA
+        optiHistorial.push({role:'user', content:text});
+        optiHistorial.push({role:'assistant', content:d.respuesta});
+        if(optiHistorial.length > 12) optiHistorial = optiHistorial.slice(-12);
+      }
       setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
     } catch(e) {
       optiHideTyping();

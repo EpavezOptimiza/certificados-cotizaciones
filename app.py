@@ -262,11 +262,11 @@ def do_login():
     return resp
 
 NOTA_TRIGGER_RE = re.compile(
-    r'^(?:opti[,:]?\s*)?(?:nota|anota|an[oó]tame|apunta|recu[eé]rdame|recuerdame|guarda esto|crea una nota)[:,]?\s+(.+)',
+    r'^(?:opti[,:]?\s*)?(?:nota|anota|an[oó]tame|apunta|recu[eé]rdame|recuerdame|guarda esto|crea una nota)[:,]?\s*(.*)$',
     re.IGNORECASE)
 
 ERROR_TRIGGER_RE = re.compile(
-    r'^(?:opti[,:]?\s*)?(?:informar error|reportar error|report error|hay un error|error|falla|bug)[:,]?\s+(.+)',
+    r'^(?:opti[,:]?\s*)?(?:informar error|reportar error|report error|hay un error|error|falla|bug)[:,]?\s*(.*)$',
     re.IGNORECASE)
 
 @app.route("/api/opti_chat", methods=["POST"])
@@ -281,6 +281,8 @@ def opti_chat():
     if m:
         user = get_current_user()
         texto_crudo = m.group(1).strip()
+        if not texto_crudo:
+            return jsonify({"respuesta": "📝 Dale, cuéntame qué quieres que anote.", "modo": "nota_pendiente"})
         texto = _pulir_texto_nota(texto_crudo)
         nid, tarea_id = _crear_nota_desde_texto(user["id"], texto)
         resp_txt = f'📝 Listo, creé la nota: "{texto[:60]}{"..." if len(texto) > 60 else ""}"'
@@ -292,6 +294,8 @@ def opti_chat():
     if me:
         user = get_current_user()
         texto_error = me.group(1).strip()
+        if not texto_error:
+            return jsonify({"respuesta": "🚨 Cuéntame qué error tuviste y se lo envío al administrador.", "modo": "error_pendiente"})
         enviado = send_email_error_opti(user["nombre"], user.get("email",""), texto_error)
         if enviado:
             resp_txt = "🚨 Listo, le avisé al administrador por correo con el detalle del error. ¡Gracias por reportarlo!"

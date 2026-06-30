@@ -2,7 +2,7 @@
 Certificados de Cotizaciones — Versión Web
 Flask + SQLite nativo | Despliegue Railway
 """
-import os, json, shutil, secrets, threading, uuid, time as _time, zipfile
+import os, json, re, shutil, secrets, threading, uuid, time as _time, zipfile
 from datetime import datetime
 from functools import wraps
 from flask import (Flask, render_template, request, jsonify,
@@ -261,6 +261,10 @@ def do_login():
     resp.set_cookie("session_token", token, max_age=86400*30, httponly=True)
     return resp
 
+NOTA_TRIGGER_RE = re.compile(
+    r'^(?:opti[,:]?\s*)?(?:nota|anota|an[oó]tame|apunta|recu[eé]rdame|recuerdame|guarda esto|crea una nota)[:,]?\s+(.+)',
+    re.IGNORECASE)
+
 @app.route("/api/opti_chat", methods=["POST"])
 @api_login_required
 def opti_chat():
@@ -268,7 +272,18 @@ def opti_chat():
     d = request.json
     mensaje = d.get("mensaje","")
     historial = d.get("historial", [])
-    
+
+    m = NOTA_TRIGGER_RE.match(mensaje.strip())
+    if m:
+        user = get_current_user()
+        texto_crudo = m.group(1).strip()
+        texto = _pulir_texto_nota(texto_crudo)
+        nid, tarea_id = _crear_nota_desde_texto(user["id"], texto)
+        resp_txt = f'📝 Listo, creé la nota: "{texto[:60]}{"..." if len(texto) > 60 else ""}"'
+        if tarea_id:
+            resp_txt += "\n✅ También detecté una tarea y la agregué a tus pendientes."
+        return jsonify({"respuesta": resp_txt})
+
     api_key = os.environ.get("OPENAI_API_KEY","")
     if not api_key:
         return jsonify({"respuesta": "Lo siento, no tengo conexión con mi cerebro ahora mismo. Por favor contacta al administrador."})
@@ -1817,6 +1832,55 @@ PALABRAS_TAREA_DEFAULT = [
 def _detectar_tareas(texto, palabras):
     tl = texto.lower()
     return any(p.lower() in tl for p in palabras)
+
+def _pulir_texto_nota(texto):
+    """Corrige ortografía/redacción del texto dictado a Opti, sin cambiar el sentido."""
+    api_key = os.environ.get("OPENAI_API_KEY","")
+    if not api_key or not texto.strip():
+        return texto
+    try:
+        import urllib.request, json as jsonlib
+        data = jsonlib.dumps({
+            "model": "gpt-3.5-turbo",
+            "messages": [
+                {"role": "system", "content": "Corrige ortografía, tildes y puntuación del texto del usuario, sin cambiar su significado ni agregar contenido. Responde solo con el texto corregido, sin comillas ni explicaciones."},
+                {"role": "user", "content": texto}
+            ],
+            "max_tokens": 300,
+            "temperature": 0.2
+        }).encode('utf-8')
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=data,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            resp = jsonlib.loads(r.read())
+        return resp["choices"][0]["message"]["content"].strip().strip('"')
+    except Exception as e:
+        print(f"[OPTI] Error puliendo texto: {e}")
+        return texto
+
+def _crear_nota_desde_texto(user_id, texto, etiqueta="info", color="amarillo"):
+    """Crea una nota (y tarea si corresponde) a partir de texto libre. Usado por Opti."""
+    titulo = texto.strip()
+    if len(titulo) > 70:
+        titulo = titulo[:67] + "..."
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO notas(usuario_id,titulo,contenido,etiqueta,color,fijada,creada,actualizada) VALUES(?,?,?,?,?,?,?,?)",
+            (user_id, titulo, texto.strip(), etiqueta, color, 0, now, now))
+        nid = cur.lastrowid
+        cfg = conn.execute("SELECT palabras_clave FROM config_recordatorios WHERE usuario_id=?", (user_id,)).fetchone()
+        palabras = (cfg["palabras_clave"].split(",") if cfg and cfg["palabras_clave"] else PALABRAS_TAREA_DEFAULT)
+        tarea_id = None
+        if _detectar_tareas(texto, palabras):
+            prioridad = "alta" if etiqueta == "urgente" else "media"
+            cur2 = conn.execute(
+                "INSERT INTO tareas(usuario_id,titulo,descripcion,prioridad,estado,nota_id,creada) VALUES(?,?,?,?,?,?,?)",
+                (user_id, titulo, texto.strip(), prioridad, "pendiente", nid, now))
+            tarea_id = cur2.lastrowid
+    return nid, tarea_id
 
 @app.route("/notas")
 @login_required

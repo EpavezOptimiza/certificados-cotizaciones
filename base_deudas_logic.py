@@ -117,7 +117,7 @@ RE_RUT_HDR       = re.compile(r"^r\.u\.t\.", re.IGNORECASE)
 RE_RUT_EMP       = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
 
 NOISE_TEXTS = {"este certificado", "certificado de deudas", "afp   planvital", "santiago,"}
-STOP_TEXTS  = {"resumen", "total resumen", "total general", "administradora", "r.u.t."}
+STOP_TEXTS  = {"resumen", "total resumen", "total general", "administradora origen", "r.u.t."}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -664,6 +664,128 @@ def _parsear_habitat(wb, pdf_lookup: dict) -> tuple:
     return filas, [], ws
 
 
+# ── Parseo Excel exportado con ABBYY FineReader ───────────────────────────────
+
+def _es_abbyy(ws) -> bool:
+    """Detecta si el Excel fue generado por ABBYY (columnas tabulares limpias
+    con encabezados 'Origen de Deuda', 'Periodo Pago', 'Monto Nominal', etc.)"""
+    for r in range(1, min(25, ws.max_row + 1)):
+        row_vals = [str(ws.cell(r, c).value or "").lower() for c in range(1, ws.max_column + 1)]
+        if any("origen" in v and "deuda" in v for v in row_vals) and \
+           any("periodo" in v or "período" in v for v in row_vals) and \
+           any("nominal" in v for v in row_vals):
+            return True
+    return False
+
+def _parsear_abbyy(ws) -> tuple:
+    """Parser para Excel exportado con ABBYY FineReader PDF.
+    Usa los totales declarados en cada encabezado de grupo (exactos)
+    en vez de intentar parsear cada fila individual (inconsistente en ABBYY)."""
+    filas = []
+    advertencias = []
+
+    # Localizar fila de cabecera — todas las columnas clave en la MISMA fila
+    C_ORIGEN = C_PERIODO = C_NOM = C_ACT = C_ESTADO = None
+    fila_header = None
+    for r in range(1, min(25, ws.max_row + 1)):
+        o = p = n = a = e = None
+        for c in range(1, ws.max_column + 1):
+            vl = str(ws.cell(r, c).value or "").lower()
+            if "origen" in vl and "deuda" in vl: o = c
+            elif ("period" in vl or "período" in vl) and p is None: p = c
+            elif "nominal" in vl and n is None: n = c
+            elif "actualiz" in vl and a is None: a = c
+            elif "estado" in vl and "deuda" in vl and e is None: e = c
+        if o and p and n and a:
+            C_ORIGEN, C_PERIODO, C_NOM, C_ACT, C_ESTADO = o, p, n, a, e
+            fila_header = r; break
+
+    if not fila_header:
+        return filas, advertencias, ws
+
+    def _monto_str(v):
+        if v is None: return None
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return _convertir_monto(v)
+        v = str(v).strip()
+        if re.match(r'^[\d.,]+$', v): return _convertir_monto(v)
+        return None
+
+    for r in range(fila_header + 1, ws.max_row + 1):
+        col1 = str(ws.cell(r, C_ORIGEN).value or "").strip()
+        if not col1: continue
+        col1_low = col1.lower()
+        if any(col1_low.startswith(t) for t in STOP_TEXTS): break
+        if any(t in col1_low for t in NOISE_TEXTS): continue
+
+        if not _es_grupo(col1): continue
+
+        per_raw = str(ws.cell(r, C_PERIODO).value or "").strip()
+        if not re.match(r'^\d{2}/\d{4}$', per_raw): continue
+
+        nom_g = _monto_str(ws.cell(r, C_NOM).value)
+        act_g = _monto_str(ws.cell(r, C_ACT).value)
+        if act_g is None:
+            for cc in range(C_ACT + 1, ws.max_column + 1):
+                act_g = _monto_str(ws.cell(r, cc).value)
+                if act_g is not None: break
+        if nom_g is None or act_g is None: continue
+
+        estado_raw = ""
+        for cc in range(C_ACT + 1, ws.max_column + 1):
+            v_e = str(ws.cell(r, cc).value or "").upper().strip()
+            if v_e in ("SIN GESTION", "JUICIO", "PREJUDICIAL", "RESOLUCION"):
+                estado_raw = v_e; break
+
+        filas.append({
+            "rut": "", "nombre": "",
+            "monto_nom": nom_g, "monto_act": act_g,
+            "_fila_excel": r,
+            "origen": _norm_origen(col1),
+            "adm": ws.cell(r, 2).value,
+            "periodo": _periodo(per_raw),
+            "estado": _norm_estado(estado_raw) if estado_raw else "",
+            "abogado": "",
+        })
+
+    # Leer total oficial del resumen (más confiable que la suma de grupos
+    # porque ABBYY puede perder grupos completos durante la exportación).
+    nom_total_oficial = None; act_total_oficial = None
+    for r in range(ws.max_row, max(ws.max_row - 30, fila_header), -1):
+        col1 = str(ws.cell(r, 1).value or "").strip().upper()
+        if "TOTAL" in col1 and ("RESUMEN" in col1 or "GENERAL" in col1):
+            # Buscar dos montos en la fila
+            montos_r = []
+            for cc in range(2, ws.max_column + 1):
+                v = _monto_str(ws.cell(r, cc).value)
+                if v and v > 100000:
+                    montos_r.append(v)
+            if len(montos_r) >= 2:
+                nom_total_oficial, act_total_oficial = montos_r[0], montos_r[1]
+                break
+
+    if nom_total_oficial and act_total_oficial and filas:
+        sum_nom = sum(f["monto_nom"] for f in filas)
+        sum_act = sum(f["monto_act"] for f in filas)
+        dif_nom = nom_total_oficial - sum_nom
+        dif_act = act_total_oficial - sum_act
+        if dif_nom != 0 or dif_act != 0:
+            filas.append({
+                "rut": "", "nombre": "_ajuste_grupos_faltantes",
+                "monto_nom": dif_nom, "monto_act": dif_act,
+                "_fila_excel": 0,
+                "origen": "PLANILLAS COMPLEMENTARIAS",
+                "adm": None,
+                "periodo": filas[0]["periodo"] if filas else "",
+                "estado": "",
+                "abogado": "",
+            })
+            advertencias.append(f"[ABBYY] Ajuste aplicado: nom+{dif_nom} act+{dif_act} (grupos faltantes en el export)")
+
+    return filas, advertencias, ws
+
+
+
 # ── Parseo Excel Adobe genérico (sin columnas fijas) ──────────────────────────
 # Algunos exports de Adobe (ej. AFP Provida) desplazan las columnas según el
 # ancho del texto de cada fila, por lo que la detección por posición de columna
@@ -898,7 +1020,7 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
     COL_NOM_GRP=None; COL_ACT_GRP=None; COL_ESTADO=None; COL_ABOGADO=None
     COL_NOM_EMP=[]; COL_ACT_EMP=[]
 
-    for r in range(1, min(8, ws.max_row+1)):
+    for r in range(1, min(25, ws.max_row+1)):
         for c in range(1, ws.max_column+1):
             val = ws.cell(r,c).value
             if not isinstance(val,str): continue
@@ -1335,7 +1457,10 @@ def procesar_lote(pares: list, log=None) -> bytes:
 
             # Apuntar el workbook a esta hoja para que los parsers la lean
             wb_adobe.active = ws
-            if _es_habitat(ws):
+            if _es_abbyy(ws):
+                filas, advertencias, ws_adobe2 = _parsear_abbyy(ws)
+                advertencias.append("[INFO] Formato ABBYY FineReader detectado")
+            elif _es_habitat(ws):
                 filas, advertencias, ws_adobe2 = _parsear_habitat(wb_adobe, {})
             elif _es_masvida(ws):
                 filas, advertencias, ws_adobe2 = _parsear_masvida(wb_adobe)

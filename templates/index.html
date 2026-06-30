@@ -702,6 +702,14 @@ body.dark .pref-label{color:#e2e8f0}
       <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="closeModal('modalPreferencias');openModal('modalCambioClave')">Cambiar</button>
     </div>
 
+    <div class="pref-row">
+      <div>
+        <div class="pref-label">📧 Cambiar correo</div>
+        <div class="pref-desc">Actualiza tu correo de contacto</div>
+      </div>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="closeModal('modalPreferencias');document.getElementById('ce-nuevo').value=(currentUser&&currentUser.email)||'';openModal('modalCambioEmail')">Cambiar</button>
+    </div>
+
     <!-- Sección apariencia del login -->
     <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0">
       <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">🎨 Apariencia del Login <span style="font-weight:400;color:#cbd5e1">(este equipo)</span></div>
@@ -786,6 +794,21 @@ body.dark .pref-label{color:#e2e8f0}
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal('modalCambioClave')">Cancelar</button>
       <button class="btn btn-primary" onclick="cambiarClave()">Guardar clave</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal cambio de correo -->
+<div class="modal-bg" id="modalCambioEmail">
+  <div class="modal" style="width:min(380px,92vw)">
+    <h3>📧 Cambiar correo</h3>
+    <p style="font-size:11px;color:#64748b;margin-bottom:12px">Este correo se usa para notificaciones y reportes.</p>
+    <label>Nuevo correo *</label>
+    <input type="email" id="ce-nuevo" placeholder="tucorreo@optimizaco.cl">
+    <div id="ce-error" style="color:#dc2626;font-size:12px;margin-top:4px;display:none"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal('modalCambioEmail')">Cancelar</button>
+      <button class="btn btn-primary" onclick="cambiarEmail()">Guardar correo</button>
     </div>
   </div>
 </div>
@@ -2069,6 +2092,21 @@ async function cambiarClave(){
   closeModal("modalCambioClave");
   ["cc-actual","cc-nueva","cc-confirmar"].forEach(id=>document.getElementById(id).value="");
   toast("✅ Contraseña actualizada correctamente");
+}
+
+async function cambiarEmail(){
+  const nuevo = document.getElementById("ce-nuevo").value.trim();
+  const errEl = document.getElementById("ce-error");
+  errEl.style.display = "none";
+  if(!nuevo || !nuevo.includes("@")) return (errEl.textContent="Ingresa un correo válido", errEl.style.display="");
+  const r = await fetch("/api/cambiar_email", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({email: nuevo})});
+  const d = await r.json();
+  if(d.error) return (errEl.textContent=d.error, errEl.style.display="");
+  if(currentUser) currentUser.email = d.email;
+  closeModal("modalCambioEmail");
+  toast("✅ Correo actualizado correctamente");
 }
 
 // ── Preferencias ──────────────────────────────────────────────────────────────

@@ -686,6 +686,20 @@ def cambiar_clave():
         registrar_log(conn, user["id"], "Clave cambiada", "El usuario cambió su contraseña")
     return jsonify({"ok": True})
 
+@app.route("/api/cambiar_email", methods=["POST"])
+@api_login_required
+def cambiar_email():
+    """El usuario actualiza su propio correo de contacto."""
+    user = get_current_user()
+    d = request.json or {}
+    nuevo_email = d.get("email","").strip()
+    if not nuevo_email or "@" not in nuevo_email or "." not in nuevo_email.split("@")[-1]:
+        return jsonify({"error": "Ingresa un correo válido"}), 400
+    with get_conn() as conn:
+        conn.execute("UPDATE usuarios SET email=? WHERE id=?", (nuevo_email, user["id"]))
+        registrar_log(conn, user["id"], "Correo actualizado", f"Nuevo correo: {nuevo_email}")
+    return jsonify({"ok": True, "email": nuevo_email})
+
 @app.route("/api/usuarios/<int:uid>", methods=["DELETE"])
 @admin_required
 def eliminar_usuario(uid):

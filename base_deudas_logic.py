@@ -697,6 +697,55 @@ def _filas_virtuales(ws, r):
                 fila.append((c, v if i == 0 else None))
         yield fila
 
+def _extraer_montos_cabecera(cels, texto_fila):
+    """Extrae nom y act declarados de una fila de cabecera de grupo.
+    Solo considera celdas a la DERECHA de la columna donde aparece el período
+    (MM/YYYY), para evitar confundir el código ADM (ej: 1008, 1033) con montos."""
+    # Hallar la columna del período (string "MM/YYYY" o entero OCR-garbled tipo 912023)
+    col_per = None
+    for c, v in cels:
+        if isinstance(v, str) and re.match(r'^\d{2}/\d{4}$', v.strip()):
+            col_per = c; break
+    if col_per is None:
+        for c, v in cels:
+            if isinstance(v, str) and re.search(r'\d{2}/\d{4}', v):
+                col_per = c; break
+    if col_per is None:
+        # Adobe a veces convierte "09/2023" en el entero 912023 o similares
+        for c, v in cels:
+            if isinstance(v, int) and 10000 <= v <= 1299999:
+                s = str(v)
+                if len(s) >= 5 and s[-4:].isdigit() and 2000 <= int(s[-4:]) <= 2030:
+                    col_per = c; break
+
+    # Si no encontramos el período, no podemos distinguir ADM de montos con seguridad
+    if col_per is None:
+        return None, None
+
+    montos = []
+    for c, v in cels:
+        # Solo celdas a la derecha del período (o toda la fila si no se halló período)
+        if col_per is not None and c <= col_per:
+            continue
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            cv = _convertir_monto(v)
+            if cv > 0:
+                montos.append(cv)
+        elif isinstance(v, str):
+            # "12.352            SIN GESTION" → extraer solo el monto
+            m = re.match(r'^([\d.,]+)\s+(?:SIN GESTION|JUICIO|PREJUDICIAL|RESOLUCION|INGRESADA)', v.strip(), re.IGNORECASE)
+            if m:
+                montos.append(_convertir_monto(m.group(1)))
+            else:
+                # Dos montos en una sola celda: "3.562                9.960"
+                m2 = re.match(r'^([\d.,]+)\s{2,}([\d.,]+)\s*$', v.strip())
+                if m2:
+                    montos.append(_convertir_monto(m2.group(1)))
+                    montos.append(_convertir_monto(m2.group(2)))
+    if len(montos) >= 2:
+        return montos[0], montos[1]
+    return None, None
+
 def _parsear_excel_generico(ws) -> tuple:
     filas = []
     advertencias = []

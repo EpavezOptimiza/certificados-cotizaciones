@@ -817,7 +817,9 @@ function asegurarSel(w) {
   const rut = w.rut_trabajador;
   if (!seleccionados[rut]) {
     seleccionados[rut] = initSel(w);
-  } else {
+  } else if (!seleccionados[rut].periodosCustomizados) {
+    // Solo resincronizar con el filtro si el usuario NO ha tocado manualmente
+    // los períodos de este trabajador (para no pisar su selección manual)
     const fMotivo = document.getElementById('filtro-motivo')?.value || '';
     const fEstatus = document.getElementById('filtro-estatus')?.value || '';
     if (fMotivo || fEstatus) seleccionados[rut].periodos_sel = [...periodosParaMotivoActivo(w)];
@@ -928,6 +930,7 @@ function togglePeriodo(p, el) {
   const idx = sel.periodos_sel.indexOf(p);
   if (idx >= 0) sel.periodos_sel.splice(idx, 1);
   else sel.periodos_sel.push(p);
+  sel.periodosCustomizados = true;  // el usuario tocó la selección manualmente
   el.classList.toggle('checked');
   guardarForm();
 }

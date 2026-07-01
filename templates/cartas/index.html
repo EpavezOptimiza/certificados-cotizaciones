@@ -678,6 +678,23 @@ function toggleAll(cb) {
     if (!seleccionados[w.rut_trabajador]) seleccionados[w.rut_trabajador] = initSel(w);
     seleccionados[w.rut_trabajador].checked = cb.checked;
   });
+
+  // Sincronizar el trabajador mostrado en "Datos de la carta" con el nuevo estado
+  const marcados = trabajadoresMarcados();
+  if (!currentRut || !marcados.some(w => w.rut_trabajador === currentRut)) {
+    currentRut = marcados.length ? marcados[0].rut_trabajador : null;
+  }
+  currentNavIndex = currentRut ? marcados.findIndex(w => w.rut_trabajador === currentRut) : -1;
+
+  if (document.getElementById('tab-carta')?.classList.contains('active')) {
+    if (currentRut) {
+      renderCartaForm();
+    } else {
+      document.getElementById('carta-form').style.display = 'none';
+      document.getElementById('no-worker-msg').style.display = '';
+    }
+  }
+
   renderSidebar();
   refreshDependientes();
 }

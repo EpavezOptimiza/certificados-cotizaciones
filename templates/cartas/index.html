@@ -171,7 +171,7 @@ textarea{resize:vertical;min-height:70px}
       <span class="sidebar-title">Trabajadores</span>
       <span class="badge" id="badge-total">0</span>
       <label style="margin-left:auto;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:400">
-        <input type="checkbox" id="check-all" onchange="toggleAll(this)"> Todos
+        <input type="checkbox" id="check-all" onchange="toggleAll(this)"> Marcar filtrados
       </label>
     </div>
     <div class="search-wrap">
@@ -558,17 +558,22 @@ function poblarFiltros() {
     pers.map(p => `<option value="${p}">${p}</option>`).join('');
 }
 
-function renderSidebar() {
+// Devuelve la lista de trabajadores que pasan los filtros actuales del sidebar
+function getWorkersFiltrados() {
   const q = document.getElementById('search-worker').value.toLowerCase();
   const fInst = document.getElementById('filtro-inst')?.value || '';
   const fPer = document.getElementById('filtro-periodo')?.value || '';
   const fMarcados = document.getElementById('filtro-marcados')?.checked || false;
-  const lista = document.getElementById('worker-list');
-  const filtrados = trabajadores.filter(w =>
+  return trabajadores.filter(w =>
     (w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q)) &&
     (!fInst || (w.institucion||'').trim() === fInst) &&
     (!fPer || (w.periodos||[]).includes(fPer)) &&
     (!fMarcados || seleccionados[w.rut_trabajador]?.checked));
+}
+
+function renderSidebar() {
+  const lista = document.getElementById('worker-list');
+  const filtrados = getWorkersFiltrados();
   document.getElementById('badge-total').textContent = trabajadores.length;
   const countEl = document.getElementById('filtro-count');
   if (countEl) countEl.textContent = filtrados.length !== trabajadores.length ? `${filtrados.length} de ${trabajadores.length}` : '';
@@ -600,7 +605,8 @@ function renderSidebar() {
 function filtrarWorkers() { renderSidebar(); }
 
 function toggleAll(cb) {
-  trabajadores.forEach(w => {
+  // Marca/desmarca SOLO los trabajadores que pasan los filtros actuales
+  getWorkersFiltrados().forEach(w => {
     if (!seleccionados[w.rut_trabajador]) seleccionados[w.rut_trabajador] = initSel(w);
     seleccionados[w.rut_trabajador].checked = cb.checked;
   });

@@ -15,6 +15,15 @@ cartas_bp = Blueprint("cartas", __name__,
     static_folder=_os.path.join(_HERE, "static", "cartas") if _os.path.exists(_os.path.join(_HERE, "static", "cartas")) else None,
     url_prefix="/cartas")
 
+@cartas_bp.errorhandler(Exception)
+def _cartas_error_handler(e):
+    """Convierte cualquier excepción no manejada en JSON legible (en vez de
+    la pagina HTML de error de Flask, que rompe el fetch() del frontend)."""
+    import traceback
+    tb = traceback.format_exc()
+    print(f"[cartas] ERROR no manejado: {tb}")
+    return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
+
 # ── Fuente cursiva para firma manuscrita automática ───────────────────────────
 _FIRMA_FONT = "Helvetica-Oblique"
 try:

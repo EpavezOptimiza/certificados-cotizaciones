@@ -394,6 +394,32 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
 
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">🖊️</span> Firma</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" id="m-firma-nombre">
+          </div>
+          <div class="form-group">
+            <label>RUT</label>
+            <input type="text" id="m-firma-rut">
+          </div>
+          <div class="form-group">
+            <label>Cargo</label>
+            <input type="text" id="m-firma-cargo">
+          </div>
+          <div class="form-group">
+            <label>Correo</label>
+            <input type="email" id="m-firma-correo">
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input type="text" id="m-firma-tel">
+          </div>
+        </div>
+      </div>
+
       <div class="btn-group">
         <button class="btn btn-primary" onclick="verPreviewMasiva()">👁 Vista previa</button>
         <button class="btn btn-success" onclick="generarPDFMasiva()">📄 Guardar PDF</button>
@@ -1300,6 +1326,13 @@ function renderMasiva() {
     actualizarCuerpoMasiva();
   }
 
+  // Copiar firma desde "Datos de la carta" si ahí ya está completada y aquí está vacía
+  ['nombre','rut','cargo','correo','tel'].forEach(campo => {
+    const origen = document.getElementById('firma-' + campo);
+    const destino = document.getElementById('m-firma-' + campo);
+    if (origen && destino && origen.value && !destino.value) destino.value = origen.value;
+  });
+
   renderMasivaLista();
 }
 
@@ -1385,11 +1418,11 @@ Se adjunta
 Les saluda atentamente,
 
 _______________________________
-Nombre: ${document.getElementById('firma-nombre').value}
-Rut: ${document.getElementById('firma-rut').value}
-Cargo: ${document.getElementById('firma-cargo').value}
-Correo: ${document.getElementById('firma-correo').value}
-Tel: ${document.getElementById('firma-tel').value}`;
+Nombre: ${document.getElementById('m-firma-nombre').value}
+Rut: ${document.getElementById('m-firma-rut').value}
+Cargo: ${document.getElementById('m-firma-cargo').value}
+Correo: ${document.getElementById('m-firma-correo').value}
+Tel: ${document.getElementById('m-firma-tel').value}`;
 
   document.getElementById('m-preview-content').textContent = preview;
   document.getElementById('m-card-preview').style.display = '';
@@ -1400,11 +1433,11 @@ async function generarPDFMasiva() {
   const carta = datosMasiva();
   if (!carta.trabajadores.length) { alert('Marca al menos un trabajador en la lista lateral.'); return; }
   const firma = {
-    nombre: document.getElementById('firma-nombre').value,
-    rut: document.getElementById('firma-rut').value,
-    cargo: document.getElementById('firma-cargo').value,
-    correo: document.getElementById('firma-correo').value,
-    tel: document.getElementById('firma-tel').value,
+    nombre: document.getElementById('m-firma-nombre').value,
+    rut: document.getElementById('m-firma-rut').value,
+    cargo: document.getElementById('m-firma-cargo').value,
+    correo: document.getElementById('m-firma-correo').value,
+    tel: document.getElementById('m-firma-tel').value,
   };
   const btn = event.target;
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generando...';

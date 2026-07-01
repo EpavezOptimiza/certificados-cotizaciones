@@ -764,7 +764,7 @@ function actualizarBadgeMarcados() {
 // Refresca vistas que dependen de los trabajadores marcados
 function refreshDependientes() {
   actualizarBadgeMarcados();
-  if (document.getElementById('tab-masiva')?.classList.contains('active')) renderMasivaLista();
+  if (document.getElementById('tab-masiva')?.classList.contains('active')) renderMasiva();
   if (document.getElementById('tab-previred')?.classList.contains('active')) renderPreviRedWorkers();
   if (document.getElementById('tab-destacar')?.classList.contains('active')) renderDestacar();
 }
@@ -1298,26 +1298,29 @@ function trabajadoresMarcados() {
 function renderMasiva() {
   const marcados = trabajadoresMarcados();
 
-  // Institución (solo la primera vez o si está vacía)
   const instEl = document.getElementById('m-inst');
   if (!instEl.options.length) {
     instEl.innerHTML = INST_LIST_MASIVA.map(i => `<option>${i}</option>`).join('');
   }
 
-  // Autocompletar datos de empresa desde el primer trabajador marcado (o cargado)
-  const ref = marcados[0] || trabajadores[0];
-  if (ref && !masivaInit) {
-    if (!document.getElementById('m-razon').value) document.getElementById('m-razon').value = ref.razon_social || '';
-    if (!document.getElementById('m-rut-empresa').value) document.getElementById('m-rut-empresa').value = ref.rut_empresa || '';
-    if (!document.getElementById('m-mes').value) document.getElementById('m-mes').value = new Date().toISOString().slice(0,7);
-    // Institución sugerida
-    if (ref.institucion) {
-      const instLow = ref.institucion.toLowerCase().trim();
+  // Institución: siempre se recalcula según los trabajadores marcados actualmente
+  if (marcados.length) {
+    const instsMarcados = [...new Set(marcados.map(w => (w.institucion||'').toLowerCase().trim()).filter(Boolean))];
+    if (instsMarcados.length === 1) {
+      const instLow = instsMarcados[0];
       const match = INST_LIST_MASIVA.find(i => i.toLowerCase() === instLow)
                  || INST_LIST_MASIVA.find(i => instLow.includes(i.toLowerCase()))
                  || INST_LIST_MASIVA.find(i => i.toLowerCase().includes(instLow.replace(/\s/g,'')));
       if (match) instEl.value = match;
     }
+  }
+
+  // Autocompletar datos de empresa desde el primer trabajador marcado (o cargado), solo una vez
+  const ref = marcados[0] || trabajadores[0];
+  if (ref && !masivaInit) {
+    if (!document.getElementById('m-razon').value) document.getElementById('m-razon').value = ref.razon_social || '';
+    if (!document.getElementById('m-rut-empresa').value) document.getElementById('m-rut-empresa').value = ref.rut_empresa || '';
+    if (!document.getElementById('m-mes').value) document.getElementById('m-mes').value = new Date().toISOString().slice(0,7);
     // Período sugerido: primer período del trabajador de referencia
     if (!document.getElementById('m-periodo').value && ref.periodos?.length) {
       document.getElementById('m-periodo').value = ref.periodos[0];

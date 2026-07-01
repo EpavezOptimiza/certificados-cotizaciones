@@ -236,7 +236,16 @@ textarea{resize:vertical;min-height:70px}
       </div>
       <div id="carta-form" style="display:none">
         <div class="card">
-          <div class="card-title"><span class="card-title-icon">👤</span> <span id="carta-worker-name"></span></div>
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="card-title-icon">👤</span> <span id="carta-worker-name"></span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-outline btn-sm" id="btn-anterior" onclick="navAnterior()">◀ Anterior</button>
+              <span id="nav-contador" style="font-size:12px;color:#64748b;min-width:40px;text-align:center"></span>
+              <button class="btn btn-outline btn-sm" id="btn-siguiente" onclick="navSiguiente()">Siguiente ▶</button>
+            </div>
+          </div>
           <div class="form-grid">
             <div class="form-group">
               <label>Institución</label>
@@ -517,6 +526,7 @@ let jobId = null;
 let jobPoll = null;
 let visorDatos = [];
 let visorCols = [];
+let currentNavIndex = -1;  // Índice en la lista de marcados
 
 const MOTIVOS = [
   'Trabajador finiquitado con fecha ',
@@ -712,9 +722,25 @@ function selectWorker(rut) {
     seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
   }
   seleccionados[rut].checked = true;
+  const marcados = trabajadoresMarcados();
+  currentNavIndex = marcados.findIndex(w => w.rut_trabajador === rut);
   renderSidebar();
   renderCartaForm();
   switchTab('carta');
+}
+
+function navAnterior() {
+  const marcados = trabajadoresMarcados();
+  if (marcados.length === 0) return;
+  currentNavIndex = (currentNavIndex - 1 + marcados.length) % marcados.length;
+  selectWorker(marcados[currentNavIndex].rut_trabajador);
+}
+
+function navSiguiente() {
+  const marcados = trabajadoresMarcados();
+  if (marcados.length === 0) return;
+  currentNavIndex = (currentNavIndex + 1) % marcados.length;
+  selectWorker(marcados[currentNavIndex].rut_trabajador);
 }
 
 function renderCartaForm() {
@@ -733,6 +759,23 @@ function renderCartaForm() {
   if (btnLote) {
     btnLote.style.display = marcados.length > 1 ? '' : 'none';
     if (marcados.length > 1) btnLote.textContent = `📦 Generar para ${marcados.length} marcados`;
+  }
+
+  // Actualizar navegación
+  const btnAnt = document.getElementById('btn-anterior');
+  const btnSig = document.getElementById('btn-siguiente');
+  const contEl = document.getElementById('nav-contador');
+  if (btnAnt && btnSig && contEl) {
+    if (marcados.length <= 1) {
+      btnAnt.style.display = 'none';
+      btnSig.style.display = 'none';
+      contEl.style.display = 'none';
+    } else {
+      btnAnt.style.display = '';
+      btnSig.style.display = '';
+      contEl.style.display = '';
+      contEl.textContent = `${currentNavIndex + 1} de ${marcados.length}`;
+    }
   }
 
   // Instituciones

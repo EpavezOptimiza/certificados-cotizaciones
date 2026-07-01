@@ -157,6 +157,7 @@ textarea{resize:vertical;min-height:70px}
 <div class="tabs">
   <div class="tab active" onclick="switchTab('visor')">📊 Visor Excel</div>
   <div class="tab" onclick="switchTab('carta')">📝 Datos de la carta</div>
+  <div class="tab" onclick="switchTab('masiva')">📋 Carta masiva por período</div>
   <div class="tab" onclick="switchTab('previred')">⚡ Movimiento PreviRed</div>
   <div class="tab" onclick="switchTab('estado')">✅ Estado</div>
 </div>
@@ -305,6 +306,75 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
 
+    <!-- Tab: Carta masiva por período -->
+    <div class="tab-content" id="tab-masiva">
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">📋</span> Carta masiva por período</div>
+        <div class="alert alert-info" style="margin-bottom:14px">
+          Una sola carta, un período, con la tabla de todos los trabajadores seleccionados (RUT + Nombre).
+          Marca los trabajadores en la lista lateral izquierda.
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Institución</label>
+            <select id="m-inst"></select>
+          </div>
+          <div class="form-group">
+            <label>Período (Ej: Ago-25)</label>
+            <input type="text" id="m-periodo" placeholder="Ago-25" oninput="actualizarCuerpoMasiva()">
+          </div>
+          <div class="form-group">
+            <label>Mes y año de la carta</label>
+            <input type="month" id="m-mes">
+          </div>
+          <div class="form-group">
+            <label>Razón social</label>
+            <input type="text" id="m-razon">
+          </div>
+          <div class="form-group">
+            <label>RUT empresa</label>
+            <input type="text" id="m-rut-empresa">
+          </div>
+          <div class="form-group full">
+            <label>Dirección de la empresa</label>
+            <input type="text" id="m-direccion" placeholder="Ej: AV. LIBERTADOR BDO OHIGGINS 877, Santiago, RM">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">✍️</span> Cuerpo de la carta</div>
+        <div class="btn-group" style="margin-bottom:10px">
+          <button class="btn btn-outline btn-sm" onclick="plantillaCuerpo('pagada')">Deuda bien pagada</button>
+          <button class="btn btn-outline btn-sm" onclick="plantillaCuerpo('otra')">Pagada en otra institución</button>
+        </div>
+        <div class="form-group">
+          <textarea id="m-cuerpo" rows="4" placeholder="Texto explicativo de la carta..."></textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">👥</span> Trabajadores incluidos
+          <span class="badge" id="m-badge-count" style="margin-left:8px">0</span>
+        </div>
+        <div id="m-trabajadores-list">
+          <div class="alert alert-info">Marca trabajadores en la lista lateral para incluirlos en la tabla.</div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="verPreviewMasiva()">👁 Vista previa</button>
+        <button class="btn btn-success" onclick="generarPDFMasiva()">📄 Guardar PDF</button>
+      </div>
+
+      <div class="card" id="m-card-preview" style="display:none;margin-top:16px">
+        <div class="card-title"><span class="card-title-icon">👁</span> Vista previa
+          <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="document.getElementById('m-card-preview').style.display='none'">✕</button>
+        </div>
+        <div class="carta-preview" id="m-preview-content"></div>
+      </div>
+    </div>
+
     <!-- Tab: PreviRed -->
     <div class="tab-content" id="tab-previred">
       <div class="card">
@@ -422,9 +492,10 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  document.querySelectorAll('.tab')[['visor','carta','previred','estado'].indexOf(tab)].classList.add('active');
+  document.querySelectorAll('.tab')[['visor','carta','masiva','previred','estado'].indexOf(tab)].classList.add('active');
   if (tab === 'estado') renderEstado();
   if (tab === 'previred') renderPreviRedWorkers();
+  if (tab === 'masiva') renderMasiva();
   if (tab === 'carta' && currentRut) cargarWorker(currentRut);
 }
 
@@ -498,11 +569,19 @@ function toggleAll(cb) {
     seleccionados[w.rut_trabajador].checked = cb.checked;
   });
   renderSidebar();
+  refreshDependientes();
 }
 
 function toggleWorker(rut, cb) {
   if (!seleccionados[rut]) seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
   seleccionados[rut].checked = cb.checked;
+  refreshDependientes();
+}
+
+// Refresca vistas que dependen de los trabajadores marcados
+function refreshDependientes() {
+  if (document.getElementById('tab-masiva')?.classList.contains('active')) renderMasivaLista();
+  if (document.getElementById('tab-previred')?.classList.contains('active')) renderPreviRedWorkers();
 }
 
 function initSel(w) {
@@ -920,6 +999,170 @@ function mostrarPDFs(resultados) {
   document.getElementById('bot-resultados').style.display = '';
 }
 
+
+// ── Carta masiva por período ──────────────────────────────────────────────────
+const INST_LIST_MASIVA = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Plan Vital',
+  'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC'];
+
+let masivaInit = false;
+
+function trabajadoresMarcados() {
+  return trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
+}
+
+function renderMasiva() {
+  const marcados = trabajadoresMarcados();
+
+  // Institución (solo la primera vez o si está vacía)
+  const instEl = document.getElementById('m-inst');
+  if (!instEl.options.length) {
+    instEl.innerHTML = INST_LIST_MASIVA.map(i => `<option>${i}</option>`).join('');
+  }
+
+  // Autocompletar datos de empresa desde el primer trabajador marcado (o cargado)
+  const ref = marcados[0] || trabajadores[0];
+  if (ref && !masivaInit) {
+    if (!document.getElementById('m-razon').value) document.getElementById('m-razon').value = ref.razon_social || '';
+    if (!document.getElementById('m-rut-empresa').value) document.getElementById('m-rut-empresa').value = ref.rut_empresa || '';
+    if (!document.getElementById('m-mes').value) document.getElementById('m-mes').value = new Date().toISOString().slice(0,7);
+    // Institución sugerida
+    if (ref.institucion) {
+      const instLow = ref.institucion.toLowerCase().trim();
+      const match = INST_LIST_MASIVA.find(i => i.toLowerCase() === instLow)
+                 || INST_LIST_MASIVA.find(i => instLow.includes(i.toLowerCase()))
+                 || INST_LIST_MASIVA.find(i => i.toLowerCase().includes(instLow.replace(/\s/g,'')));
+      if (match) instEl.value = match;
+    }
+    // Período sugerido: primer período del trabajador de referencia
+    if (!document.getElementById('m-periodo').value && ref.periodos?.length) {
+      document.getElementById('m-periodo').value = ref.periodos[0];
+    }
+    masivaInit = true;
+    actualizarCuerpoMasiva();
+  }
+
+  renderMasivaLista();
+}
+
+function renderMasivaLista() {
+  const marcados = trabajadoresMarcados();
+  const cont = document.getElementById('m-trabajadores-list');
+  document.getElementById('m-badge-count').textContent = marcados.length;
+  if (!marcados.length) {
+    cont.innerHTML = '<div class="alert alert-info">Marca trabajadores en la lista lateral para incluirlos en la tabla.</div>';
+    return;
+  }
+  cont.innerHTML = `<table class="tabla-estado">
+    <thead><tr><th>RUT AFILIADO</th><th>NOMBRE AFILIADO</th></tr></thead>
+    <tbody>${marcados.map(w => `<tr><td>${w.rut_trabajador}</td><td>${w.nombre}</td></tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function plantillaCuerpo(tipo) {
+  const per = document.getElementById('m-periodo').value || '[PERIODO]';
+  let txt = '';
+  if (tipo === 'pagada') {
+    txt = `Solicitamos su ayuda con la aclaración de deuda generada en el periodo ${per}, luego de una revisión detectamos que se encuentran bien pagadas en base a los indicadores previsionales de periodo. Pagando correctamente la cotización obligatoria (Trabajador y empleador) y SIS`;
+  } else {
+    txt = `Solicitamos su ayuda con la aclaración de deuda generada en el periodo ${per}, luego de una revisión detectamos que las cotizaciones fueron pagadas en otra institución previsional.`;
+  }
+  document.getElementById('m-cuerpo').value = txt;
+}
+
+function actualizarCuerpoMasiva() {
+  // Si el cuerpo contiene "en el periodo XXX", actualizar el período
+  const per = document.getElementById('m-periodo').value;
+  const el = document.getElementById('m-cuerpo');
+  if (per && el.value) {
+    el.value = el.value.replace(/en el periodo\s+[^\s,]+/i, `en el periodo ${per}`);
+  }
+}
+
+function datosMasiva() {
+  const marcados = trabajadoresMarcados();
+  return {
+    institucion: document.getElementById('m-inst').value,
+    periodo: document.getElementById('m-periodo').value,
+    mes: document.getElementById('m-mes').value,
+    razon_social: document.getElementById('m-razon').value,
+    rut_empresa: document.getElementById('m-rut-empresa').value,
+    direccion: document.getElementById('m-direccion').value,
+    cuerpo: document.getElementById('m-cuerpo').value,
+    trabajadores: marcados.map(w => ({rut: w.rut_trabajador, nombre: w.nombre})),
+  };
+}
+
+function verPreviewMasiva() {
+  const d = datosMasiva();
+  if (!d.trabajadores.length) { alert('Marca al menos un trabajador en la lista lateral.'); return; }
+
+  const [anio, mesN] = (d.mes||'').split('-');
+  const MESES_ES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const fechaTxt = `Santiago, ${MESES_ES[parseInt(mesN)]||''} ${anio||''}`;
+
+  let intro = `Me dirijo a ustedes en representación de la empresa ${d.razon_social} RUT: ${d.rut_empresa}`;
+  if (d.direccion) intro += ` ubicada en ${d.direccion}`;
+  intro += ', a fin de gestionar consultar por deuda de la empresa';
+
+  const tabla = 'RUT AFILIADO'.padEnd(16) + 'NOMBRE AFILIADO\n' +
+    d.trabajadores.map(t => (t.rut||'').padEnd(16) + (t.nombre||'')).join('\n');
+
+  const preview = `${fechaTxt}
+
+Señores:
+${d.institucion}.
+Presente. -
+
+${intro}
+
+${d.cuerpo}
+
+${tabla}
+
+Se adjunta
+-Planilla de pago en AFP
+
+Les saluda atentamente,
+
+_______________________________
+Nombre: ${document.getElementById('firma-nombre').value}
+Rut: ${document.getElementById('firma-rut').value}
+Cargo: ${document.getElementById('firma-cargo').value}
+Correo: ${document.getElementById('firma-correo').value}
+Tel: ${document.getElementById('firma-tel').value}`;
+
+  document.getElementById('m-preview-content').textContent = preview;
+  document.getElementById('m-card-preview').style.display = '';
+  document.getElementById('m-card-preview').scrollIntoView({behavior:'smooth'});
+}
+
+async function generarPDFMasiva() {
+  const carta = datosMasiva();
+  if (!carta.trabajadores.length) { alert('Marca al menos un trabajador en la lista lateral.'); return; }
+  const firma = {
+    nombre: document.getElementById('firma-nombre').value,
+    rut: document.getElementById('firma-rut').value,
+    cargo: document.getElementById('firma-cargo').value,
+    correo: document.getElementById('firma-correo').value,
+    tel: document.getElementById('firma-tel').value,
+  };
+  const btn = event.target;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generando...';
+  try {
+    const res = await fetch('/cartas/api/generar_carta_masiva', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({carta, firma})
+    });
+    const data = await res.json();
+    if (data.error) { alert('Error: ' + data.error); return; }
+    window.location.href = `/cartas/api/descargar/${data.filename}`;
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '📄 Guardar PDF';
+  }
+}
 
 // ── Estado ────────────────────────────────────────────────────────────────────
 function renderEstado() {

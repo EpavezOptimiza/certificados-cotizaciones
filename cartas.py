@@ -303,6 +303,108 @@ def generar_carta_pdf(carta_data, firma_data):
     buf.seek(0)
     return buf.read()
 
+# ── Generación de carta masiva por período (tabla de trabajadores) ────────────
+def generar_carta_masiva_pdf(data, firma_data):
+    """Genera PDF de carta masiva: un solo período, muchos trabajadores en tabla."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                     HRFlowable, Table, TableStyle)
+    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.lib import colors
+    import io
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+        leftMargin=3*cm, rightMargin=3*cm,
+        topMargin=2.5*cm, bottomMargin=2.5*cm)
+
+    normal = ParagraphStyle('Normal', fontName='Helvetica', fontSize=11,
+        leading=16, spaceAfter=6)
+    title_s = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=11,
+        leading=16, alignment=TA_RIGHT)
+    cell_s = ParagraphStyle('Cell', fontName='Helvetica', fontSize=9, leading=12)
+
+    # Fecha
+    MESES_ES = {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril',
+                '05':'Mayo','06':'Junio','07':'Julio','08':'Agosto',
+                '09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}
+    mes_num = (data.get('mes') or datetime.now().strftime('%Y-%m')).split('-')
+    mes_txt = MESES_ES.get(mes_num[1] if len(mes_num) > 1 else '', '') if len(mes_num) > 1 else ''
+    anio_txt = mes_num[0] if mes_num else str(datetime.now().year)
+    fecha_txt = f"Santiago, {mes_txt} {anio_txt}"
+
+    razon       = data.get('razon_social', '')
+    rut_emp     = data.get('rut_empresa', '')
+    direccion   = data.get('direccion', '')
+    institucion = data.get('institucion', '')
+    periodo     = data.get('periodo', '')
+    cuerpo      = data.get('cuerpo', '')
+    trabajadores = data.get('trabajadores', [])
+
+    story = []
+    story.append(Paragraph(fecha_txt, title_s))
+    story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph("Señores:", normal))
+    story.append(Paragraph(f"<b>{institucion}.</b>", normal))
+    story.append(Paragraph("Presente. -", normal))
+    story.append(Spacer(1, 0.3*cm))
+
+    intro = f"Me dirijo a ustedes en representación de la empresa <b>{razon}</b> RUT: <b>{rut_emp}</b>"
+    if direccion:
+        intro += f" ubicada en {direccion}"
+    intro += ", a fin de gestionar consultar por deuda de la empresa"
+    story.append(Paragraph(intro, normal))
+    story.append(Spacer(1, 0.3*cm))
+
+    if cuerpo:
+        for parrafo in cuerpo.split('\n'):
+            if parrafo.strip():
+                story.append(Paragraph(parrafo.strip(), normal))
+        story.append(Spacer(1, 0.4*cm))
+
+    # Tabla de trabajadores
+    tabla_data = [[Paragraph('<b>RUT AFILIADO</b>', cell_s),
+                   Paragraph('<b>NOMBRE AFILIADO</b>', cell_s)]]
+    for t in trabajadores:
+        tabla_data.append([Paragraph(t.get('rut', ''), cell_s),
+                           Paragraph(t.get('nombre', ''), cell_s)])
+    tabla = Table(tabla_data, colWidths=[4*cm, 9.5*cm], repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#9ca3af')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e5e7eb')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    story.append(tabla)
+    story.append(Spacer(1, 0.5*cm))
+
+    story.append(Paragraph("Se adjunta", normal))
+    story.append(Paragraph("-Planilla de pago en AFP", normal))
+    story.append(Spacer(1, 0.6*cm))
+
+    story.append(Paragraph("Les saluda atentamente,", normal))
+    story.append(Spacer(1, 1.3*cm))
+    story.append(HRFlowable(width="40%", thickness=0.5, color=colors.black))
+    story.append(Spacer(1, 0.2*cm))
+
+    if firma_data:
+        story.append(Paragraph(f"Nombre: {firma_data.get('nombre','')}", normal))
+        story.append(Paragraph(f"Rut: {firma_data.get('rut','')}", normal))
+        story.append(Paragraph(f"Cargo: {firma_data.get('cargo','')}", normal))
+        if firma_data.get('correo'):
+            story.append(Paragraph(f"Correo: {firma_data.get('correo')}", normal))
+        if firma_data.get('tel'):
+            story.append(Paragraph(f"Tel: {firma_data.get('tel')}", normal))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
+
 # ── Bot PreviRed (headless) ───────────────────────────────────────────────────
 def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
     """Corre el bot de PreviRed en un thread separado."""
@@ -959,6 +1061,25 @@ def generar_carta():
     rut = carta.get('rut_trabajador','').replace('.','').replace(' ','')
     fname = f"Carta_Explicativa_{rut}.pdf"
     # Guardar en DATA_DIR
+    data_dir = current_app.config.get('DATA_DIR', 'adjuntos')
+    dest = os.path.join(data_dir, fname)
+    with open(dest, 'wb') as fout:
+        fout.write(pdf_bytes)
+    return jsonify({"ok": True, "filename": fname})
+
+@cartas_bp.route("/api/generar_carta_masiva", methods=["POST"])
+@cartas_login_required
+def generar_carta_masiva():
+    """Genera PDF de carta masiva por período con tabla de trabajadores."""
+    data = request.json or {}
+    carta = data.get('carta', {})
+    firma = data.get('firma', {})
+    if not carta.get('trabajadores'):
+        return jsonify({"error": "No hay trabajadores seleccionados"}), 400
+    pdf_bytes = generar_carta_masiva_pdf(carta, firma)
+    rut = (carta.get('rut_empresa', '') or 'empresa').replace('.', '').replace(' ', '')
+    periodo = (carta.get('periodo', '') or 'periodo').replace('/', '-').replace(' ', '')
+    fname = f"Carta_Masiva_{rut}_{periodo}.pdf"
     data_dir = current_app.config.get('DATA_DIR', 'adjuntos')
     dest = os.path.join(data_dir, fname)
     with open(dest, 'wb') as fout:

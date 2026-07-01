@@ -639,34 +639,40 @@ function poblarFiltros() {
   const selPer = document.getElementById('filtro-periodo');
   selPer.innerHTML = '<option value="">Todos los períodos</option>' +
     pers.map(p => `<option value="${p}">${p}</option>`).join('');
-  // Estatus únicos
-  const estatus = [...new Set(trabajadores.map(w => (w.estatus||'').trim()).filter(Boolean))].sort();
+  // Estatus únicos (cada período puede tener su propio estatus)
+  const estatus = [...new Set(trabajadores.flatMap(w => valoresPorPeriodo(w, 'periodo_estatus', 'estatus')))].sort();
   const selEst = document.getElementById('filtro-estatus');
   selEst.innerHTML = '<option value="">Todos los estatus</option>' +
     estatus.map(e => `<option value="${e}">${e}</option>`).join('');
   // Motivos únicos (cada período puede tener su propio motivo)
-  const motivos = [...new Set(trabajadores.flatMap(w => motivosDeWorker(w)))].sort();
+  const motivos = [...new Set(trabajadores.flatMap(w => valoresPorPeriodo(w, 'periodo_motivos', 'motivo')))].sort();
   const selMot = document.getElementById('filtro-motivo');
   selMot.innerHTML = '<option value="">Todos los motivos</option>' +
     motivos.map(m => `<option value="${m}">${m}</option>`).join('');
 }
 
-// Devuelve todos los motivos presentes en los períodos de un trabajador
-function motivosDeWorker(w) {
-  const pm = w.periodo_motivos || {};
-  const vals = Object.values(pm).map(m => (m||'').trim()).filter(Boolean);
+// Devuelve todos los valores (motivo o estatus) presentes en los períodos de
+// un trabajador. mapaKey: 'periodo_motivos' o 'periodo_estatus'.
+// campoLegado: 'motivo' o 'estatus' (fallback si no hay datos por período).
+function valoresPorPeriodo(w, mapaKey, campoLegado) {
+  const mapa = w[mapaKey] || {};
+  const vals = Object.values(mapa).map(v => (v||'').trim()).filter(Boolean);
   if (vals.length) return [...new Set(vals)];
-  return w.motivo ? [w.motivo.trim()] : [];
+  return w[campoLegado] ? [w[campoLegado].trim()] : [];
 }
 
-// Devuelve solo los períodos de un trabajador cuyo motivo coincide con el
-// filtro de motivo activo (o todos los períodos si no hay filtro activo)
+// Devuelve solo los períodos de un trabajador que coinciden con TODOS los
+// filtros de motivo/estatus activos (o todos los períodos si no hay ninguno)
 function periodosParaMotivoActivo(w) {
   const fMotivo = document.getElementById('filtro-motivo')?.value || '';
-  const todos = w.periodos || [];
-  if (!fMotivo) return todos;
+  const fEstatus = document.getElementById('filtro-estatus')?.value || '';
+  let todos = w.periodos || [];
+  if (!fMotivo && !fEstatus) return todos;
   const pm = w.periodo_motivos || {};
-  const filtrados = todos.filter(p => (pm[p]||'').trim() === fMotivo);
+  const pe = w.periodo_estatus || {};
+  const filtrados = todos.filter(p =>
+    (!fMotivo || (pm[p]||'').trim() === fMotivo) &&
+    (!fEstatus || (pe[p]||'').trim() === fEstatus));
   return filtrados.length ? filtrados : todos;
 }
 
@@ -681,8 +687,8 @@ function getWorkersFiltrados() {
     (w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q)) &&
     (!fInst || (w.institucion||'').trim() === fInst) &&
     (!fPer || (w.periodos||[]).includes(fPer)) &&
-    (!fEstatus || (w.estatus||'').trim() === fEstatus) &&
-    (!fMotivo || motivosDeWorker(w).includes(fMotivo)));
+    (!fEstatus || valoresPorPeriodo(w, 'periodo_estatus', 'estatus').includes(fEstatus)) &&
+    (!fMotivo || valoresPorPeriodo(w, 'periodo_motivos', 'motivo').includes(fMotivo)));
 }
 
 function renderSidebar() {
@@ -813,7 +819,8 @@ function asegurarSel(w) {
     seleccionados[rut] = initSel(w);
   } else {
     const fMotivo = document.getElementById('filtro-motivo')?.value || '';
-    if (fMotivo) seleccionados[rut].periodos_sel = [...periodosParaMotivoActivo(w)];
+    const fEstatus = document.getElementById('filtro-estatus')?.value || '';
+    if (fMotivo || fEstatus) seleccionados[rut].periodos_sel = [...periodosParaMotivoActivo(w)];
   }
   return seleccionados[rut];
 }

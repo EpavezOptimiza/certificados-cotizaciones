@@ -212,14 +212,15 @@ def agrupar_por_trabajador(datos):
     for d in datos:
         k = d['rut_trabajador']
         if k not in grupos:
-            grupos[k] = {**d, 'periodos': [], 'periodo_motivos': {}}
+            grupos[k] = {**d, 'periodos': [], 'periodo_motivos': {}, 'periodo_estatus': {}}
         p = d['periodo']
         if p and p not in grupos[k]['periodos']:
             grupos[k]['periodos'].append(p)
-        # Cada período puede tener su propio motivo (un mismo trabajador puede
-        # tener el mismo periodo repetido por distintos motivos de deuda)
+        # Cada período puede tener su propio motivo y estatus (un mismo
+        # trabajador puede tener distintos periodos con distinto motivo/estatus)
         if p:
             grupos[k]['periodo_motivos'][p] = d.get('motivo', '')
+            grupos[k]['periodo_estatus'][p] = d.get('estatus', '')
 
     # Ordenar períodos de menor a mayor
     for k in grupos:

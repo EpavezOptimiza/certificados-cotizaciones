@@ -1315,16 +1315,26 @@ function renderMasiva() {
     }
   }
 
+  // Período: siempre se recalcula según los trabajadores marcados actualmente
+  // (si todos comparten exactamente un mismo período en común)
+  if (marcados.length) {
+    let comunes = marcados[0].periodos || [];
+    for (let i = 1; i < marcados.length && comunes.length; i++) {
+      const otros = new Set(marcados[i].periodos || []);
+      comunes = comunes.filter(p => otros.has(p));
+    }
+    if (comunes.length === 1) {
+      document.getElementById('m-periodo').value = comunes[0];
+      actualizarCuerpoMasiva();
+    }
+  }
+
   // Autocompletar datos de empresa desde el primer trabajador marcado (o cargado), solo una vez
   const ref = marcados[0] || trabajadores[0];
   if (ref && !masivaInit) {
     if (!document.getElementById('m-razon').value) document.getElementById('m-razon').value = ref.razon_social || '';
     if (!document.getElementById('m-rut-empresa').value) document.getElementById('m-rut-empresa').value = ref.rut_empresa || '';
     if (!document.getElementById('m-mes').value) document.getElementById('m-mes').value = new Date().toISOString().slice(0,7);
-    // Período sugerido: primer período del trabajador de referencia
-    if (!document.getElementById('m-periodo').value && ref.periodos?.length) {
-      document.getElementById('m-periodo').value = ref.periodos[0];
-    }
     masivaInit = true;
     actualizarCuerpoMasiva();
   }

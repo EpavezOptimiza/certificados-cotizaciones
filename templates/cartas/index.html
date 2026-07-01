@@ -177,6 +177,20 @@ textarea{resize:vertical;min-height:70px}
     <div class="search-wrap">
       <input type="text" id="search-worker" placeholder="Buscar trabajador o RUT..." oninput="filtrarWorkers()">
     </div>
+    <div class="search-wrap" style="padding-top:0;display:flex;gap:6px">
+      <select id="filtro-inst" onchange="filtrarWorkers()" style="flex:1;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none;background:#fff">
+        <option value="">Todas las instituciones</option>
+      </select>
+      <select id="filtro-periodo" onchange="filtrarWorkers()" style="flex:1;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none;background:#fff">
+        <option value="">Todos los períodos</option>
+      </select>
+    </div>
+    <div class="search-wrap" style="padding-top:0;display:flex;align-items:center;justify-content:space-between">
+      <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:400;color:#64748b">
+        <input type="checkbox" id="filtro-marcados" onchange="filtrarWorkers()"> Solo marcados
+      </label>
+      <span id="filtro-count" style="font-size:11px;color:#94a3b8"></span>
+    </div>
     <div class="worker-list" id="worker-list">
       <div style="padding:30px;text-align:center;color:#94a3b8;font-size:13px">
         Sube un Excel para ver los trabajadores
@@ -523,6 +537,7 @@ async function subirExcel(file) {
       return;
     }
     statusEl.innerHTML = `<div class="alert alert-success">✅ ${data.total} trabajadores cargados</div>`;
+    poblarFiltros();
     renderSidebar();
   } catch(e) {
     statusEl.innerHTML = `<div class="alert alert-error">❌ Error al procesar el archivo: ${e.message}</div>`;
@@ -530,12 +545,33 @@ async function subirExcel(file) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
+function poblarFiltros() {
+  // Instituciones únicas
+  const insts = [...new Set(trabajadores.map(w => (w.institucion||'').trim()).filter(Boolean))].sort();
+  const selInst = document.getElementById('filtro-inst');
+  selInst.innerHTML = '<option value="">Todas las instituciones</option>' +
+    insts.map(i => `<option value="${i}">${i}</option>`).join('');
+  // Períodos únicos
+  const pers = [...new Set(trabajadores.flatMap(w => w.periodos||[]))].sort((a,b)=>perKey(a)-perKey(b));
+  const selPer = document.getElementById('filtro-periodo');
+  selPer.innerHTML = '<option value="">Todos los períodos</option>' +
+    pers.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+
 function renderSidebar() {
   const q = document.getElementById('search-worker').value.toLowerCase();
+  const fInst = document.getElementById('filtro-inst')?.value || '';
+  const fPer = document.getElementById('filtro-periodo')?.value || '';
+  const fMarcados = document.getElementById('filtro-marcados')?.checked || false;
   const lista = document.getElementById('worker-list');
   const filtrados = trabajadores.filter(w =>
-    w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q));
+    (w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q)) &&
+    (!fInst || (w.institucion||'').trim() === fInst) &&
+    (!fPer || (w.periodos||[]).includes(fPer)) &&
+    (!fMarcados || seleccionados[w.rut_trabajador]?.checked));
   document.getElementById('badge-total').textContent = trabajadores.length;
+  const countEl = document.getElementById('filtro-count');
+  if (countEl) countEl.textContent = filtrados.length !== trabajadores.length ? `${filtrados.length} de ${trabajadores.length}` : '';
 
   if (!filtrados.length) {
     lista.innerHTML = '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">Sin resultados</div>';
@@ -582,6 +618,7 @@ function toggleWorker(rut, cb) {
 function refreshDependientes() {
   if (document.getElementById('tab-masiva')?.classList.contains('active')) renderMasivaLista();
   if (document.getElementById('tab-previred')?.classList.contains('active')) renderPreviRedWorkers();
+  if (document.getElementById('filtro-marcados')?.checked) renderSidebar();
 }
 
 function initSel(w) {

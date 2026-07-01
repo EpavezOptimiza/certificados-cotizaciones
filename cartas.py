@@ -1245,8 +1245,7 @@ def generar_cartas_lote():
         for carta in cartas_list:
             pdf_bytes = generar_carta_pdf(carta, firma)
             rut_clean = (carta.get('rut_trabajador', '') or '').replace('.', '').replace(' ', '')
-            nombre_clean = (carta.get('nombre','').split()[0] if carta.get('nombre') else 'worker')[:20]
-            fname = f"Carta_{nombre_clean}_{rut_clean}.pdf"
+            fname = f"Carta_Explicativa_{rut_clean}.pdf"
             zf.writestr(fname, pdf_bytes)
 
     zip_buf.seek(0)

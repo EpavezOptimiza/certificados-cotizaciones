@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cartas Previsionales — Optimiza</title>
 <style>
+@font-face{font-family:'GreatVibes';src:url('/static/fonts/GreatVibes-Regular.ttf') format('truetype')}
+.firma-cursiva{font-family:'GreatVibes',cursive;font-size:32px;color:#1a1a2e;line-height:1.2;margin:4px 0}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
 
@@ -960,31 +962,39 @@ function verPreview() {
   const motivo = sel.motivo || '[MOTIVO]';
   const fechaCese = (sel.fecha_cese && !motivo.includes(sel.fecha_cese)) ? ' ' + sel.fecha_cese : '';
 
-  const preview = `${fechaTxt}
+  const esc = s => (s||'').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const nombreFirma = document.getElementById('firma-nombre').value;
+
+  const preview = `${esc(fechaTxt)}
 
 Senores:
-${inst}.
+${esc(inst)}.
 Presente. -
 
-Me dirijo a ustedes en representacion de la empresa ${w.razon_social||''}. Rut: ${w.rut_empresa||''}, a fin de informar a ustedes lo siguiente:
+Me dirijo a ustedes en representacion de la empresa ${esc(w.razon_social)}. Rut: ${esc(w.rut_empresa)}, a fin de informar a ustedes lo siguiente:
 
-NOMBRE: ${w.nombre.toUpperCase()}
-RUT: ${w.rut_trabajador}.
-TIPO DE PRODUCTO: ${w.tipo||''}.
-PERIODO DE DEUDA: ${periodoTxt}.
-MOTIVO DE NO PAGO: ${motivo}${fechaCese}
+NOMBRE: ${esc(w.nombre.toUpperCase())}
+RUT: ${esc(w.rut_trabajador)}.
+TIPO DE PRODUCTO: ${esc(w.tipo)}.
+PERIODO DE DEUDA: ${esc(periodoTxt)}.
+MOTIVO DE NO PAGO: ${esc(motivo)}${esc(fechaCese)}
 
 
 Les saluda atentamente,
+`;
 
-_______________________________
-Nombre: ${document.getElementById('firma-nombre').value}
-Rut: ${document.getElementById('firma-rut').value}
-Cargo: ${document.getElementById('firma-cargo').value}
-Correo: ${document.getElementById('firma-correo').value}
-Tel: ${document.getElementById('firma-tel').value}`;
+  const firmaHtml = (nombreFirma ? `<div class="firma-cursiva">${esc(nombreFirma)}</div>` : '<br><br>') +
+`_______________________________
+Nombre: ${esc(nombreFirma)}
+Rut: ${esc(document.getElementById('firma-rut').value)}
+Cargo: ${esc(document.getElementById('firma-cargo').value)}
+Correo: ${esc(document.getElementById('firma-correo').value)}
+Tel: ${esc(document.getElementById('firma-tel').value)}`;
 
-  document.getElementById('carta-preview-content').textContent = preview;
+  document.getElementById('carta-preview-content').innerHTML =
+    preview.replace(/\n/g,'<br>') + firmaHtml.replace(/\n/g,'<br>');
   document.getElementById('card-preview').style.display = '';
   document.getElementById('card-preview').scrollIntoView({behavior:'smooth'});
 }
@@ -1436,21 +1446,25 @@ ${esc(intro)}
 ${esc(d.cuerpo)}
 `;
 
+  const nombreFirmaM = document.getElementById('m-firma-nombre').value;
+
   const cierre = `
 Se adjunta
 -Planilla de pago en AFP
 
 Les saluda atentamente,
+`;
 
-_______________________________
-Nombre: ${esc(document.getElementById('m-firma-nombre').value)}
+  const firmaHtml = (nombreFirmaM ? `<div class="firma-cursiva">${esc(nombreFirmaM)}</div>` : '<br><br>') +
+`_______________________________
+Nombre: ${esc(nombreFirmaM)}
 Rut: ${esc(document.getElementById('m-firma-rut').value)}
 Cargo: ${esc(document.getElementById('m-firma-cargo').value)}
 Correo: ${esc(document.getElementById('m-firma-correo').value)}
 Tel: ${esc(document.getElementById('m-firma-tel').value)}`;
 
   document.getElementById('m-preview-content').innerHTML =
-    preview.replace(/\n/g, '<br>') + tablaHtml + cierre.replace(/\n/g, '<br>');
+    preview.replace(/\n/g, '<br>') + tablaHtml + cierre.replace(/\n/g, '<br>') + firmaHtml.replace(/\n/g, '<br>');
   document.getElementById('m-card-preview').style.display = '';
   document.getElementById('m-card-preview').scrollIntoView({behavior:'smooth'});
 }

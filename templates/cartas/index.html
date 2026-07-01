@@ -187,6 +187,11 @@ textarea{resize:vertical;min-height:70px}
         <option value="">Todos los períodos</option>
       </select>
     </div>
+    <div class="search-wrap" style="padding-top:0">
+      <select id="filtro-estatus" onchange="filtrarWorkers()" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none;background:#fff">
+        <option value="">Todos los estatus</option>
+      </select>
+    </div>
     <div class="search-wrap" style="padding-top:0;display:flex;align-items:center;justify-content:space-between">
       <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:400;color:#64748b">
         <input type="checkbox" id="filtro-marcados" onchange="filtrarWorkers()"> Solo marcados
@@ -584,6 +589,11 @@ function poblarFiltros() {
   const selPer = document.getElementById('filtro-periodo');
   selPer.innerHTML = '<option value="">Todos los períodos</option>' +
     pers.map(p => `<option value="${p}">${p}</option>`).join('');
+  // Estatus únicos
+  const estatus = [...new Set(trabajadores.map(w => (w.estatus||'').trim()).filter(Boolean))].sort();
+  const selEst = document.getElementById('filtro-estatus');
+  selEst.innerHTML = '<option value="">Todos los estatus</option>' +
+    estatus.map(e => `<option value="${e}">${e}</option>`).join('');
 }
 
 // Devuelve la lista de trabajadores que pasan los filtros actuales del sidebar
@@ -591,11 +601,13 @@ function getWorkersFiltrados() {
   const q = document.getElementById('search-worker').value.toLowerCase();
   const fInst = document.getElementById('filtro-inst')?.value || '';
   const fPer = document.getElementById('filtro-periodo')?.value || '';
+  const fEstatus = document.getElementById('filtro-estatus')?.value || '';
   const fMarcados = document.getElementById('filtro-marcados')?.checked || false;
   return trabajadores.filter(w =>
     (w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q)) &&
     (!fInst || (w.institucion||'').trim() === fInst) &&
     (!fPer || (w.periodos||[]).includes(fPer)) &&
+    (!fEstatus || (w.estatus||'').trim() === fEstatus) &&
     (!fMarcados || seleccionados[w.rut_trabajador]?.checked));
 }
 

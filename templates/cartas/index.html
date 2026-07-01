@@ -1411,34 +1411,46 @@ function verPreviewMasiva() {
   if (d.direccion) intro += ` ubicada en ${d.direccion}`;
   intro += ', a fin de gestionar consultar por deuda de la empresa';
 
-  const tabla = 'RUT AFILIADO'.padEnd(16) + 'NOMBRE AFILIADO\n' +
-    d.trabajadores.map(t => (t.rut||'').padEnd(16) + (t.nombre||'')).join('\n');
+  const esc = s => (s||'').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  const preview = `${fechaTxt}
+  const tablaHtml = `<table style="width:100%;border-collapse:collapse;font-family:'Times New Roman',serif;font-size:13px;margin:8px 0">
+    <thead><tr>
+      <th style="text-align:left;padding:4px 12px 4px 0;border-bottom:1px solid #333">RUT AFILIADO</th>
+      <th style="text-align:left;padding:4px 0;border-bottom:1px solid #333">NOMBRE AFILIADO</th>
+    </tr></thead>
+    <tbody>${d.trabajadores.map(t => `<tr>
+      <td style="padding:3px 12px 3px 0">${esc(t.rut)}</td>
+      <td style="padding:3px 0">${esc(t.nombre)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+
+  const preview = `${esc(fechaTxt)}
 
 Señores:
-${d.institucion}.
+${esc(d.institucion)}.
 Presente. -
 
-${intro}
+${esc(intro)}
 
-${d.cuerpo}
+${esc(d.cuerpo)}
+`;
 
-${tabla}
-
+  const cierre = `
 Se adjunta
 -Planilla de pago en AFP
 
 Les saluda atentamente,
 
 _______________________________
-Nombre: ${document.getElementById('m-firma-nombre').value}
-Rut: ${document.getElementById('m-firma-rut').value}
-Cargo: ${document.getElementById('m-firma-cargo').value}
-Correo: ${document.getElementById('m-firma-correo').value}
-Tel: ${document.getElementById('m-firma-tel').value}`;
+Nombre: ${esc(document.getElementById('m-firma-nombre').value)}
+Rut: ${esc(document.getElementById('m-firma-rut').value)}
+Cargo: ${esc(document.getElementById('m-firma-cargo').value)}
+Correo: ${esc(document.getElementById('m-firma-correo').value)}
+Tel: ${esc(document.getElementById('m-firma-tel').value)}`;
 
-  document.getElementById('m-preview-content').textContent = preview;
+  document.getElementById('m-preview-content').innerHTML =
+    preview.replace(/\n/g, '<br>') + tablaHtml + cierre.replace(/\n/g, '<br>');
   document.getElementById('m-card-preview').style.display = '';
   document.getElementById('m-card-preview').scrollIntoView({behavior:'smooth'});
 }

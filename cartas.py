@@ -331,6 +331,11 @@ def generar_carta_pdf(carta_data, firma_data):
         normal))
     story.append(Spacer(1, 0.3*cm))
 
+    story.append(Paragraph(
+        "a fin de solicitar la regularización de deudas previsionales por la siguiente persona:",
+        normal))
+    story.append(Spacer(1, 0.3*cm))
+
     story.append(Paragraph(f"<b>NOMBRE: {carta_data.get('nombre','').upper()}</b>", normal))
     story.append(Paragraph(f"<b>RUT: {carta_data.get('rut_trabajador','')}.</b>", normal))
     story.append(Paragraph(f"<b>TIPO DE PRODUCTO: {carta_data.get('tipo','')}.</b>", normal))

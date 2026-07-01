@@ -229,7 +229,7 @@ def _agregar_bloque_firma(story, firma_data, normal_style):
     línea, y debajo los datos impresos (Nombre/Rut/Cargo/Correo/Tel)."""
     from reportlab.platypus import Paragraph, Spacer, HRFlowable
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.enums import TA_LEFT
     from reportlab.lib.units import cm
     from reportlab.lib import colors
 
@@ -238,12 +238,12 @@ def _agregar_bloque_firma(story, firma_data, normal_style):
     nombre_firma = firma_data.get('nombre', '')
     if nombre_firma:
         firma_style = ParagraphStyle('FirmaManuscrita', fontName=_FIRMA_FONT,
-            fontSize=26, leading=30, alignment=TA_CENTER, textColor='#1a1a2e')
+            fontSize=26, leading=30, alignment=TA_LEFT, textColor='#1a1a2e')
         story.append(Paragraph(nombre_firma, firma_style))
     else:
         story.append(Spacer(1, 0.5*cm))
 
-    story.append(HRFlowable(width="40%", thickness=0.5, color=colors.black))
+    story.append(HRFlowable(width="40%", thickness=0.5, color=colors.black, hAlign='LEFT'))
     story.append(Spacer(1, 0.2*cm))
 
     story.append(Paragraph(f"Nombre: {nombre_firma}", normal_style))

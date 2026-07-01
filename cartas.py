@@ -1157,6 +1157,35 @@ def api_destacar_pdf():
         fout.write(resaltado)
     return jsonify({"ok": True, "filename": fname, "stats": stats})
 
+@cartas_bp.route("/api/generar_cartas_lote", methods=["POST"])
+@cartas_login_required
+def generar_cartas_lote():
+    """Genera una carta PDF individual para cada trabajador (lote)."""
+    import zipfile
+    import io
+    data = request.json or {}
+    cartas_list = data.get('cartas', [])
+    firma = data.get('firma', {})
+    if not cartas_list:
+        return jsonify({"error": "No hay trabajadores"}), 400
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for carta in cartas_list:
+            pdf_bytes = generar_carta_pdf(carta, firma)
+            rut_clean = (carta.get('rut_trabajador', '') or '').replace('.', '').replace(' ', '')
+            nombre_clean = (carta.get('nombre','').split()[0] if carta.get('nombre') else 'worker')[:20]
+            fname = f"Carta_{nombre_clean}_{rut_clean}.pdf"
+            zf.writestr(fname, pdf_bytes)
+
+    zip_buf.seek(0)
+    zip_name = f"Cartas_lote_{len(cartas_list)}.zip"
+    data_dir = current_app.config.get('DATA_DIR', 'adjuntos')
+    dest = os.path.join(data_dir, zip_name)
+    with open(dest, 'wb') as fout:
+        fout.write(zip_buf.getvalue())
+    return jsonify({"ok": True, "filename": zip_name, "total": len(cartas_list)})
+
 @cartas_bp.route("/api/generar_carta_masiva", methods=["POST"])
 @cartas_login_required
 def generar_carta_masiva():

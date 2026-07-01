@@ -315,7 +315,9 @@ textarea{resize:vertical;min-height:70px}
         <div class="btn-group">
           <button class="btn btn-primary" onclick="verPreview()">👁 Vista previa</button>
           <button class="btn btn-success" onclick="generarPDF()">📄 Guardar PDF</button>
+          <button class="btn btn-purple" onclick="generarPDFLote()" id="btn-lote" style="display:none">📦 Generar para marcados</button>
         </div>
+        <div id="lote-status" style="margin-top:8px"></div>
       </div>
 
       <!-- Preview -->
@@ -715,6 +717,14 @@ function renderCartaForm() {
   document.getElementById('carta-worker-name').textContent =
     `${w.nombre}  ·  RUT: ${w.rut_trabajador}  ·  ${w.razon_social||''}`;
 
+  // Mostrar botón lote si hay marcados
+  const marcados = trabajadoresMarcados();
+  const btnLote = document.getElementById('btn-lote');
+  if (btnLote) {
+    btnLote.style.display = marcados.length > 1 ? '' : 'none';
+    if (marcados.length > 1) btnLote.textContent = `📦 Generar para ${marcados.length} marcados`;
+  }
+
   // Instituciones
   const instEl = document.getElementById('f-inst');
   const INST_LIST = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital',
@@ -901,6 +911,65 @@ async function generarPDF() {
     alert('Error: ' + e.message);
   } finally {
     btn.disabled = false; btn.innerHTML = '📄 Guardar PDF';
+  }
+}
+
+// ── Generar cartas en lote (todos los marcados) ────────────────────────────────
+async function generarPDFLote() {
+  guardarForm();
+  const marcados = trabajadoresMarcados();
+  if (!marcados.length) { alert('No hay trabajadores marcados.'); return; }
+
+  const firma = {
+    nombre: document.getElementById('firma-nombre').value,
+    rut: document.getElementById('firma-rut').value,
+    cargo: document.getElementById('firma-cargo').value,
+    correo: document.getElementById('firma-correo').value,
+    tel: document.getElementById('firma-tel').value,
+  };
+
+  const statusEl = document.getElementById('lote-status');
+  const btn = document.getElementById('btn-lote');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generando...';
+  statusEl.innerHTML = `<div class="alert alert-info">⏳ Generando ${marcados.length} cartas...</div>`;
+
+  try {
+    const cartas = marcados.map(w => {
+      const sel = seleccionados[w.rut_trabajador];
+      return {
+        ...w,
+        periodos_sel: sel.periodos_sel,
+        periodos_extra: sel.periodos_extra,
+        motivo: sel.motivo,
+        fecha_cese: sel.fecha_cese,
+        mes: document.getElementById('f-mes').value,
+        institucion: document.getElementById('f-inst').value,
+      };
+    });
+
+    const res = await fetch('/cartas/api/generar_cartas_lote', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cartas, firma})
+    });
+    const data = await res.json();
+    if (data.error) {
+      statusEl.innerHTML = `<div class="alert alert-error">❌ ${data.error}</div>`;
+      return;
+    }
+    statusEl.innerHTML = `<div class="alert alert-success">✅ ${data.total} cartas generadas</div>
+      <a href="/cartas/api/descargar/${data.filename}" class="btn btn-success" style="margin-top:8px">⬇ Descargar ZIP</a>`;
+    // Descarga automática
+    const a = document.createElement('a');
+    a.href = `/cartas/api/descargar/${data.filename}`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    marcados.forEach(w => { if (seleccionados[w.rut_trabajador]) seleccionados[w.rut_trabajador].status = 'completado'; });
+    renderSidebar();
+  } catch(e) {
+    statusEl.innerHTML = `<div class="alert alert-error">❌ Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = `📦 Generar para ${marcados.length} marcados`;
   }
 }
 

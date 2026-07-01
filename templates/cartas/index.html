@@ -171,6 +171,7 @@ textarea{resize:vertical;min-height:70px}
     <div class="sidebar-header">
       <span class="sidebar-title">Trabajadores</span>
       <span class="badge" id="badge-total">0</span>
+      <span class="badge" id="badge-marcados" style="background:#16a34a;display:none">✓ 0</span>
       <label style="margin-left:auto;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:400">
         <input type="checkbox" id="check-all" onchange="toggleAll(this)"> Marcar filtrados
       </label>
@@ -602,6 +603,7 @@ function renderSidebar() {
   const lista = document.getElementById('worker-list');
   const filtrados = getWorkersFiltrados();
   document.getElementById('badge-total').textContent = trabajadores.length;
+  actualizarBadgeMarcados();
   const countEl = document.getElementById('filtro-count');
   if (countEl) countEl.textContent = filtrados.length !== trabajadores.length ? `${filtrados.length} de ${trabajadores.length}` : '';
 
@@ -647,8 +649,18 @@ function toggleWorker(rut, cb) {
   refreshDependientes();
 }
 
+// Actualiza el badge verde con el número de trabajadores marcados
+function actualizarBadgeMarcados() {
+  const n = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked).length;
+  const el = document.getElementById('badge-marcados');
+  if (!el) return;
+  el.textContent = `✓ ${n}`;
+  el.style.display = n > 0 ? '' : 'none';
+}
+
 // Refresca vistas que dependen de los trabajadores marcados
 function refreshDependientes() {
+  actualizarBadgeMarcados();
   if (document.getElementById('tab-masiva')?.classList.contains('active')) renderMasivaLista();
   if (document.getElementById('tab-previred')?.classList.contains('active')) renderPreviRedWorkers();
   if (document.getElementById('tab-destacar')?.classList.contains('active')) renderDestacar();

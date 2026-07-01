@@ -456,7 +456,11 @@ def destacar_pdf(pdf_bytes, workers, resaltar_fila=True):
     total_marcas = 0
 
     for page in doc:
-        page_rect = page.rect
+        # Palabras de la página (para hallar la extensión real de cada fila,
+        # ya que usar el ancho de página completo falla en documentos con
+        # rotación, dejando el resaltado como una columna en vez de una fila)
+        palabras = page.get_text("words")  # (x0,y0,x1,y1,word,block,line,word_no)
+
         for w in workers:
             rut = w.get('rut') or w.get('rut_trabajador') or ''
             if not rut:
@@ -467,9 +471,17 @@ def destacar_pdf(pdf_bytes, workers, resaltar_fila=True):
                 rects = page.search_for(var)
                 for r in rects:
                     if resaltar_fila:
-                        # Expandir horizontalmente para resaltar toda la fila
-                        fila = fitz.Rect(page_rect.x0 + 4, r.y0 - 1,
-                                         page_rect.x1 - 4, r.y1 + 1)
+                        # Encontrar todas las palabras que comparten la misma línea
+                        # (mismo bloque/línea que la palabra del RUT encontrado)
+                        y_mid = (r.y0 + r.y1) / 2
+                        misma_linea = [p for p in palabras
+                                       if p[1] <= y_mid <= p[3]]
+                        if misma_linea:
+                            x0 = min(p[0] for p in misma_linea)
+                            x1 = max(p[2] for p in misma_linea)
+                            fila = fitz.Rect(x0 - 2, r.y0 - 1, x1 + 2, r.y1 + 1)
+                        else:
+                            fila = r
                         annot = page.add_highlight_annot(fila)
                     else:
                         annot = page.add_highlight_annot(r)

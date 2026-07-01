@@ -685,6 +685,27 @@ function toggleAll(cb) {
 function toggleWorker(rut, cb) {
   if (!seleccionados[rut]) seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
   seleccionados[rut].checked = cb.checked;
+
+  if (cb.checked) {
+    // Al marcar, ese pasa a ser el trabajador mostrado en "Datos de la carta"
+    currentRut = rut;
+  } else if (currentRut === rut) {
+    // Si se desmarca el que estaba mostrado, saltar a otro marcado o limpiar
+    const marcados = trabajadoresMarcados();
+    currentRut = marcados.length ? marcados[0].rut_trabajador : null;
+  }
+  const marcadosActualizados = trabajadoresMarcados();
+  currentNavIndex = currentRut ? marcadosActualizados.findIndex(w => w.rut_trabajador === currentRut) : -1;
+
+  if (document.getElementById('tab-carta')?.classList.contains('active')) {
+    if (currentRut) {
+      renderCartaForm();
+    } else {
+      document.getElementById('carta-form').style.display = 'none';
+      document.getElementById('no-worker-msg').style.display = '';
+    }
+  }
+  renderSidebar();
   refreshDependientes();
 }
 

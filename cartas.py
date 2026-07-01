@@ -405,6 +405,67 @@ def generar_carta_masiva_pdf(data, firma_data):
     buf.seek(0)
     return buf.read()
 
+# ── Destacar trabajadores en un PDF descargado ────────────────────────────────
+def _variantes_rut(rut):
+    """Devuelve las variantes de un RUT: con puntos, sin puntos, mayúscula DV."""
+    rut = str(rut).replace(".", "").replace(" ", "").upper()
+    if "-" not in rut:
+        return {rut} if rut else set()
+    cuerpo, dv = rut.split("-", 1)
+    variantes = {f"{cuerpo}-{dv}"}
+    if len(cuerpo) >= 7:
+        c = cuerpo[::-1]
+        grupos = [c[i:i+3] for i in range(0, len(c), 3)]
+        con_puntos = ".".join(g[::-1] for g in grupos[::-1])
+        variantes.add(f"{con_puntos}-{dv}")
+    return variantes
+
+def destacar_pdf(pdf_bytes, workers, resaltar_fila=True):
+    """Resalta en un PDF las filas de los trabajadores dados (por RUT).
+    workers: lista de dicts con 'rut' (y opcionalmente 'nombre').
+    Retorna (pdf_bytes_resaltado, stats)."""
+    import fitz  # PyMuPDF
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    encontrados = set()
+    total_marcas = 0
+
+    for page in doc:
+        page_rect = page.rect
+        for w in workers:
+            rut = w.get('rut') or w.get('rut_trabajador') or ''
+            if not rut:
+                continue
+            for var in _variantes_rut(rut):
+                if not var:
+                    continue
+                rects = page.search_for(var)
+                for r in rects:
+                    if resaltar_fila:
+                        # Expandir horizontalmente para resaltar toda la fila
+                        fila = fitz.Rect(page_rect.x0 + 4, r.y0 - 1,
+                                         page_rect.x1 - 4, r.y1 + 1)
+                        annot = page.add_highlight_annot(fila)
+                    else:
+                        annot = page.add_highlight_annot(r)
+                    annot.set_colors(stroke=(1, 0.92, 0.23))  # amarillo
+                    annot.update()
+                    encontrados.add(rut)
+                    total_marcas += 1
+
+    out = doc.tobytes(garbage=3, deflate=True)
+    doc.close()
+    no_encontrados = [w for w in workers
+                      if (w.get('rut') or w.get('rut_trabajador') or '') not in encontrados]
+    stats = {
+        "total_workers": len(workers),
+        "encontrados": len(encontrados),
+        "no_encontrados": [{"rut": (w.get('rut') or w.get('rut_trabajador') or ''),
+                            "nombre": w.get('nombre', '')} for w in no_encontrados],
+        "marcas": total_marcas,
+    }
+    return out, stats
+
 # ── Bot PreviRed (headless) ───────────────────────────────────────────────────
 def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
     """Corre el bot de PreviRed en un thread separado."""
@@ -1066,6 +1127,35 @@ def generar_carta():
     with open(dest, 'wb') as fout:
         fout.write(pdf_bytes)
     return jsonify({"ok": True, "filename": fname})
+
+@cartas_bp.route("/api/destacar_pdf", methods=["POST"])
+@cartas_login_required
+def api_destacar_pdf():
+    """Recibe un PDF + lista de trabajadores (JSON en campo 'workers') y
+    devuelve el PDF con esas filas resaltadas en amarillo."""
+    if 'pdf' not in request.files:
+        return jsonify({"error": "No se envió el PDF"}), 400
+    try:
+        workers = json.loads(request.form.get('workers', '[]'))
+    except Exception:
+        workers = []
+    if not workers:
+        return jsonify({"error": "No hay trabajadores marcados"}), 400
+
+    pdf_bytes = request.files['pdf'].read()
+    nombre_orig = request.files['pdf'].filename or 'documento.pdf'
+    try:
+        resaltado, stats = destacar_pdf(pdf_bytes, workers)
+    except Exception as e:
+        return jsonify({"error": f"No se pudo procesar el PDF: {e}"}), 500
+
+    base = nombre_orig.rsplit('.', 1)[0]
+    fname = f"{base}_DESTACADO.pdf"
+    data_dir = current_app.config.get('DATA_DIR', 'adjuntos')
+    dest = os.path.join(data_dir, fname)
+    with open(dest, 'wb') as fout:
+        fout.write(resaltado)
+    return jsonify({"ok": True, "filename": fname, "stats": stats})
 
 @cartas_bp.route("/api/generar_carta_masiva", methods=["POST"])
 @cartas_login_required

@@ -158,6 +158,7 @@ textarea{resize:vertical;min-height:70px}
   <div class="tab active" onclick="switchTab('visor')">📂 Cargar Excel</div>
   <div class="tab" onclick="switchTab('carta')">📝 Datos de la carta</div>
   <div class="tab" onclick="switchTab('masiva')">📋 Carta masiva por período</div>
+  <div class="tab" onclick="switchTab('destacar')">🖍️ Destacar PDF</div>
   <div class="tab" onclick="switchTab('previred')">⚡ Movimiento PreviRed</div>
   <div class="tab" onclick="switchTab('estado')">✅ Estado</div>
 </div>
@@ -389,6 +390,31 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
 
+    <!-- Tab: Destacar PDF -->
+    <div class="tab-content" id="tab-destacar">
+      <div class="card">
+        <div class="card-title"><span class="card-title-icon">🖍️</span> Destacar trabajadores en un PDF</div>
+        <div class="alert alert-info" style="margin-bottom:14px">
+          Marca los trabajadores en la lista lateral, sube un PDF descargado del portal
+          (certificado, comprobante, planilla) y el sistema resalta en amarillo las filas
+          de esos trabajadores (busca su RUT en el documento).
+        </div>
+        <div class="upload-zone" id="destacar-zone" onclick="document.getElementById('input-destacar').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDropDestacar(event)">
+          <div class="upload-zone-icon">📄</div>
+          <div class="upload-zone-text"><strong>Click para seleccionar</strong> o arrastra el PDF aquí</div>
+          <div class="upload-zone-text" style="font-size:11px;margin-top:4px">.pdf descargado del portal</div>
+        </div>
+        <input type="file" id="input-destacar" accept=".pdf" style="display:none" onchange="destacarPDF(this.files[0])">
+        <div style="margin-top:12px;font-size:13px;color:#64748b">
+          Trabajadores marcados: <b id="destacar-count">0</b>
+        </div>
+        <div id="destacar-status" style="margin-top:10px"></div>
+      </div>
+    </div>
+
     <!-- Tab: PreviRed -->
     <div class="tab-content" id="tab-previred">
       <div class="card">
@@ -506,10 +532,11 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  document.querySelectorAll('.tab')[['visor','carta','masiva','previred','estado'].indexOf(tab)].classList.add('active');
+  document.querySelectorAll('.tab')[['visor','carta','masiva','destacar','previred','estado'].indexOf(tab)].classList.add('active');
   if (tab === 'estado') renderEstado();
   if (tab === 'previred') renderPreviRedWorkers();
   if (tab === 'masiva') renderMasiva();
+  if (tab === 'destacar') renderDestacar();
   if (tab === 'carta' && currentRut) cargarWorker(currentRut);
 }
 
@@ -624,6 +651,7 @@ function toggleWorker(rut, cb) {
 function refreshDependientes() {
   if (document.getElementById('tab-masiva')?.classList.contains('active')) renderMasivaLista();
   if (document.getElementById('tab-previred')?.classList.contains('active')) renderPreviRedWorkers();
+  if (document.getElementById('tab-destacar')?.classList.contains('active')) renderDestacar();
   if (document.getElementById('filtro-marcados')?.checked) renderSidebar();
 }
 
@@ -1204,6 +1232,54 @@ async function generarPDFMasiva() {
     alert('Error: ' + e.message);
   } finally {
     btn.disabled = false; btn.innerHTML = '📄 Guardar PDF';
+  }
+}
+
+// ── Destacar PDF ──────────────────────────────────────────────────────────────
+function renderDestacar() {
+  const n = trabajadoresMarcados().length;
+  document.getElementById('destacar-count').textContent = n;
+}
+
+function handleDropDestacar(e) {
+  e.preventDefault();
+  document.getElementById('destacar-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) destacarPDF(f);
+}
+
+async function destacarPDF(file) {
+  if (!file) return;
+  const marcados = trabajadoresMarcados();
+  const statusEl = document.getElementById('destacar-status');
+  if (!marcados.length) {
+    statusEl.innerHTML = '<div class="alert alert-error">❌ Marca al menos un trabajador en la lista lateral.</div>';
+    return;
+  }
+  statusEl.innerHTML = '<div class="alert alert-info">⏳ Buscando y resaltando trabajadores en el PDF...</div>';
+  const fd = new FormData();
+  fd.append('pdf', file);
+  fd.append('workers', JSON.stringify(marcados.map(w => ({rut: w.rut_trabajador, nombre: w.nombre}))));
+  try {
+    const res = await fetch('/cartas/api/destacar_pdf', {method:'POST', body:fd});
+    const data = await res.json();
+    if (data.error) { statusEl.innerHTML = `<div class="alert alert-error">❌ ${data.error}</div>`; return; }
+    const s = data.stats || {};
+    let html = `<div class="alert alert-success">✅ Resaltados ${s.encontrados}/${s.total_workers} trabajadores (${s.marcas} marcas).</div>`;
+    if (s.no_encontrados && s.no_encontrados.length) {
+      html += `<div class="alert alert-error" style="margin-top:8px"><b>No encontrados en el PDF (${s.no_encontrados.length}):</b><br>` +
+        s.no_encontrados.map(w => `${w.rut} · ${w.nombre}`).join('<br>') + '</div>';
+    }
+    html += `<a href="/cartas/api/descargar/${data.filename}" class="btn btn-success" style="margin-top:8px">⬇ Descargar PDF destacado</a>`;
+    statusEl.innerHTML = html;
+    // Descarga automática
+    const a = document.createElement('a');
+    a.href = `/cartas/api/descargar/${data.filename}`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  } catch(e) {
+    statusEl.innerHTML = `<div class="alert alert-error">❌ Error: ${e.message}</div>`;
+  } finally {
+    document.getElementById('input-destacar').value = '';
   }
 }
 

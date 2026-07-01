@@ -15,6 +15,18 @@ cartas_bp = Blueprint("cartas", __name__,
     static_folder=_os.path.join(_HERE, "static", "cartas") if _os.path.exists(_os.path.join(_HERE, "static", "cartas")) else None,
     url_prefix="/cartas")
 
+# ── Fuente cursiva para firma manuscrita automática ───────────────────────────
+_FIRMA_FONT = "Helvetica-Oblique"
+try:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    _font_path = _os.path.join(_HERE, "static", "fonts", "GreatVibes-Regular.ttf")
+    if _os.path.exists(_font_path):
+        pdfmetrics.registerFont(TTFont("GreatVibes", _font_path))
+        _FIRMA_FONT = "GreatVibes"
+except Exception:
+    pass
+
 # ── Estado de jobs (en memoria, Railway reinicia limpia) ──────────────────────
 _jobs = {}  # job_id -> {status, log, result, worker_rut}
 
@@ -202,6 +214,37 @@ def agrupar_por_trabajador(datos):
 
     return list(grupos.values())
 
+def _agregar_bloque_firma(story, firma_data, normal_style):
+    """Agrega el bloque de firma completo: nombre en estilo manuscrito
+    (generado automáticamente, sin subir ninguna imagen) apoyado sobre una
+    línea, y debajo los datos impresos (Nombre/Rut/Cargo/Correo/Tel)."""
+    from reportlab.platypus import Paragraph, Spacer, HRFlowable
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+
+    if not firma_data:
+        return
+    nombre_firma = firma_data.get('nombre', '')
+    if nombre_firma:
+        firma_style = ParagraphStyle('FirmaManuscrita', fontName=_FIRMA_FONT,
+            fontSize=26, leading=30, alignment=TA_CENTER, textColor='#1a1a2e')
+        story.append(Paragraph(nombre_firma, firma_style))
+    else:
+        story.append(Spacer(1, 0.5*cm))
+
+    story.append(HRFlowable(width="40%", thickness=0.5, color=colors.black))
+    story.append(Spacer(1, 0.2*cm))
+
+    story.append(Paragraph(f"Nombre: {nombre_firma}", normal_style))
+    story.append(Paragraph(f"Rut: {firma_data.get('rut','')}", normal_style))
+    story.append(Paragraph(f"Cargo: {firma_data.get('cargo','')}", normal_style))
+    if firma_data.get('correo'):
+        story.append(Paragraph(f"Correo: {firma_data.get('correo')}", normal_style))
+    if firma_data.get('tel'):
+        story.append(Paragraph(f"Tel: {firma_data.get('tel')}", normal_style))
+
 # ── Generación de carta PDF ───────────────────────────────────────────────────
 def generar_carta_pdf(carta_data, firma_data):
     """Genera PDF de carta previsional y retorna bytes."""
@@ -286,18 +329,9 @@ def generar_carta_pdf(carta_data, firma_data):
     story.append(Paragraph(f"<b>MOTIVO DE NO PAGO: {motivo_final}</b>", normal))
     story.append(Spacer(1, 0.8*cm))
     story.append(Paragraph("Les saluda atentamente,", normal))
-    story.append(Spacer(1, 1.5*cm))
-    story.append(HRFlowable(width="40%", thickness=0.5, color=colors.black))
-    story.append(Spacer(1, 0.2*cm))
+    story.append(Spacer(1, 1*cm))
 
-    if firma_data:
-        story.append(Paragraph(f"Nombre: {firma_data.get('nombre','')}", normal))
-        story.append(Paragraph(f"Rut: {firma_data.get('rut','')}", normal))
-        story.append(Paragraph(f"Cargo: {firma_data.get('cargo','')}", normal))
-        if firma_data.get('correo'):
-            story.append(Paragraph(f"Correo: {firma_data.get('correo')}", normal))
-        if firma_data.get('tel'):
-            story.append(Paragraph(f"Tel: {firma_data.get('tel')}", normal))
+    _agregar_bloque_firma(story, firma_data, normal)
 
     doc.build(story)
     buf.seek(0)
@@ -389,17 +423,8 @@ def generar_carta_masiva_pdf(data, firma_data):
 
     story.append(Paragraph("Les saluda atentamente,", normal))
     story.append(Spacer(1, 1.3*cm))
-    story.append(HRFlowable(width="40%", thickness=0.5, color=colors.black))
-    story.append(Spacer(1, 0.2*cm))
 
-    if firma_data:
-        story.append(Paragraph(f"Nombre: {firma_data.get('nombre','')}", normal))
-        story.append(Paragraph(f"Rut: {firma_data.get('rut','')}", normal))
-        story.append(Paragraph(f"Cargo: {firma_data.get('cargo','')}", normal))
-        if firma_data.get('correo'):
-            story.append(Paragraph(f"Correo: {firma_data.get('correo')}", normal))
-        if firma_data.get('tel'):
-            story.append(Paragraph(f"Tel: {firma_data.get('tel')}", normal))
+    _agregar_bloque_firma(story, firma_data, normal)
 
     doc.build(story)
     buf.seek(0)

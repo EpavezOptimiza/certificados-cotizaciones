@@ -722,7 +722,7 @@ function filtrarWorkers() { renderSidebar(); }
 function toggleAll(cb) {
   // Marca/desmarca SOLO los trabajadores que pasan los filtros actuales
   getWorkersFiltrados().forEach(w => {
-    if (!seleccionados[w.rut_trabajador]) seleccionados[w.rut_trabajador] = initSel(w);
+    asegurarSel(w);
     seleccionados[w.rut_trabajador].checked = cb.checked;
   });
 
@@ -747,7 +747,7 @@ function toggleAll(cb) {
 }
 
 function toggleWorker(rut, cb) {
-  if (!seleccionados[rut]) seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
+  asegurarSel(trabajadores.find(w=>w.rut_trabajador===rut));
   seleccionados[rut].checked = cb.checked;
 
   if (cb.checked) {
@@ -804,12 +804,25 @@ function initSel(w) {
   };
 }
 
+// Asegura que exista una seleccion para el trabajador, y si ya existia,
+// resincroniza sus periodos_sel con el filtro de motivo activo (evita quedar
+// con una seleccion vieja de antes de aplicar/cambiar el filtro)
+function asegurarSel(w) {
+  const rut = w.rut_trabajador;
+  if (!seleccionados[rut]) {
+    seleccionados[rut] = initSel(w);
+  } else {
+    const fMotivo = document.getElementById('filtro-motivo')?.value || '';
+    if (fMotivo) seleccionados[rut].periodos_sel = [...periodosParaMotivoActivo(w)];
+  }
+  return seleccionados[rut];
+}
+
 // ── Seleccionar trabajador ────────────────────────────────────────────────────
 function selectWorker(rut) {
   currentRut = rut;
-  if (!seleccionados[rut]) {
-    seleccionados[rut] = initSel(trabajadores.find(w=>w.rut_trabajador===rut));
-  }
+  const w = trabajadores.find(t=>t.rut_trabajador===rut);
+  asegurarSel(w);
   seleccionados[rut].checked = true;
   const marcados = trabajadoresMarcados();
   currentNavIndex = marcados.findIndex(w => w.rut_trabajador === rut);

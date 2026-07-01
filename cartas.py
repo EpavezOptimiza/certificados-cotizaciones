@@ -485,7 +485,7 @@ def destacar_pdf(pdf_bytes, workers, resaltar_fila=True):
                         annot = page.add_highlight_annot(fila)
                     else:
                         annot = page.add_highlight_annot(r)
-                    annot.set_colors(stroke=(1, 0.92, 0.23))  # amarillo
+                    annot.set_colors(stroke=(1, 1, 0))  # amarillo puro (marcador)
                     annot.update()
                     encontrados.add(rut)
                     total_marcas += 1

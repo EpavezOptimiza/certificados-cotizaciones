@@ -917,8 +917,11 @@ function renderPeriodos(todos, seleccionadosList) {
   const grid = document.getElementById('periodos-grid');
   grid.innerHTML = todos.map(p => {
     const checked = seleccionadosList.includes(p);
+    // Sin <input> anidado: un checkbox real dentro de un <label> con onclick
+    // hace que el click rebote y dispare togglePeriodo DOS veces (una por el
+    // label, otra por el input), cancelando el toggle. El check visual ya lo
+    // da la clase .checked del CSS.
     return `<label class="periodo-check ${checked?'checked':''}" onclick="togglePeriodo('${p}', this)">
-      <input type="checkbox" ${checked?'checked':''}>
       ${p}
     </label>`;
   }).join('');

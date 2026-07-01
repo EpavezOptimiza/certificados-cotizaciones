@@ -195,10 +195,7 @@ textarea{resize:vertical;min-height:70px}
         <option value="">Todos los motivos</option>
       </select>
     </div>
-    <div class="search-wrap" style="padding-top:0;display:flex;align-items:center;justify-content:space-between">
-      <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:400;color:#64748b">
-        <input type="checkbox" id="filtro-marcados" onchange="filtrarWorkers()"> Solo marcados
-      </label>
+    <div class="search-wrap" style="padding-top:0;display:flex;align-items:center;justify-content:flex-end">
       <span id="filtro-count" style="font-size:11px;color:#94a3b8"></span>
     </div>
     <div class="worker-list" id="worker-list">
@@ -623,14 +620,12 @@ function getWorkersFiltrados() {
   const fPer = document.getElementById('filtro-periodo')?.value || '';
   const fEstatus = document.getElementById('filtro-estatus')?.value || '';
   const fMotivo = document.getElementById('filtro-motivo')?.value || '';
-  const fMarcados = document.getElementById('filtro-marcados')?.checked || false;
   return trabajadores.filter(w =>
     (w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q)) &&
     (!fInst || (w.institucion||'').trim() === fInst) &&
     (!fPer || (w.periodos||[]).includes(fPer)) &&
     (!fEstatus || (w.estatus||'').trim() === fEstatus) &&
-    (!fMotivo || (w.motivo||'').trim() === fMotivo) &&
-    (!fMarcados || seleccionados[w.rut_trabajador]?.checked));
+    (!fMotivo || (w.motivo||'').trim() === fMotivo));
 }
 
 function renderSidebar() {
@@ -698,7 +693,6 @@ function refreshDependientes() {
   if (document.getElementById('tab-masiva')?.classList.contains('active')) renderMasivaLista();
   if (document.getElementById('tab-previred')?.classList.contains('active')) renderPreviRedWorkers();
   if (document.getElementById('tab-destacar')?.classList.contains('active')) renderDestacar();
-  if (document.getElementById('filtro-marcados')?.checked) renderSidebar();
 }
 
 function initSel(w) {

@@ -456,10 +456,24 @@ def destacar_pdf(pdf_bytes, workers, resaltar_fila=True):
     total_marcas = 0
 
     for page in doc:
-        # Palabras de la página (para hallar la extensión real de cada fila,
-        # ya que usar el ancho de página completo falla en documentos con
-        # rotación, dejando el resaltado como una columna en vez de una fila)
+        # get_text/search_for devuelven coordenadas en el espacio SIN ROTAR
+        # de la página (MediaBox), no en el espacio visual. Si la página tiene
+        # rotación (común en reportes PreviRed exportados en landscape), lo
+        # que visualmente es una "fila" queda como una franja vertical en esas
+        # coordenadas crudas. Se transforma todo a espacio visual (rotation_matrix)
+        # para razonar en términos de fila/columna como se ve en pantalla, y se
+        # vuelve a transformar al espacio crudo (derotation_matrix) para dibujar.
+        # Nota: se dibuja el rectángulo directamente sobre el contenido
+        # (page.draw_rect) en vez de usar una anotación de resaltado
+        # (add_highlight_annot), ya que esta última no se renderiza
+        # correctamente en páginas con rotación en algunos visores/render.
+        rot = page.rotation_matrix
+        derot = page.derotation_matrix
         palabras = page.get_text("words")  # (x0,y0,x1,y1,word,block,line,word_no)
+        palabras_vis = [(p[0], p[1], p[2], p[3]) for p in palabras]
+        palabras_vis = [fitz.Rect(p) * rot for p in palabras_vis]
+        shape = page.new_shape()
+        dibujo = False
 
         for w in workers:
             rut = w.get('rut') or w.get('rut_trabajador') or ''
@@ -471,24 +485,29 @@ def destacar_pdf(pdf_bytes, workers, resaltar_fila=True):
                 rects = page.search_for(var)
                 for r in rects:
                     if resaltar_fila:
-                        # Encontrar todas las palabras que comparten la misma línea
-                        # (mismo bloque/línea que la palabra del RUT encontrado)
-                        y_mid = (r.y0 + r.y1) / 2
-                        misma_linea = [p for p in palabras
-                                       if p[1] <= y_mid <= p[3]]
+                        r_vis = r * rot
+                        y_mid = (r_vis.y0 + r_vis.y1) / 2
+                        misma_linea = [p for p in palabras_vis
+                                       if p.y0 - 1 <= y_mid <= p.y1 + 1]
                         if misma_linea:
-                            x0 = min(p[0] for p in misma_linea)
-                            x1 = max(p[2] for p in misma_linea)
-                            fila = fitz.Rect(x0 - 2, r.y0 - 1, x1 + 2, r.y1 + 1)
+                            x0 = min(p.x0 for p in misma_linea)
+                            x1 = max(p.x1 for p in misma_linea)
+                            y0 = min(p.y0 for p in misma_linea)
+                            y1 = max(p.y1 for p in misma_linea)
+                            fila_vis = fitz.Rect(x0 - 2, y0 - 1, x1 + 2, y1 + 1)
+                            fila = fila_vis * derot
                         else:
                             fila = r
-                        annot = page.add_highlight_annot(fila)
                     else:
-                        annot = page.add_highlight_annot(r)
-                    annot.set_colors(stroke=(1, 1, 0))  # amarillo puro (marcador)
-                    annot.update()
+                        fila = r
+                    shape.draw_rect(fila)
+                    shape.finish(color=None, fill=(1, 1, 0), fill_opacity=0.4)
+                    dibujo = True
                     encontrados.add(rut)
                     total_marcas += 1
+
+        if dibujo:
+            shape.commit(overlay=False)  # detrás del texto, como un marcador real
 
     out = doc.tobytes(garbage=3, deflate=True)
     doc.close()

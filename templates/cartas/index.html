@@ -1414,14 +1414,14 @@ function verPreviewMasiva() {
   const esc = s => (s||'').toString()
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  const tablaHtml = `<table style="width:100%;border-collapse:collapse;font-family:'Times New Roman',serif;font-size:13px;margin:8px 0">
-    <thead><tr>
-      <th style="text-align:left;padding:4px 12px 4px 0;border-bottom:1px solid #333">RUT AFILIADO</th>
-      <th style="text-align:left;padding:4px 0;border-bottom:1px solid #333">NOMBRE AFILIADO</th>
+  const tablaHtml = `<table style="width:100%;border-collapse:collapse;font-family:'Times New Roman',serif;font-size:13px;margin:8px 0;border:1px solid #9ca3af">
+    <thead><tr style="background:#e5e7eb">
+      <th style="text-align:left;padding:5px 10px;border:1px solid #9ca3af">RUT AFILIADO</th>
+      <th style="text-align:left;padding:5px 10px;border:1px solid #9ca3af">NOMBRE AFILIADO</th>
     </tr></thead>
     <tbody>${d.trabajadores.map(t => `<tr>
-      <td style="padding:3px 12px 3px 0">${esc(t.rut)}</td>
-      <td style="padding:3px 0">${esc(t.nombre)}</td>
+      <td style="padding:4px 10px;border:1px solid #9ca3af">${esc(t.rut)}</td>
+      <td style="padding:4px 10px;border:1px solid #9ca3af">${esc(t.nombre)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 

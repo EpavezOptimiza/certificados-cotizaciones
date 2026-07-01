@@ -644,11 +644,30 @@ function poblarFiltros() {
   const selEst = document.getElementById('filtro-estatus');
   selEst.innerHTML = '<option value="">Todos los estatus</option>' +
     estatus.map(e => `<option value="${e}">${e}</option>`).join('');
-  // Motivos únicos
-  const motivos = [...new Set(trabajadores.map(w => (w.motivo||'').trim()).filter(Boolean))].sort();
+  // Motivos únicos (cada período puede tener su propio motivo)
+  const motivos = [...new Set(trabajadores.flatMap(w => motivosDeWorker(w)))].sort();
   const selMot = document.getElementById('filtro-motivo');
   selMot.innerHTML = '<option value="">Todos los motivos</option>' +
     motivos.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+// Devuelve todos los motivos presentes en los períodos de un trabajador
+function motivosDeWorker(w) {
+  const pm = w.periodo_motivos || {};
+  const vals = Object.values(pm).map(m => (m||'').trim()).filter(Boolean);
+  if (vals.length) return [...new Set(vals)];
+  return w.motivo ? [w.motivo.trim()] : [];
+}
+
+// Devuelve solo los períodos de un trabajador cuyo motivo coincide con el
+// filtro de motivo activo (o todos los períodos si no hay filtro activo)
+function periodosParaMotivoActivo(w) {
+  const fMotivo = document.getElementById('filtro-motivo')?.value || '';
+  const todos = w.periodos || [];
+  if (!fMotivo) return todos;
+  const pm = w.periodo_motivos || {};
+  const filtrados = todos.filter(p => (pm[p]||'').trim() === fMotivo);
+  return filtrados.length ? filtrados : todos;
 }
 
 // Devuelve la lista de trabajadores que pasan los filtros actuales del sidebar
@@ -663,7 +682,7 @@ function getWorkersFiltrados() {
     (!fInst || (w.institucion||'').trim() === fInst) &&
     (!fPer || (w.periodos||[]).includes(fPer)) &&
     (!fEstatus || (w.estatus||'').trim() === fEstatus) &&
-    (!fMotivo || (w.motivo||'').trim() === fMotivo));
+    (!fMotivo || motivosDeWorker(w).includes(fMotivo)));
 }
 
 function renderSidebar() {
@@ -691,7 +710,7 @@ function renderSidebar() {
              onclick="event.stopPropagation();toggleWorker('${w.rut_trabajador}', this)">
       <div class="worker-info">
         <div class="worker-name">${w.nombre}</div>
-        <div class="worker-sub">${w.rut_trabajador} · ${w.institucion} · ${w.periodos?.length||0} períodos</div>
+        <div class="worker-sub">${w.rut_trabajador} · ${w.institucion} · ${periodosParaMotivoActivo(w).length} períodos</div>
         ${statusBadge}
       </div>
     </div>`;
@@ -774,7 +793,7 @@ function refreshDependientes() {
 function initSel(w) {
   return {
     checked: false,
-    periodos_sel: [...(w.periodos||[])],
+    periodos_sel: [...periodosParaMotivoActivo(w)],
     periodos_extra: '',
     causa: w.causa || 'Otros Movimientos (Ausentismo)',
     salud: w.salud || 'FONASA',

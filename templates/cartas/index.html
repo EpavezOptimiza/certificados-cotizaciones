@@ -1304,13 +1304,14 @@ function renderMasiva() {
   }
 
   // Institución: siempre se recalcula según los trabajadores marcados actualmente
+  const normInst = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   if (marcados.length) {
-    const instsMarcados = [...new Set(marcados.map(w => (w.institucion||'').toLowerCase().trim()).filter(Boolean))];
+    const instsMarcados = [...new Set(marcados.map(w => normInst(w.institucion)).filter(Boolean))];
     if (instsMarcados.length === 1) {
-      const instLow = instsMarcados[0];
-      const match = INST_LIST_MASIVA.find(i => i.toLowerCase() === instLow)
-                 || INST_LIST_MASIVA.find(i => instLow.includes(i.toLowerCase()))
-                 || INST_LIST_MASIVA.find(i => i.toLowerCase().includes(instLow.replace(/\s/g,'')));
+      const instNorm = instsMarcados[0];
+      const match = INST_LIST_MASIVA.find(i => normInst(i) === instNorm)
+                 || INST_LIST_MASIVA.find(i => instNorm.includes(normInst(i)))
+                 || INST_LIST_MASIVA.find(i => normInst(i).includes(instNorm));
       if (match) instEl.value = match;
     }
   }

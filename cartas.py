@@ -332,12 +332,8 @@ def generar_carta_pdf(carta_data, firma_data):
     rut_emp = carta_data.get('rut_empresa', '')
     story.append(Paragraph(
         f"Me dirijo a ustedes en representacion de la empresa {razon}. "
-        f"Rut: {rut_emp}, a fin de informar a ustedes lo siguiente:",
-        normal))
-    story.append(Spacer(1, 0.3*cm))
-
-    story.append(Paragraph(
-        "a fin de solicitar la regularización de deudas previsionales por la siguiente persona:",
+        f"Rut: {rut_emp}, a fin de solicitar la regularización de deudas "
+        f"previsionales por la siguiente persona:",
         normal))
     story.append(Spacer(1, 0.3*cm))
 

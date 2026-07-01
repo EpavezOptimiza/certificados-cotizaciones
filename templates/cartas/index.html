@@ -555,7 +555,17 @@ function switchTab(tab) {
   if (tab === 'previred') renderPreviRedWorkers();
   if (tab === 'masiva') renderMasiva();
   if (tab === 'destacar') renderDestacar();
-  if (tab === 'carta' && currentRut) cargarWorker(currentRut);
+  if (tab === 'carta') {
+    if (!currentRut) {
+      const marcados = trabajadoresMarcados();
+      if (marcados.length) {
+        currentRut = marcados[0].rut_trabajador;
+        currentNavIndex = 0;
+        seleccionados[currentRut].checked = true;
+      }
+    }
+    if (currentRut) renderCartaForm();
+  }
 }
 
 // ── Upload Excel ──────────────────────────────────────────────────────────────

@@ -187,9 +187,12 @@ textarea{resize:vertical;min-height:70px}
         <option value="">Todos los períodos</option>
       </select>
     </div>
-    <div class="search-wrap" style="padding-top:0">
-      <select id="filtro-estatus" onchange="filtrarWorkers()" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none;background:#fff">
+    <div class="search-wrap" style="padding-top:0;display:flex;gap:6px">
+      <select id="filtro-estatus" onchange="filtrarWorkers()" style="flex:1;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none;background:#fff">
         <option value="">Todos los estatus</option>
+      </select>
+      <select id="filtro-motivo" onchange="filtrarWorkers()" style="flex:1;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none;background:#fff">
+        <option value="">Todos los motivos</option>
       </select>
     </div>
     <div class="search-wrap" style="padding-top:0;display:flex;align-items:center;justify-content:space-between">
@@ -596,6 +599,11 @@ function poblarFiltros() {
   const selEst = document.getElementById('filtro-estatus');
   selEst.innerHTML = '<option value="">Todos los estatus</option>' +
     estatus.map(e => `<option value="${e}">${e}</option>`).join('');
+  // Motivos únicos
+  const motivos = [...new Set(trabajadores.map(w => (w.motivo||'').trim()).filter(Boolean))].sort();
+  const selMot = document.getElementById('filtro-motivo');
+  selMot.innerHTML = '<option value="">Todos los motivos</option>' +
+    motivos.map(m => `<option value="${m}">${m}</option>`).join('');
 }
 
 // Devuelve la lista de trabajadores que pasan los filtros actuales del sidebar
@@ -604,12 +612,14 @@ function getWorkersFiltrados() {
   const fInst = document.getElementById('filtro-inst')?.value || '';
   const fPer = document.getElementById('filtro-periodo')?.value || '';
   const fEstatus = document.getElementById('filtro-estatus')?.value || '';
+  const fMotivo = document.getElementById('filtro-motivo')?.value || '';
   const fMarcados = document.getElementById('filtro-marcados')?.checked || false;
   return trabajadores.filter(w =>
     (w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q)) &&
     (!fInst || (w.institucion||'').trim() === fInst) &&
     (!fPer || (w.periodos||[]).includes(fPer)) &&
     (!fEstatus || (w.estatus||'').trim() === fEstatus) &&
+    (!fMotivo || (w.motivo||'').trim() === fMotivo) &&
     (!fMarcados || seleccionados[w.rut_trabajador]?.checked));
 }
 

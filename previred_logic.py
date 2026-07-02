@@ -151,11 +151,15 @@ def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
                     while (el && depth < 15) {
                         var cnt = el.querySelectorAll('[id^="' + patron + '"]').length;
                         if (cnt === 1) {
-                            var texto = el.textContent.toLowerCase().trim().replace(/\\s+/g, ' ');
+                            // El nombre de empresa está en el padre del ancestro único (la fila completa)
+                            var parent = el.parentElement;
+                            var textoRow = parent ? parent.textContent.toLowerCase().trim().replace(/\\s+/g, ' ') : '';
+                            var textoEl  = el.textContent.toLowerCase().trim().replace(/\\s+/g, ' ');
+                            var textoCheck = textoEl + ' ' + textoRow;
                             if (i < 8) {
-                                diagnostico.push(btns[i].id + ' | ' + texto.substring(0, 120));
+                                diagnostico.push(btns[i].id + ' | ' + textoRow.substring(0, 150));
                             }
-                            if (!encontrado && texto.indexOf(sufijo) !== -1) {
+                            if (!encontrado && textoCheck.indexOf(sufijo) !== -1) {
                                 encontrado = btns[i].id;
                             }
                             break;

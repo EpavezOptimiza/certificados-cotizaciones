@@ -106,14 +106,52 @@ def esta_en_login(driver) -> bool:
 
 
 def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
-    btn_id = rut_a_btn_id(rut_empresa, razon_social)
-    log(f"Navegando a empresa {rut_empresa} (btn={btn_id})...", "info")
+    rut_num = rut_empresa.replace(".", "").split("-")[0]
+    patron  = f"empresa#{rut_num}#"
+    log(f"Navegando a empresa {rut_empresa}...", "info")
     wait = WebDriverWait(driver, 20)
-    btn_empresas = wait.until(EC.element_to_be_clickable((By.XPATH, "//li[@id='empresa']")))
-    btn_empresas.click()
+
+    btn_menu = wait.until(EC.element_to_be_clickable((By.XPATH, "//li[@id='empresa']")))
+    btn_menu.click()
     time.sleep(3)
-    btn_ingresar = wait.until(EC.element_to_be_clickable((By.ID, btn_id)))
-    btn_ingresar.click()
+
+    # Buscar todos los botones que coincidan con el RUT
+    btns = driver.find_elements(By.XPATH, f"//*[starts-with(@id,'{patron}')]")
+    ids_encontrados = [b.get_attribute("id") for b in btns]
+    log(f"Botones empresa encontrados: {ids_encontrados}", "info")
+
+    elegido = None
+
+    if len(btns) == 1:
+        elegido = btns[0]
+    elif len(btns) > 1 and razon_social:
+        # Intentar coincidir por texto de razón social en el contenedor del botón
+        razon_lower = razon_social.lower().strip()
+        for btn in btns:
+            for niveles in range(1, 6):
+                try:
+                    anc = btn.find_element(By.XPATH, f"ancestor::*[{niveles}]")
+                    if razon_lower in anc.text.lower():
+                        elegido = btn
+                        break
+                except Exception:
+                    pass
+            if elegido:
+                break
+        if not elegido:
+            log("No se encontró coincidencia exacta por razón social; usando primer botón del RUT", "warn")
+            elegido = btns[0]
+    elif len(btns) > 1:
+        elegido = btns[0]
+
+    if elegido:
+        elegido.click()
+    else:
+        # Fallback absoluto: botón #00#false
+        btn_id = f"{patron}00#false"
+        log(f"Usando botón por defecto: {btn_id}", "warn")
+        wait.until(EC.element_to_be_clickable((By.ID, btn_id))).click()
+
     time.sleep(4)
     log("Empresa seleccionada", "ok")
 

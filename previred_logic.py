@@ -15,11 +15,20 @@ MESES_NOMBRE = {
 }
 
 
-def rut_a_btn_id(rut: str) -> str:
-    """'76.098.152-4' → 'empresa#76098152#00#false'"""
+def rut_a_btn_id(rut: str, razon_social: str = "") -> str:
+    """
+    Construye el ID del botón de empresa en Previred.
+    '76.098.152-4'               → 'empresa#76098152#00#false'
+    '76.098.152-4', 'Emp (I700)' → 'empresa#76098152#700#false'
+    """
     rut = (rut or '').strip()
     num = rut.split("-")[0].replace(".", "")
-    return f"empresa#{num}#00#false"
+    sub_id = "00"
+    if razon_social:
+        m = re.search(r'\(I(\d+)\)', razon_social, re.IGNORECASE)
+        if m:
+            sub_id = m.group(1)
+    return f"empresa#{num}#{sub_id}#false"
 
 
 def _encontrar_chrome():
@@ -96,9 +105,9 @@ def esta_en_login(driver) -> bool:
         return False
 
 
-def ir_a_empresa(driver, rut_empresa: str, log):
-    btn_id = rut_a_btn_id(rut_empresa)
-    log(f"Navegando a empresa {rut_empresa}...", "info")
+def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
+    btn_id = rut_a_btn_id(rut_empresa, razon_social)
+    log(f"Navegando a empresa {rut_empresa} (btn={btn_id})...", "info")
     wait = WebDriverWait(driver, 20)
     btn_empresas = wait.until(EC.element_to_be_clickable((By.XPATH, "//li[@id='empresa']")))
     btn_empresas.click()
@@ -132,11 +141,11 @@ def ir_a_planillas_pagadas(driver, log):
     log("En sección Planillas Pagadas", "ok")
 
 
-def verificar_y_relogin(driver, rut_usuario, contrasena, log):
+def verificar_y_relogin(driver, rut_usuario, contrasena, rut_empresa, razon_social, log):
     if esta_en_login(driver):
         log("Sesión expirada — re-login automático...", "warn")
         hacer_login(driver, rut_usuario, contrasena, log)
-        ir_a_empresa(driver, rut_usuario, log)
+        ir_a_empresa(driver, rut_empresa, log, razon_social)
         ir_a_planillas_pagadas(driver, log)
         return True
     return False
@@ -264,10 +273,13 @@ def volver_a_busqueda(driver, rut_usuario, contrasena, log):
 
 
 def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
-              periodos: list, carpeta_dest: str, carpeta_temp: str, log):
+              periodos: list, carpeta_dest: str, carpeta_temp: str, log,
+              razon_social: str = ""):
     """
     Descarga planillas PDF de Previred para los períodos indicados.
     periodos: lista de (mes:int, anio:int)
+    razon_social: si la empresa tiene variantes (I700, I358...) se usa para
+                  construir el botón correcto en Previred.
     log: callable(msg, tipo) donde tipo ∈ 'info'|'ok'|'warn'|'err'
     """
     os.makedirs(carpeta_dest, exist_ok=True)
@@ -276,7 +288,7 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
     driver = iniciar_driver(carpeta_temp)
     try:
         hacer_login(driver, rut_usuario, contrasena, log)
-        ir_a_empresa(driver, rut_empresa, log)
+        ir_a_empresa(driver, rut_empresa, log, razon_social)
         ir_a_planillas_pagadas(driver, log)
 
         log(f"Períodos a procesar: {len(periodos)}", "info")
@@ -290,7 +302,7 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                 driver.get(URL_LOGIN)
                 time.sleep(2)
                 hacer_login(driver, rut_usuario, contrasena, log)
-                ir_a_empresa(driver, rut_empresa, log)
+                ir_a_empresa(driver, rut_empresa, log, razon_social)
                 ir_a_planillas_pagadas(driver, log)
 
             try:

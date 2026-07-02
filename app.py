@@ -1862,7 +1862,8 @@ def previred_iniciar():
                     carpeta_emp = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
                     os.makedirs(carpeta_emp, exist_ok=True)
                     descargar(rut_usr, cont_usr, rut_empresa, periodos,
-                              carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t))
+                              carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t),
+                              razon_social=razon_social)
                     pdfs_emp = [os.path.join(carpeta_emp, f) for f in os.listdir(carpeta_emp) if f.endswith(".pdf")]
                     todas_rutas_pdf.extend(pdfs_emp)
                 if todas_rutas_pdf:

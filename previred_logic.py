@@ -136,29 +136,44 @@ def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
         m_suf = re.search(r'\(([^)]+)\)', razon_social or "")
         if m_suf:
             sufijo = m_suf.group(1).lower().strip()
-            log(f"Buscando empresa con sufijo '{sufijo}' (nivel fila)...", "info")
-            # Buscar en máximo 3 niveles de ancestro (fila de tabla)
-            btn_id_elegido = driver.execute_script("""
+            log(f"Buscando empresa con sufijo '{sufijo}'...", "info")
+            # Buscar el ancestro ÚNICO de cada botón (primer ancestro que contenga
+            # solo 1 botón del RUT). Ese es el "row" exclusivo de esa empresa.
+            resultado = driver.execute_script("""
                 var patron = arguments[0];
                 var sufijo = arguments[1];
-                var btns   = document.querySelectorAll('[id^="' + patron + '"]');
+                var btns = document.querySelectorAll('[id^="' + patron + '"]');
+                var diagnostico = [];
+                var encontrado = null;
                 for (var i = 0; i < btns.length; i++) {
-                    var el = btns[i];
-                    for (var j = 0; j < 3; j++) {
-                        if (!el.parentElement) break;
-                        el = el.parentElement;
-                        if (el.textContent.toLowerCase().indexOf(sufijo) !== -1) {
-                            return btns[i].id;
+                    var el = btns[i].parentElement;
+                    var depth = 0;
+                    while (el && depth < 15) {
+                        var cnt = el.querySelectorAll('[id^="' + patron + '"]').length;
+                        if (cnt === 1) {
+                            var texto = el.textContent.toLowerCase().trim().replace(/\\s+/g, ' ');
+                            if (i < 8) {
+                                diagnostico.push(btns[i].id + ' | ' + texto.substring(0, 120));
+                            }
+                            if (!encontrado && texto.indexOf(sufijo) !== -1) {
+                                encontrado = btns[i].id;
+                            }
+                            break;
                         }
+                        el = el.parentElement;
+                        depth++;
                     }
                 }
-                return null;
+                return {encontrado: encontrado, diagnostico: diagnostico};
             """, patron, sufijo)
+            for linea in (resultado.get("diagnostico") or []):
+                log(f"  ROW: {linea}", "info")
+            btn_id_elegido = resultado.get("encontrado")
             if btn_id_elegido:
                 log(f"Empresa identificada por sufijo '{sufijo}': {btn_id_elegido}", "info")
             else:
                 btn_id_elegido = ids_encontrados[0]
-                log(f"Sufijo '{sufijo}' no encontrado en la página, usando primer botón", "warn")
+                log(f"Sufijo '{sufijo}' no encontrado, usando primer botón", "warn")
         else:
             # Sin sufijo → empresa principal (#00#)
             btn_id_elegido = f"{patron}00#false"

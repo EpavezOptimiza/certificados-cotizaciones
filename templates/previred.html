@@ -106,6 +106,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .cred-status{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:16px}
 .cred-ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
 .cred-err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.mode-tabs{display:flex;gap:6px;margin-bottom:12px}
+.mode-tab{flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#64748b;font-family:inherit;transition:all .12s}
+.mode-tab.active{background:#1D9E75;color:#fff;border-color:#1D9E75}
+.input-err{color:#dc2626;font-size:11px;margin-top:3px;display:none}
+.input-ok{border-color:#1D9E75!important}
 </style>
 </head>
 <body>
@@ -160,13 +165,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <!-- Empresa -->
       <div class="card">
         <div class="card-title"><span>🏢</span> Empresa</div>
-        <div class="field">
-          <label>Buscar empresa</label>
-          <input id="emp-buscar" placeholder="Nombre, RUT o grupo..." oninput="filtrarEmpresas()">
+        <div class="mode-tabs">
+          <button class="mode-tab active" id="tab-base"   onclick="setModo('base')">📋 Base</button>
+          <button class="mode-tab"        id="tab-manual" onclick="setModo('manual')">✏️ Manual</button>
         </div>
-        <div class="empresa-list" id="emp-list">
-          <div style="color:#94a3b8;font-size:13px;padding:8px">Cargando...</div>
+
+        <!-- Modo Base -->
+        <div id="modo-base">
+          <div class="field">
+            <label>Buscar empresa</label>
+            <input id="emp-buscar" placeholder="Nombre, RUT o grupo..." oninput="filtrarEmpresas()">
+          </div>
+          <div class="empresa-list" id="emp-list">
+            <div style="color:#94a3b8;font-size:13px;padding:8px">Cargando...</div>
+          </div>
         </div>
+
+        <!-- Modo Manual -->
+        <div id="modo-manual" style="display:none">
+          <div class="field">
+            <label>RUT empresa (con puntos y guión)</label>
+            <input id="man-rut" placeholder="99.577.060-1" oninput="validarManual()">
+            <div class="input-err" id="man-rut-err">RUT inválido — revisa el formato y dígito verificador</div>
+          </div>
+          <div class="field">
+            <label>Razón social</label>
+            <input id="man-razon" placeholder="CHILE BPO SOLUTIONS S.A" oninput="validarManual()">
+            <div class="input-err" id="man-razon-err">Ingresa la razón social</div>
+          </div>
+        </div>
+
         <div id="emp-seleccionada" style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:7px;font-size:12px;color:#166534;display:none">
           ✓ <strong id="emp-sel-nombre">—</strong>
           <span id="emp-sel-rut" style="font-family:monospace;opacity:.7;margin-left:4px"></span>
@@ -284,10 +312,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="toast"></div>
 
 <script>
-let _panelOpen = true;
-let _empresas  = [], _empSel = null;
-let _anio      = '2026';
-let _taskId    = null, _polling = null, _logSince = 0;
+let _panelOpen  = true;
+let _empresas   = [], _empSel = null;
+let _anio       = '2026';
+let _taskId     = null, _polling = null, _logSince = 0;
+let _modoManual = false, _manRutOk = false;
+
+// ── Modo empresa ──────────────────────────────────────────
+function setModo(modo){
+  _modoManual = (modo === 'manual');
+  document.getElementById('tab-base').classList.toggle('active', !_modoManual);
+  document.getElementById('tab-manual').classList.toggle('active',  _modoManual);
+  document.getElementById('modo-base').style.display   = _modoManual ? 'none' : '';
+  document.getElementById('modo-manual').style.display = _modoManual ? ''     : 'none';
+  document.getElementById('emp-seleccionada').style.display = 'none';
+  _empSel = null; _manRutOk = false;
+}
+
+function _dvRut(num){
+  let s=0, m=2;
+  const n=String(num);
+  for(let i=n.length-1;i>=0;i--){ s+=parseInt(n[i])*m; m=m===7?2:m+1; }
+  const r=11-(s%11);
+  return r===11?'0':r===10?'K':String(r);
+}
+
+function _parsearRut(raw){
+  const s=raw.replace(/\./g,'').replace(/\s/g,'').toUpperCase();
+  const m=s.match(/^(\d+)-?([0-9K])$/);
+  return m?{num:m[1],dv:m[2]}:null;
+}
+
+function validarManual(){
+  const rutRaw = document.getElementById('man-rut').value.trim();
+  const razon  = document.getElementById('man-razon').value.trim();
+  const rutInp = document.getElementById('man-rut');
+  const rutErr = document.getElementById('man-rut-err');
+  const razErr = document.getElementById('man-razon-err');
+  const parsed = _parsearRut(rutRaw);
+  _manRutOk    = !!(parsed && _dvRut(parsed.num)===parsed.dv);
+  rutInp.classList.toggle('input-ok', _manRutOk);
+  rutErr.style.display = (rutRaw && !_manRutOk) ? 'block' : 'none';
+  razErr.style.display = (razon==='' && document.activeElement!==document.getElementById('man-razon')) ? 'none' : 'none';
+}
 
 function togglePanel(){
   _panelOpen = !_panelOpen;
@@ -365,9 +432,19 @@ function updateTags(){
 
 // ── Acciones ──────────────────────────────────────────────
 async function accion(tipo){
-  if(tipo !== 'convertir' && !_empSel){
-    toast('Selecciona una empresa primero');
-    return;
+  if(tipo !== 'convertir'){
+    if(_modoManual){
+      const rutRaw = document.getElementById('man-rut').value.trim();
+      const razon  = document.getElementById('man-razon').value.trim();
+      if(!_manRutOk || !rutRaw){ toast('RUT inválido — revisa el formato'); return; }
+      if(!razon){ toast('Ingresa la razón social'); return; }
+      const parsed = _parsearRut(rutRaw);
+      const rutLimpio = parsed.num + '-' + parsed.dv;
+      _empSel = {rut: rutLimpio, razon, grupo: razon};
+    } else if(!_empSel){
+      toast('Selecciona una empresa primero');
+      return;
+    }
   }
   const meses = [...document.querySelectorAll('.mes-btn.sel')].map(m=>parseInt(m.dataset.mes));
   if(tipo !== 'convertir' && !meses.length){

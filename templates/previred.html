@@ -57,6 +57,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .anio-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .anio-btn{padding:5px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;color:#374151;transition:all .12s}
 .anio-btn.sel{background:#1D9E75;color:#fff;border-color:#1D9E75}
+.anio-btn.sel-parcial{background:#d1fae5;color:#065f46;border-color:#1D9E75}
+.anio-btn.activo{outline:2px solid #1D9E75;outline-offset:1px}
 .meses-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px}
 .mes-btn{padding:7px 4px;border:1px solid #e2e8f0;border-radius:7px;font-size:11px;text-align:center;cursor:pointer;background:#fff;color:#374151;transition:all .12s}
 .mes-btn:hover{background:#f8fafc}
@@ -236,7 +238,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <div class="anio-btn" onclick="selAnio(this)">2023</div>
             <div class="anio-btn" onclick="selAnio(this)">2024</div>
             <div class="anio-btn" onclick="selAnio(this)">2025</div>
-            <div class="anio-btn sel" onclick="selAnio(this)">2026</div>
+            <div class="anio-btn activo" onclick="selAnio(this)">2026</div>
           </div>
         </div>
         <div class="field">
@@ -467,13 +469,41 @@ let   _periodos    = new Map(); // clave "YYYY-MM" → {mes, anio}
 
 function _pKey(mes, anio){ return `${anio}-${String(mes).padStart(2,'0')}`; }
 
+function _actualizarBotonAnio(btn){
+  const a    = btn.textContent.trim();
+  const cont = Array.from({length:12},(_,i)=>_pKey(i+1,a)).filter(k=>_periodos.has(k)).length;
+  btn.classList.remove('sel','sel-parcial');
+  if(cont===12)     btn.classList.add('sel');
+  else if(cont>0)   btn.classList.add('sel-parcial');
+}
+
+// Click en año: 1er click → selecciona todos los meses del año
+//               2do click (todos ya sel) → deselecciona todos
+//               Siempre activa ese año como vista de meses
 function selAnio(el){
-  document.querySelectorAll('.anio-btn').forEach(b=>b.classList.remove('sel'));
-  el.classList.add('sel');
+  // Marcar año activo
+  document.querySelectorAll('.anio-btn').forEach(b=>b.classList.remove('activo'));
+  el.classList.add('activo');
   _anio = el.textContent.trim();
-  // Actualizar estado visual de meses para el nuevo año
+
+  // Toggle: si todos los 12 meses están → quitar todos; si no → agregar todos
+  const keys   = Array.from({length:12},(_,i)=>_pKey(i+1,_anio));
+  const todSel = keys.every(k=>_periodos.has(k));
+  const ai     = parseInt(_anio);
+  if(todSel){
+    keys.forEach(k=>_periodos.delete(k));
+  } else {
+    for(let m=1;m<=12;m++){
+      const k=_pKey(m,_anio);
+      if(!_periodos.has(k)) _periodos.set(k,{mes:m,anio:ai});
+    }
+  }
+
+  _actualizarBotonAnio(el);
+
+  // Sincronizar meses
   document.querySelectorAll('.mes-btn').forEach(b=>{
-    b.classList.toggle('sel', _periodos.has(_pKey(parseInt(b.dataset.mes), _anio)));
+    b.classList.toggle('sel',_periodos.has(_pKey(parseInt(b.dataset.mes),_anio)));
   });
   updateTags();
 }
@@ -485,9 +515,12 @@ function toggleMes(el){
     _periodos.delete(key);
     el.classList.remove('sel');
   } else {
-    _periodos.set(key, {mes, anio: parseInt(_anio)});
+    _periodos.set(key,{mes,anio:parseInt(_anio)});
     el.classList.add('sel');
   }
+  // Actualizar indicador del año activo
+  const btnAnio = [...document.querySelectorAll('.anio-btn')].find(b=>b.textContent.trim()===_anio);
+  if(btnAnio) _actualizarBotonAnio(btnAnio);
   updateTags();
 }
 
@@ -497,13 +530,14 @@ function updateTags(){
     wrap.innerHTML='<span style="font-size:11px;color:#94a3b8">Sin períodos seleccionados</span>';
     return;
   }
-  const sorted = [..._periodos.values()].sort((a,b)=>a.anio-b.anio||a.mes-b.mes);
-  wrap.innerHTML = sorted.map(p=>`<span class="tag">${_MESES_CORTO[p.mes]} ${p.anio}</span>`).join('');
+  const sorted=[..._periodos.values()].sort((a,b)=>a.anio-b.anio||a.mes-b.mes);
+  wrap.innerHTML=sorted.map(p=>`<span class="tag">${_MESES_CORTO[p.mes]} ${p.anio}</span>`).join('');
 }
 
 function limpiarPeriodos(){
   _periodos.clear();
   document.querySelectorAll('.mes-btn').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('.anio-btn').forEach(b=>b.classList.remove('sel','sel-parcial'));
   updateTags();
 }
 

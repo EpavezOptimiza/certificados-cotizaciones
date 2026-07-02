@@ -291,11 +291,14 @@ def buscar_planilla(driver, mes: int, anio: int, nombre_nomina: str) -> bool:
 def descargar_planilla(driver, mes: int, anio: int, nombre_nomina: str,
                        carpeta_temp: str, carpeta_dest: str, log) -> bool:
     wait = WebDriverWait(driver, 20)
+    log("  [D1] buscando btn planillas_masivas...", "info")
     btn_masivas = wait.until(EC.element_to_be_clickable(
         (By.XPATH, "//button[starts-with(@id,'planillas_masivas')]")
     ))
+    log("  [D2] click planillas_masivas...", "info")
     btn_masivas.click()
     time.sleep(2)
+    log("  [D3] buscando radio...", "info")
     try:
         radio = wait.until(EC.presence_of_element_located(
             (By.XPATH, "//input[@type='radio' and contains(@value,'total')] | //input[@type='radio'][1]")
@@ -305,9 +308,12 @@ def descargar_planilla(driver, mes: int, anio: int, nombre_nomina: str,
         time.sleep(1)
     except Exception:
         pass
+    log("  [D4] buscando aceptar_modal...", "info")
     btn_imp = wait.until(EC.element_to_be_clickable((By.ID, "aceptar_modal")))
+    log("  [D5] click aceptar_modal...", "info")
     btn_imp.click()
     time.sleep(8)
+    log("  [D6] verificando ventanas...", "info")
     if len(driver.window_handles) > 1:
         driver.switch_to.window(driver.window_handles[-1])
         driver.close()
@@ -405,7 +411,7 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                                        carpeta_temp, carpeta_dest, log)
                     volver_a_busqueda(driver, rut_usuario, contrasena, log)
                 except Exception as e:
-                    log(f"Error '{nombre_nomina}': {e}", "err")
+                    log(f"Error '{nombre_nomina}' ({type(e).__name__}): {str(e)[:200]}", "err")
                     try:
                         volver_a_busqueda(driver, rut_usuario, contrasena, log)
                     except Exception:

@@ -257,7 +257,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           </div>
         </div>
         <div class="field">
-          <label>Seleccionados</label>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label style="margin-bottom:0">Seleccionados</label>
+            <button onclick="limpiarPeriodos()" style="font-size:10px;padding:2px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#fff;color:#94a3b8;cursor:pointer;font-family:inherit">Limpiar</button>
+          </div>
           <div class="tags-wrap" id="tags-wrap">
             <span style="font-size:11px;color:#94a3b8">Sin períodos seleccionados</span>
           </div>
@@ -459,26 +462,49 @@ function selEmp(el, rut, razon, grupo){
 }
 
 // ── Períodos ──────────────────────────────────────────────
+const _MESES_CORTO = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+let   _periodos    = new Map(); // clave "YYYY-MM" → {mes, anio}
+
+function _pKey(mes, anio){ return `${anio}-${String(mes).padStart(2,'0')}`; }
+
 function selAnio(el){
   document.querySelectorAll('.anio-btn').forEach(b=>b.classList.remove('sel'));
   el.classList.add('sel');
   _anio = el.textContent.trim();
+  // Actualizar estado visual de meses para el nuevo año
+  document.querySelectorAll('.mes-btn').forEach(b=>{
+    b.classList.toggle('sel', _periodos.has(_pKey(parseInt(b.dataset.mes), _anio)));
+  });
   updateTags();
 }
 
 function toggleMes(el){
-  el.classList.toggle('sel');
+  const mes = parseInt(el.dataset.mes);
+  const key = _pKey(mes, _anio);
+  if(_periodos.has(key)){
+    _periodos.delete(key);
+    el.classList.remove('sel');
+  } else {
+    _periodos.set(key, {mes, anio: parseInt(_anio)});
+    el.classList.add('sel');
+  }
   updateTags();
 }
 
 function updateTags(){
-  const meses = [...document.querySelectorAll('.mes-btn.sel')];
-  const wrap  = document.getElementById('tags-wrap');
-  if(!meses.length){
+  const wrap = document.getElementById('tags-wrap');
+  if(!_periodos.size){
     wrap.innerHTML='<span style="font-size:11px;color:#94a3b8">Sin períodos seleccionados</span>';
     return;
   }
-  wrap.innerHTML = meses.map(m=>`<span class="tag">${m.textContent} ${_anio}</span>`).join('');
+  const sorted = [..._periodos.values()].sort((a,b)=>a.anio-b.anio||a.mes-b.mes);
+  wrap.innerHTML = sorted.map(p=>`<span class="tag">${_MESES_CORTO[p.mes]} ${p.anio}</span>`).join('');
+}
+
+function limpiarPeriodos(){
+  _periodos.clear();
+  document.querySelectorAll('.mes-btn').forEach(b=>b.classList.remove('sel'));
+  updateTags();
 }
 
 // ── Acciones ──────────────────────────────────────────────
@@ -489,13 +515,11 @@ async function accion(tipo){
       return;
     }
   }
-  const meses = [...document.querySelectorAll('.mes-btn.sel')].map(m=>parseInt(m.dataset.mes));
-  if(tipo !== 'convertir' && !meses.length){
+  const periodos = [..._periodos.values()].sort((a,b)=>a.anio-b.anio||a.mes-b.mes);
+  if(tipo !== 'convertir' && !periodos.length){
     toast('Selecciona al menos un período');
     return;
   }
-
-  const periodos = meses.map(mes => ({mes, anio: parseInt(_anio)}));
 
   setBotones(false);
   limpiarLog();

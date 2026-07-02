@@ -252,15 +252,21 @@ def buscar_planilla(driver, mes: int, anio: int, nombre_nomina: str) -> bool:
     else:
         return False
     time.sleep(1)
-    select_tipo = Select(wait.until(EC.presence_of_element_located((By.ID, "combo_tipo_institucion"))))
-    for opt in select_tipo.options:
-        if "AFP" in opt.text.upper():
-            select_tipo.select_by_visible_text(opt.text)
-            break
-    time.sleep(3)
-    wait.until(lambda d: len(Select(d.find_element(By.ID, "combo_instituciones")).options) > 1)
-    Select(driver.find_element(By.ID, "combo_instituciones")).select_by_visible_text("Todas las Instituciones")
-    time.sleep(1)
+    try:
+        select_tipo = Select(wait.until(EC.presence_of_element_located((By.ID, "combo_tipo_institucion"))))
+        afp_opt = next((o for o in select_tipo.options if "AFP" in o.text.upper()), None)
+        if afp_opt:
+            select_tipo.select_by_visible_text(afp_opt.text)
+        time.sleep(3)
+        wait_inst = WebDriverWait(driver, 8)
+        wait_inst.until(lambda d: len(Select(d.find_element(By.ID, "combo_instituciones")).options) >= 1)
+        sel_inst = Select(driver.find_element(By.ID, "combo_instituciones"))
+        textos_inst = [o.text for o in sel_inst.options]
+        if "Todas las Instituciones" in textos_inst:
+            sel_inst.select_by_visible_text("Todas las Instituciones")
+        time.sleep(1)
+    except Exception:
+        time.sleep(1)
     try:
         driver.execute_script("""
             document.querySelectorAll('.ui-dialog').forEach(function(d){

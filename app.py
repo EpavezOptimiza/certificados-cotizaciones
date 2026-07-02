@@ -1699,6 +1699,25 @@ _EXCELS_DIR    = os.path.join(_DATA_ROOT, "excels")
 for _d in [_PLANILLAS_DIR, _TEMP_DIR, _EXCELS_DIR]:
     os.makedirs(_d, exist_ok=True)
 
+def _limpiar_archivos_antiguos(max_horas: int = 4):
+    """Elimina archivos y carpetas de descargas más antiguos que max_horas."""
+    limite = _time.time() - max_horas * 3600
+    for directorio in [_PLANILLAS_DIR, _TEMP_DIR, _EXCELS_DIR]:
+        if not os.path.isdir(directorio):
+            continue
+        for nombre in os.listdir(directorio):
+            ruta = os.path.join(directorio, nombre)
+            try:
+                if os.path.getmtime(ruta) < limite:
+                    if os.path.isdir(ruta):
+                        shutil.rmtree(ruta, ignore_errors=True)
+                    else:
+                        os.remove(ruta)
+            except Exception:
+                pass
+
+_limpiar_archivos_antiguos()
+
 _tareas: dict = {}
 
 # ── Configuración Previred (guardada en SQLite) ───────────────
@@ -1923,6 +1942,16 @@ def previred_iniciar():
             _log(tid, tb[:400], "err")
             _tareas[tid]["error"] = True
             _tareas[tid]["done"]  = True
+        finally:
+            if tipo in ("descargar", "ambos"):
+                for emp in empresas:
+                    rut_e = (emp.get("rut") or "").replace(".", "").replace("-", "")
+                    shutil.rmtree(os.path.join(_PLANILLAS_DIR, rut_e), ignore_errors=True)
+                for fn in os.listdir(_TEMP_DIR):
+                    try:
+                        os.remove(os.path.join(_TEMP_DIR, fn))
+                    except Exception:
+                        pass
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"task_id": tid})

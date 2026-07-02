@@ -130,32 +130,39 @@ def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
         log("Sin botones para el RUT, usando #00# por defecto", "warn")
     elif len(ids_encontrados) == 1:
         btn_id_elegido = ids_encontrados[0]
-    elif razon_social:
-        # Buscar con JS en una sola llamada: recorre ancestors buscando texto de razón social
-        razon_lower = razon_social.lower().strip()[:60]
-        btn_id_elegido = driver.execute_script("""
-            var patron = arguments[0];
-            var razon  = arguments[1];
-            var btns   = document.querySelectorAll('[id^="' + patron + '"]');
-            for (var i = 0; i < btns.length; i++) {
-                var el = btns[i];
-                for (var j = 0; j < 6; j++) {
-                    el = el.parentElement;
-                    if (!el) break;
-                    if (el.textContent.toLowerCase().indexOf(razon) !== -1) {
-                        return btns[i].id;
+    else:
+        # Extraer el sufijo distintivo entre paréntesis: "Empresa (I700)" → "I700"
+        # Si no hay paréntesis, usar el botón #00# (empresa principal)
+        m_suf = re.search(r'\(([^)]+)\)', razon_social or "")
+        if m_suf:
+            sufijo = m_suf.group(1).lower().strip()
+            log(f"Buscando empresa con sufijo '{sufijo}' (nivel fila)...", "info")
+            # Buscar en máximo 3 niveles de ancestro (fila de tabla)
+            btn_id_elegido = driver.execute_script("""
+                var patron = arguments[0];
+                var sufijo = arguments[1];
+                var btns   = document.querySelectorAll('[id^="' + patron + '"]');
+                for (var i = 0; i < btns.length; i++) {
+                    var el = btns[i];
+                    for (var j = 0; j < 3; j++) {
+                        if (!el.parentElement) break;
+                        el = el.parentElement;
+                        if (el.textContent.toLowerCase().indexOf(sufijo) !== -1) {
+                            return btns[i].id;
+                        }
                     }
                 }
-            }
-            return null;
-        """, patron, razon_lower)
-        if btn_id_elegido:
-            log(f"Empresa identificada por razón social: {btn_id_elegido}", "info")
+                return null;
+            """, patron, sufijo)
+            if btn_id_elegido:
+                log(f"Empresa identificada por sufijo '{sufijo}': {btn_id_elegido}", "info")
+            else:
+                btn_id_elegido = ids_encontrados[0]
+                log(f"Sufijo '{sufijo}' no encontrado en la página, usando primer botón", "warn")
         else:
-            btn_id_elegido = ids_encontrados[0]
-            log(f"Sin coincidencia de razón social, usando primer botón: {btn_id_elegido}", "warn")
-    else:
-        btn_id_elegido = ids_encontrados[0]
+            # Sin sufijo → empresa principal (#00#)
+            btn_id_elegido = f"{patron}00#false"
+            log(f"Sin sufijo en razón social, usando empresa principal: {btn_id_elegido}", "info")
 
     wait.until(EC.element_to_be_clickable((By.ID, btn_id_elegido))).click()
     time.sleep(4)

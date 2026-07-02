@@ -1738,20 +1738,23 @@ def _set_previred_config(clave: str, valor: str):
 def previred_config_get():
     cfg = _get_previred_config()
     return jsonify({
-        "rut":  cfg.get("rut", ""),
-        "pass_guardado": bool(cfg.get("pass", "")),  # nunca devolver la clave
+        "rut":          cfg.get("rut", ""),
+        "pass_guardado": bool(cfg.get("pass", "")),
+        "output_path":  cfg.get("output_path", ""),
     })
 
 @app.route("/api/previred/config", methods=["POST"])
 @api_login_required
 def previred_config_set():
     d = request.json or {}
-    rut  = d.get("rut", "").strip()
-    pwd  = d.get("pwd", "").strip()
+    rut         = d.get("rut", "").strip()
+    pwd         = d.get("pwd", "").strip()
+    output_path = d.get("output_path", "").strip()
     if rut:
         _set_previred_config("rut", rut)
     if pwd:
         _set_previred_config("pass", pwd)
+    _set_previred_config("output_path", output_path)
     return jsonify({"ok": True})
 
 def _nueva_tarea() -> str:
@@ -1833,8 +1836,16 @@ def previred_iniciar():
 
     def run():
         import traceback
+        _oi = {"usar": False, "base": _PLANILLAS_DIR, "path": ""}
         try:
             _log(tid, f"Tarea iniciada — tipo: {tipo}", "info")
+            _cfg_all = _get_previred_config()
+            _op = (_cfg_all.get("output_path") or "").strip()
+            _oi["usar"] = bool(_op and os.path.isdir(_op))
+            _oi["base"] = _op if _oi["usar"] else _PLANILLAS_DIR
+            _oi["path"] = _op
+            if _oi["usar"]:
+                _log(tid, f"Carpeta de destino: {_op}", "ok")
 
             if tipo in ("descargar", "ambos"):
                 if not empresas:
@@ -1847,9 +1858,8 @@ def previred_iniciar():
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
                     return
-                cfg      = _get_previred_config()
-                rut_usr  = os.environ.get("PREVIRED_RUT", "") or cfg.get("rut", "")
-                cont_usr = os.environ.get("PREVIRED_PASS", "") or cfg.get("pass", "")
+                rut_usr  = os.environ.get("PREVIRED_RUT", "") or _cfg_all.get("rut", "")
+                cont_usr = os.environ.get("PREVIRED_PASS", "") or _cfg_all.get("pass", "")
                 if not rut_usr or not cont_usr:
                     _log(tid, "Credenciales Previred no configuradas", "err")
                     _log(tid, "Abre Configuración (⚙) en la página de Previred e ingresa tu RUT y contraseña", "warn")
@@ -1878,7 +1888,7 @@ def previred_iniciar():
                     if not rut_empresa:
                         continue
                     _log(tid, f"── Empresa: {rut_empresa} {('— ' + razon_social) if razon_social else ''}", "info")
-                    carpeta_emp = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
+                    carpeta_emp = os.path.join(_oi["base"], rut_empresa.replace(".", "").replace("-", ""))
                     os.makedirs(carpeta_emp, exist_ok=True)
                     descargar(rut_usr, cont_usr, rut_empresa, periodos,
                               carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t),
@@ -1895,7 +1905,10 @@ def previred_iniciar():
                         for rp in todas_rutas_pdf:
                             zf.write(rp, os.path.basename(rp))
                     _tareas[tid]["zip"] = ruta_zip
-                    _log(tid, f"ZIP listo con {len(todas_rutas_pdf)} PDF(s) — puedes descargarlo ahora", "ok")
+                    _log(tid, f"ZIP listo con {len(todas_rutas_pdf)} PDF(s)", "ok")
+                    if _oi["usar"]:
+                        shutil.copy2(ruta_zip, os.path.join(_oi["path"], nombre_zip))
+                        _log(tid, f"ZIP guardado en: {_oi['path']}", "ok")
 
             if tipo in ("convertir", "ambos"):
                 from pdf_excel_logic import generar_excel_bytes
@@ -1905,12 +1918,12 @@ def previred_iniciar():
                     rutas = []
                     for emp in empresas:
                         rut_e = (emp.get("rut") or "").replace(".", "").replace("-", "")
-                        carpeta_src = os.path.join(_PLANILLAS_DIR, rut_e)
+                        carpeta_src = os.path.join(_oi["base"], rut_e)
                         if os.path.isdir(carpeta_src):
                             rutas += sorted([os.path.join(carpeta_src, f)
                                              for f in os.listdir(carpeta_src) if f.endswith(".pdf")])
                 else:
-                    carpeta_src = _PLANILLAS_DIR
+                    carpeta_src = _oi["base"]
                     if not os.path.isdir(carpeta_src):
                         _log(tid, f"Carpeta no existe: {carpeta_src}", "err")
                         _tareas[tid]["error"] = True
@@ -1933,6 +1946,9 @@ def previred_iniciar():
                     f.write(xls_bytes)
                 _tareas[tid]["archivo"] = ruta_excel
                 _log(tid, f"Excel listo: {nombre_archivo}", "ok")
+                if _oi["usar"]:
+                    shutil.copy2(ruta_excel, os.path.join(_oi["base"], nombre_archivo))
+                    _log(tid, f"Excel guardado en: {_oi['base']}", "ok")
 
             _tareas[tid]["done"] = True
             _log(tid, "Proceso finalizado", "ok")
@@ -1943,7 +1959,7 @@ def previred_iniciar():
             _tareas[tid]["error"] = True
             _tareas[tid]["done"]  = True
         finally:
-            if tipo in ("descargar", "ambos"):
+            if tipo in ("descargar", "ambos") and not _oi["usar"]:
                 for emp in empresas:
                     rut_e = (emp.get("rut") or "").replace(".", "").replace("-", "")
                     shutil.rmtree(os.path.join(_PLANILLAS_DIR, rut_e), ignore_errors=True)

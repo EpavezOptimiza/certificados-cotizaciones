@@ -202,8 +202,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
 
         <div id="emp-seleccionada" style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:7px;font-size:12px;color:#166534;display:none">
-          ✓ <strong id="emp-sel-nombre">—</strong>
-          <span id="emp-sel-rut" style="font-family:monospace;opacity:.7;margin-left:4px"></span>
+          ✓ <strong id="emp-sel-count">0 empresas seleccionadas</strong>
         </div>
       </div>
 
@@ -322,7 +321,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 let _panelOpen  = true;
-let _empresas   = [], _empSel = null;
+let _empresas   = [], _empsSel = []; // multi-select
 let _anio       = '2026';
 let _taskId     = null, _polling = null, _logSince = 0;
 let _modoManual = false, _manRutOk = false, _manLista = [];
@@ -335,7 +334,7 @@ function setModo(modo){
   document.getElementById('modo-base').style.display   = _modoManual ? 'none' : '';
   document.getElementById('modo-manual').style.display = _modoManual ? ''     : 'none';
   document.getElementById('emp-seleccionada').style.display = 'none';
-  _empSel = null; _manRutOk = false;
+  _empsSel = []; _manRutOk = false;
 }
 
 function _dvRut(num){
@@ -394,22 +393,24 @@ function renderManLista(){
 }
 
 function selManual(el, rut, razon){
-  document.querySelectorAll('#man-list .emp-row').forEach(r=>r.classList.remove('selected'));
-  el.classList.add('selected');
-  _empSel = {rut, razon, grupo: razon};
-  document.getElementById('emp-seleccionada').style.display = 'block';
-  document.getElementById('emp-sel-nombre').textContent = razon;
-  document.getElementById('emp-sel-rut').textContent    = rut;
+  const idx = _empsSel.findIndex(e=>e.rut===rut && e.razon===razon);
+  if(idx >= 0){
+    _empsSel.splice(idx,1);
+    el.classList.remove('selected');
+  } else {
+    _empsSel.push({rut, razon, grupo: razon});
+    el.classList.add('selected');
+  }
+  _actualizarContador();
 }
 
 function eliminarManual(idx){
   const e = _manLista[idx];
-  if(_empSel && _empSel.rut===e.rut && _empSel.razon===e.razon){
-    _empSel = null;
-    document.getElementById('emp-seleccionada').style.display='none';
-  }
+  const si = _empsSel.findIndex(s=>s.rut===e.rut && s.razon===e.razon);
+  if(si >= 0) _empsSel.splice(si,1);
   _manLista.splice(idx,1);
   renderManLista();
+  _actualizarContador();
 }
 
 function togglePanel(){
@@ -454,13 +455,24 @@ function filtrarEmpresas(){
   ));
 }
 
+function _actualizarContador(){
+  const n = _empsSel.length;
+  const el = document.getElementById('emp-seleccionada');
+  el.style.display = n ? 'block' : 'none';
+  document.getElementById('emp-sel-count').textContent =
+    n === 1 ? `1 empresa seleccionada` : `${n} empresas seleccionadas`;
+}
+
 function selEmp(el, rut, razon, grupo){
-  document.querySelectorAll('.emp-row').forEach(r=>r.classList.remove('selected'));
-  el.classList.add('selected');
-  _empSel = {rut, razon, grupo};
-  document.getElementById('emp-seleccionada').style.display = 'block';
-  document.getElementById('emp-sel-nombre').textContent = razon;
-  document.getElementById('emp-sel-rut').textContent    = rut;
+  const idx = _empsSel.findIndex(e=>e.rut===rut && e.razon===razon);
+  if(idx >= 0){
+    _empsSel.splice(idx,1);
+    el.classList.remove('selected');
+  } else {
+    _empsSel.push({rut, razon, grupo});
+    el.classList.add('selected');
+  }
+  _actualizarContador();
 }
 
 // ── Períodos ──────────────────────────────────────────────
@@ -544,8 +556,8 @@ function limpiarPeriodos(){
 // ── Acciones ──────────────────────────────────────────────
 async function accion(tipo){
   if(tipo !== 'convertir'){
-    if(!_empSel){
-      toast(_modoManual ? 'Agrega y selecciona una empresa de la lista' : 'Selecciona una empresa primero');
+    if(!_empsSel.length){
+      toast(_modoManual ? 'Agrega y selecciona al menos una empresa' : 'Selecciona al menos una empresa');
       return;
     }
   }
@@ -563,8 +575,7 @@ async function accion(tipo){
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
       tipo,
-      rut_empresa:  _empSel ? _empSel.rut   : '',
-      razon_social: _empSel ? _empSel.razon  : '',
+      empresas: _empsSel.map(e=>({rut: e.rut, razon: e.razon})),
       periodos,
     })
   });

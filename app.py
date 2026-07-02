@@ -1795,9 +1795,15 @@ def previred_listar_planillas():
 def previred_iniciar():
     d = request.json or {}
     tipo = d.get("tipo")         # descargar | convertir | ambos
-    rut_empresa    = d.get("rut_empresa", "").strip()
-    razon_social   = d.get("razon_social", "").strip()
-    periodos_raw   = d.get("periodos", [])  # [{"mes":1,"anio":2024}, ...]
+    periodos_raw = d.get("periodos", [])  # [{"mes":1,"anio":2024}, ...]
+
+    # Soporte multi-empresa: acepta {"empresas":[{rut,razon},...]} o legado {rut_empresa, razon_social}
+    empresas = d.get("empresas", [])
+    if not empresas:
+        rut = d.get("rut_empresa", "").strip()
+        rs  = d.get("razon_social", "").strip()
+        if rut:
+            empresas = [{"rut": rut, "razon": rs}]
 
     if tipo not in ("descargar", "convertir", "ambos"):
         return jsonify({"error": "Tipo inválido"}), 400
@@ -1812,7 +1818,7 @@ def previred_iniciar():
             _log(tid, f"Tarea iniciada — tipo: {tipo}", "info")
 
             if tipo in ("descargar", "ambos"):
-                if not rut_empresa:
+                if not empresas:
                     _log(tid, "RUT de empresa requerido para descargar", "err")
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
@@ -1846,37 +1852,52 @@ def previred_iniciar():
                     _tareas[tid]["done"]  = True
                     return
                 from previred_logic import descargar
-                carpeta_emp = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
-                os.makedirs(carpeta_emp, exist_ok=True)
-                _log(tid, f"Empresa: {rut_empresa}", "info")
-                descargar(rut_usr, cont_usr, rut_empresa, periodos,
-                          carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t))
-                # Empaquetar PDFs descargados en ZIP
-                pdfs = [f for f in os.listdir(carpeta_emp) if f.endswith(".pdf")]
-                if pdfs:
-                    nombre_zip = f"Planillas_{rut_empresa.replace('.','').replace('-','')}_{_time.strftime('%Y%m%d_%H%M%S')}.zip"
+                todas_rutas_pdf = []
+                for emp in empresas:
+                    rut_empresa  = (emp.get("rut") or "").strip()
+                    razon_social = (emp.get("razon") or "").strip()
+                    if not rut_empresa:
+                        continue
+                    _log(tid, f"── Empresa: {rut_empresa} {('— ' + razon_social) if razon_social else ''}", "info")
+                    carpeta_emp = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
+                    os.makedirs(carpeta_emp, exist_ok=True)
+                    descargar(rut_usr, cont_usr, rut_empresa, periodos,
+                              carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t))
+                    pdfs_emp = [os.path.join(carpeta_emp, f) for f in os.listdir(carpeta_emp) if f.endswith(".pdf")]
+                    todas_rutas_pdf.extend(pdfs_emp)
+                if todas_rutas_pdf:
+                    tag = empresas[0].get("rut","").replace(".","").replace("-","")
+                    if len(empresas) > 1:
+                        tag += f"_y{len(empresas)-1}mas"
+                    nombre_zip = f"Planillas_{tag}_{_time.strftime('%Y%m%d_%H%M%S')}.zip"
                     ruta_zip = os.path.join(_EXCELS_DIR, nombre_zip)
                     with zipfile.ZipFile(ruta_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-                        for f in pdfs:
-                            zf.write(os.path.join(carpeta_emp, f), f)
+                        for rp in todas_rutas_pdf:
+                            zf.write(rp, os.path.basename(rp))
                     _tareas[tid]["zip"] = ruta_zip
-                    _log(tid, f"ZIP listo con {len(pdfs)} PDF(s) — puedes descargarlo ahora", "ok")
+                    _log(tid, f"ZIP listo con {len(todas_rutas_pdf)} PDF(s) — puedes descargarlo ahora", "ok")
 
             if tipo in ("convertir", "ambos"):
                 from pdf_excel_logic import generar_excel_bytes
-                if tipo == "ambos" and rut_empresa:
-                    carpeta_src = os.path.join(_PLANILLAS_DIR, rut_empresa.replace(".", "").replace("-", ""))
+                rut_empresa  = (empresas[0].get("rut")   if empresas else "") or ""
+                razon_social = (empresas[0].get("razon") if empresas else "") or ""
+                if tipo == "ambos" and empresas:
+                    rutas = []
+                    for emp in empresas:
+                        rut_e = (emp.get("rut") or "").replace(".", "").replace("-", "")
+                        carpeta_src = os.path.join(_PLANILLAS_DIR, rut_e)
+                        if os.path.isdir(carpeta_src):
+                            rutas += sorted([os.path.join(carpeta_src, f)
+                                             for f in os.listdir(carpeta_src) if f.endswith(".pdf")])
                 else:
                     carpeta_src = _PLANILLAS_DIR
-                if not os.path.isdir(carpeta_src):
-                    _log(tid, f"Carpeta no existe: {carpeta_src}", "err")
-                    _tareas[tid]["error"] = True
-                    _tareas[tid]["done"]  = True
-                    return
-                rutas = sorted([
-                    os.path.join(carpeta_src, f)
-                    for f in os.listdir(carpeta_src) if f.endswith(".pdf")
-                ])
+                    if not os.path.isdir(carpeta_src):
+                        _log(tid, f"Carpeta no existe: {carpeta_src}", "err")
+                        _tareas[tid]["error"] = True
+                        _tareas[tid]["done"]  = True
+                        return
+                    rutas = sorted([os.path.join(carpeta_src, f)
+                                    for f in os.listdir(carpeta_src) if f.endswith(".pdf")])
                 if not rutas:
                     _log(tid, "No hay PDFs en la carpeta para convertir", "warn")
                     _tareas[tid]["done"] = True

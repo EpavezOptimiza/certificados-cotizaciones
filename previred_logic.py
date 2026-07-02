@@ -115,43 +115,49 @@ def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
     btn_menu.click()
     time.sleep(3)
 
-    # Buscar todos los botones que coincidan con el RUT
-    btns = driver.find_elements(By.XPATH, f"//*[starts-with(@id,'{patron}')]")
-    ids_encontrados = [b.get_attribute("id") for b in btns]
+    # Obtener IDs de botones para este RUT (sin iterar el DOM desde Python)
+    ids_encontrados = driver.execute_script("""
+        var patron = arguments[0];
+        return Array.from(document.querySelectorAll('[id^="' + patron + '"]'))
+                    .map(function(el){ return el.id; });
+    """, patron)
     log(f"Botones empresa encontrados: {ids_encontrados}", "info")
 
-    elegido = None
-
-    if len(btns) == 1:
-        elegido = btns[0]
-    elif len(btns) > 1 and razon_social:
-        # Intentar coincidir por texto de razón social en el contenedor del botón
-        razon_lower = razon_social.lower().strip()
-        for btn in btns:
-            for niveles in range(1, 6):
-                try:
-                    anc = btn.find_element(By.XPATH, f"ancestor::*[{niveles}]")
-                    if razon_lower in anc.text.lower():
-                        elegido = btn
-                        break
-                except Exception:
-                    pass
-            if elegido:
-                break
-        if not elegido:
-            log("No se encontró coincidencia exacta por razón social; usando primer botón del RUT", "warn")
-            elegido = btns[0]
-    elif len(btns) > 1:
-        elegido = btns[0]
-
-    if elegido:
-        elegido.click()
+    # Elegir el botón correcto
+    btn_id_elegido = None
+    if not ids_encontrados:
+        btn_id_elegido = f"{patron}00#false"
+        log("Sin botones para el RUT, usando #00# por defecto", "warn")
+    elif len(ids_encontrados) == 1:
+        btn_id_elegido = ids_encontrados[0]
+    elif razon_social:
+        # Buscar con JS en una sola llamada: recorre ancestors buscando texto de razón social
+        razon_lower = razon_social.lower().strip()[:60]
+        btn_id_elegido = driver.execute_script("""
+            var patron = arguments[0];
+            var razon  = arguments[1];
+            var btns   = document.querySelectorAll('[id^="' + patron + '"]');
+            for (var i = 0; i < btns.length; i++) {
+                var el = btns[i];
+                for (var j = 0; j < 6; j++) {
+                    el = el.parentElement;
+                    if (!el) break;
+                    if (el.textContent.toLowerCase().indexOf(razon) !== -1) {
+                        return btns[i].id;
+                    }
+                }
+            }
+            return null;
+        """, patron, razon_lower)
+        if btn_id_elegido:
+            log(f"Empresa identificada por razón social: {btn_id_elegido}", "info")
+        else:
+            btn_id_elegido = ids_encontrados[0]
+            log(f"Sin coincidencia de razón social, usando primer botón: {btn_id_elegido}", "warn")
     else:
-        # Fallback absoluto: botón #00#false
-        btn_id = f"{patron}00#false"
-        log(f"Usando botón por defecto: {btn_id}", "warn")
-        wait.until(EC.element_to_be_clickable((By.ID, btn_id))).click()
+        btn_id_elegido = ids_encontrados[0]
 
+    wait.until(EC.element_to_be_clickable((By.ID, btn_id_elegido))).click()
     time.sleep(4)
     log("Empresa seleccionada", "ok")
 

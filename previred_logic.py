@@ -322,10 +322,14 @@ def descargar_planilla(driver, mes: int, anio: int, nombre_nomina: str,
         time.sleep(1)
     except Exception:
         pass
-    log("  [D4] buscando aceptar_modal...", "info")
-    btn_imp = wait.until(EC.element_to_be_clickable((By.ID, "aceptar_modal")))
-    log("  [D5] click aceptar_modal...", "info")
-    btn_imp.click()
+    log("  [D4] buscando aceptar_modal (opcional)...", "info")
+    try:
+        wait_modal = WebDriverWait(driver, 5)
+        btn_imp = wait_modal.until(EC.element_to_be_clickable((By.ID, "aceptar_modal")))
+        log("  [D5] click aceptar_modal...", "info")
+        btn_imp.click()
+    except Exception:
+        log("  [D5] sin modal — descarga directa al click planillas_masivas", "info")
     time.sleep(8)
     log("  [D6] verificando ventanas...", "info")
     if len(driver.window_handles) > 1:

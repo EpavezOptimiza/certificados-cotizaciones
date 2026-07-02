@@ -179,11 +179,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="field">
           <label>Año</label>
           <div class="anio-row">
+            <div class="anio-btn" onclick="selAnio(this)">2001</div>
+            <div class="anio-btn" onclick="selAnio(this)">2002</div>
+            <div class="anio-btn" onclick="selAnio(this)">2003</div>
+            <div class="anio-btn" onclick="selAnio(this)">2004</div>
+            <div class="anio-btn" onclick="selAnio(this)">2005</div>
+            <div class="anio-btn" onclick="selAnio(this)">2006</div>
+            <div class="anio-btn" onclick="selAnio(this)">2007</div>
+            <div class="anio-btn" onclick="selAnio(this)">2008</div>
+            <div class="anio-btn" onclick="selAnio(this)">2009</div>
+            <div class="anio-btn" onclick="selAnio(this)">2010</div>
+            <div class="anio-btn" onclick="selAnio(this)">2011</div>
+            <div class="anio-btn" onclick="selAnio(this)">2012</div>
+            <div class="anio-btn" onclick="selAnio(this)">2013</div>
+            <div class="anio-btn" onclick="selAnio(this)">2014</div>
+            <div class="anio-btn" onclick="selAnio(this)">2015</div>
+            <div class="anio-btn" onclick="selAnio(this)">2016</div>
+            <div class="anio-btn" onclick="selAnio(this)">2017</div>
+            <div class="anio-btn" onclick="selAnio(this)">2018</div>
+            <div class="anio-btn" onclick="selAnio(this)">2019</div>
+            <div class="anio-btn" onclick="selAnio(this)">2020</div>
+            <div class="anio-btn" onclick="selAnio(this)">2021</div>
             <div class="anio-btn" onclick="selAnio(this)">2022</div>
             <div class="anio-btn" onclick="selAnio(this)">2023</div>
-            <div class="anio-btn sel" onclick="selAnio(this)">2024</div>
+            <div class="anio-btn" onclick="selAnio(this)">2024</div>
             <div class="anio-btn" onclick="selAnio(this)">2025</div>
-            <div class="anio-btn" onclick="selAnio(this)">2026</div>
+            <div class="anio-btn sel" onclick="selAnio(this)">2026</div>
           </div>
         </div>
         <div class="field">
@@ -265,7 +286,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 let _panelOpen = true;
 let _empresas  = [], _empSel = null;
-let _anio      = '2024';
+let _anio      = '2026';
 let _taskId    = null, _polling = null, _logSince = 0;
 
 function togglePanel(){

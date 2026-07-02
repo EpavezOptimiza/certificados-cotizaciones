@@ -298,6 +298,20 @@ def descargar_planilla(driver, mes: int, anio: int, nombre_nomina: str,
     log("  [D2] click planillas_masivas...", "info")
     btn_masivas.click()
     time.sleep(2)
+    # Diagnostico: qué dialogs/modales aparecieron
+    try:
+        info_dom = driver.execute_script("""
+            var btns = Array.from(document.querySelectorAll('button,input[type=button],input[type=submit]'))
+                .filter(function(b){ return b.id || b.type === 'submit'; })
+                .map(function(b){ return b.id + '|' + b.textContent.trim().substring(0,30); });
+            var dialogs = Array.from(document.querySelectorAll('[role="dialog"],.ui-dialog,.modal'))
+                .map(function(d){ return d.id + '|' + d.className.substring(0,40); });
+            return {btns: btns.slice(0,15), dialogs: dialogs.slice(0,8)};
+        """)
+        log(f"  [D2b] DOM btns: {info_dom.get('btns')}", "info")
+        log(f"  [D2b] DOM dialogs: {info_dom.get('dialogs')}", "info")
+    except Exception as ex:
+        log(f"  [D2b] err: {ex}", "info")
     log("  [D3] buscando radio...", "info")
     try:
         radio = wait.until(EC.presence_of_element_located(

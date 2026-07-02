@@ -190,9 +190,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           </div>
           <div class="field">
             <label>Razón social</label>
-            <input id="man-razon" placeholder="CHILE BPO SOLUTIONS S.A" oninput="validarManual()">
-            <div class="input-err" id="man-razon-err">Ingresa la razón social</div>
+            <input id="man-razon" placeholder="CHILE BPO SOLUTIONS S.A">
           </div>
+          <button id="btn-agregar-manual" onclick="agregarManual()"
+            style="width:100%;padding:7px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:8px;font-family:inherit">
+            + Agregar a la lista
+          </button>
+          <div class="empresa-list" id="man-list" style="display:none"></div>
         </div>
 
         <div id="emp-seleccionada" style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:7px;font-size:12px;color:#166534;display:none">
@@ -316,7 +320,7 @@ let _panelOpen  = true;
 let _empresas   = [], _empSel = null;
 let _anio       = '2026';
 let _taskId     = null, _polling = null, _logSince = 0;
-let _modoManual = false, _manRutOk = false;
+let _modoManual = false, _manRutOk = false, _manLista = [];
 
 // ── Modo empresa ──────────────────────────────────────────
 function setModo(modo){
@@ -345,15 +349,62 @@ function _parsearRut(raw){
 
 function validarManual(){
   const rutRaw = document.getElementById('man-rut').value.trim();
-  const razon  = document.getElementById('man-razon').value.trim();
   const rutInp = document.getElementById('man-rut');
   const rutErr = document.getElementById('man-rut-err');
-  const razErr = document.getElementById('man-razon-err');
   const parsed = _parsearRut(rutRaw);
   _manRutOk    = !!(parsed && _dvRut(parsed.num)===parsed.dv);
   rutInp.classList.toggle('input-ok', _manRutOk);
   rutErr.style.display = (rutRaw && !_manRutOk) ? 'block' : 'none';
-  razErr.style.display = (razon==='' && document.activeElement!==document.getElementById('man-razon')) ? 'none' : 'none';
+}
+
+function agregarManual(){
+  const rutRaw = document.getElementById('man-rut').value.trim();
+  const razon  = document.getElementById('man-razon').value.trim();
+  if(!_manRutOk || !rutRaw){ toast('RUT inválido'); return; }
+  if(!razon){ toast('Ingresa la razón social'); return; }
+  const parsed   = _parsearRut(rutRaw);
+  const rutFmt   = parsed.num + '-' + parsed.dv;
+  const duplicado = _manLista.find(e=>e.rut===rutFmt && e.razon===razon);
+  if(duplicado){ toast('Ya está en la lista'); return; }
+  _manLista.push({rut: rutFmt, razon});
+  document.getElementById('man-rut').value   = '';
+  document.getElementById('man-razon').value = '';
+  document.getElementById('man-rut').classList.remove('input-ok');
+  _manRutOk = false;
+  renderManLista();
+}
+
+function renderManLista(){
+  const el = document.getElementById('man-list');
+  el.style.display = _manLista.length ? '' : 'none';
+  el.innerHTML = _manLista.map((e,i)=>`
+    <div class="emp-row" onclick="selManual(this,'${esc(e.rut)}','${esc(e.razon)}')" data-rut="${esc(e.rut)}">
+      <div>
+        <div class="emp-name">${e.razon}</div>
+        <div class="emp-rut">${e.rut}</div>
+      </div>
+      <span onclick="event.stopPropagation();eliminarManual(${i})"
+            style="font-size:14px;color:#94a3b8;cursor:pointer;padding:4px" title="Eliminar">✕</span>
+    </div>`).join('');
+}
+
+function selManual(el, rut, razon){
+  document.querySelectorAll('#man-list .emp-row').forEach(r=>r.classList.remove('selected'));
+  el.classList.add('selected');
+  _empSel = {rut, razon, grupo: razon};
+  document.getElementById('emp-seleccionada').style.display = 'block';
+  document.getElementById('emp-sel-nombre').textContent = razon;
+  document.getElementById('emp-sel-rut').textContent    = rut;
+}
+
+function eliminarManual(idx){
+  const e = _manLista[idx];
+  if(_empSel && _empSel.rut===e.rut && _empSel.razon===e.razon){
+    _empSel = null;
+    document.getElementById('emp-seleccionada').style.display='none';
+  }
+  _manLista.splice(idx,1);
+  renderManLista();
 }
 
 function togglePanel(){
@@ -433,16 +484,8 @@ function updateTags(){
 // ── Acciones ──────────────────────────────────────────────
 async function accion(tipo){
   if(tipo !== 'convertir'){
-    if(_modoManual){
-      const rutRaw = document.getElementById('man-rut').value.trim();
-      const razon  = document.getElementById('man-razon').value.trim();
-      if(!_manRutOk || !rutRaw){ toast('RUT inválido — revisa el formato'); return; }
-      if(!razon){ toast('Ingresa la razón social'); return; }
-      const parsed = _parsearRut(rutRaw);
-      const rutLimpio = parsed.num + '-' + parsed.dv;
-      _empSel = {rut: rutLimpio, razon, grupo: razon};
-    } else if(!_empSel){
-      toast('Selecciona una empresa primero');
+    if(!_empSel){
+      toast(_modoManual ? 'Agrega y selecciona una empresa de la lista' : 'Selecciona una empresa primero');
       return;
     }
   }

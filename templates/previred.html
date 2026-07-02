@@ -50,6 +50,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .emp-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;transition:all .12s}
 .emp-row:hover{background:#f8fafc}
 .emp-row.selected{border-color:#1D9E75;background:#f0fdf4}
+.emp-row.done{border-color:#2563eb!important;background:#eff6ff!important}
+.emp-row.done .emp-name{color:#1d4ed8!important}
+.emp-row.done .emp-rut{color:#3b82f6!important}
 .emp-name{font-size:13px;font-weight:500;color:#0f172a}
 .emp-rut{font-size:11px;color:#64748b;font-family:monospace}
 .emp-row.selected .emp-name{color:#166534}
@@ -423,7 +426,7 @@ function renderManLista(){
   const el = document.getElementById('man-list');
   el.style.display = _manLista.length ? '' : 'none';
   el.innerHTML = _manLista.map((e,i)=>`
-    <div class="emp-row" onclick="selManual(this,'${esc(e.rut)}','${esc(e.razon)}')" data-rut="${esc(e.rut)}">
+    <div class="emp-row" onclick="selManual(this,'${esc(e.rut)}','${esc(e.razon)}')" data-rut="${esc(e.rut)}" data-razon="${esc(e.razon)}">
       <div>
         <div class="emp-name">${e.razon}</div>
         <div class="emp-rut">${e.rut}</div>
@@ -477,7 +480,7 @@ function renderEmpresas(list){
   el.innerHTML = list.slice(0,100).map(e=>`
     <div class="emp-row"
          onclick="selEmp(this,'${esc(e.rut)}','${esc(e.razon_social||e.grupo)}','${esc(e.grupo)}')"
-         data-rut="${esc(e.rut)}">
+         data-rut="${esc(e.rut)}" data-razon="${esc(e.razon_social||e.grupo)}">
       <div>
         <div class="emp-name">${e.razon_social||e.grupo||e.rut}</div>
         <div class="emp-rut">${e.rut} · ${e.grupo}</div>
@@ -716,7 +719,18 @@ function limpiarLog(){
   document.getElementById('log-body').innerHTML = '';
 }
 
+function _marcarEmpresaDone(rut, razon){
+  document.querySelectorAll(`.emp-row[data-rut="${rut}"]`).forEach(card => {
+    if(!razon || card.dataset.razon === razon) card.classList.add('done');
+  });
+}
+
 function addLogLine(msg, tipo, hora){
+  if(msg.startsWith('__EMPRESA_OK__:')){
+    const [,rut,...rest] = msg.split(':');
+    _marcarEmpresaDone(rut, rest.join(':').trim());
+    return;
+  }
   const el    = document.getElementById('log-body');
   const empty = el.querySelector('.log-empty');
   if(empty) empty.remove();

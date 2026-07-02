@@ -1895,6 +1895,7 @@ def previred_iniciar():
                               razon_social=razon_social)
                     pdfs_emp = [os.path.join(carpeta_emp, f) for f in os.listdir(carpeta_emp) if f.endswith(".pdf")]
                     todas_rutas_pdf.extend(pdfs_emp)
+                    _log(tid, f"__EMPRESA_OK__:{rut_empresa}:{razon_social}", "ok")
                 if todas_rutas_pdf:
                     tag = empresas[0].get("rut","").replace(".","").replace("-","")
                     if len(empresas) > 1:

@@ -631,15 +631,7 @@ async function pollLogs(){
       _polling = null;
       document.getElementById('estado-badge').style.display = 'none';
       setBotones(true);
-      if(data.zip){
-        document.getElementById('btn-zip').classList.add('show');
-        const a = document.createElement('a');
-        a.href = `/api/previred/descargar-zip/${_taskId}`;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
+      if(data.zip)     document.getElementById('btn-zip').classList.add('show');
       if(data.archivo) document.getElementById('btn-excel').classList.add('show');
       toast(data.error ? 'Proceso terminó con errores' : 'Proceso completado exitosamente');
     }

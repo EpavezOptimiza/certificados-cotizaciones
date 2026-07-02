@@ -393,11 +393,12 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
 
         log(f"Períodos a procesar: {len(periodos)}", "info")
 
-        for i, (mes, anio) in enumerate(periodos):
+        periodos_con_nomina = 0
+        for (mes, anio) in periodos:
             mes_nombre = MESES_NOMBRE.get(mes, str(mes))
             log(f"── Período: {mes_nombre} {anio}", "info")
 
-            if i > 0 and i % 3 == 0:
+            if periodos_con_nomina > 0 and periodos_con_nomina % 3 == 0:
                 log("Re-login preventivo...", "info")
                 driver.get(URL_LOGIN)
                 time.sleep(2)
@@ -414,6 +415,8 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
             if not nominas:
                 log("Sin nóminas para este período", "warn")
                 continue
+
+            periodos_con_nomina += 1
 
             log(f"Nóminas ({len(nominas)}): {', '.join(nominas)}", "info")
 

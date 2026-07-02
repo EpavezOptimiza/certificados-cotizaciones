@@ -113,6 +113,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .mode-tab.active{background:#1D9E75;color:#fff;border-color:#1D9E75}
 .input-err{color:#dc2626;font-size:11px;margin-top:3px;display:none}
 .input-ok{border-color:#1D9E75!important}
+.pin-row{display:flex;gap:5px;align-items:center}
+.pin-row input{flex:1}
+.pin-btn{width:30px;height:30px;border:1px solid #e2e8f0;border-radius:7px;background:#fff;cursor:pointer;font-size:14px;padding:0;flex-shrink:0;transition:all .15s;line-height:1}
+.pin-btn.fijado{background:#fef3c7;border-color:#f59e0b;}
+.pin-label{font-size:10px;color:#64748b;margin-bottom:2px;display:block}
 </style>
 </head>
 <body>
@@ -187,12 +192,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="modo-manual" style="display:none">
           <div class="field">
             <label>RUT empresa (con puntos y guión)</label>
-            <input id="man-rut" placeholder="99.577.060-1" oninput="validarManual()">
+            <div class="pin-row">
+              <input id="man-rut" placeholder="99.577.060-1" oninput="validarManual()">
+              <button type="button" class="pin-btn" id="pin-btn-rut" onclick="togglePin('rut')" title="Fijar RUT">📌</button>
+            </div>
             <div class="input-err" id="man-rut-err">RUT inválido — revisa el formato y dígito verificador</div>
           </div>
           <div class="field">
             <label>Razón social</label>
-            <input id="man-razon" placeholder="CHILE BPO SOLUTIONS S.A">
+            <div class="pin-row">
+              <input id="man-razon" placeholder="CHILE BPO SOLUTIONS S.A">
+              <button type="button" class="pin-btn" id="pin-btn-razon" onclick="togglePin('razon')" title="Fijar razón social">📌</button>
+            </div>
           </div>
           <button id="btn-agregar-manual" onclick="agregarManual()"
             style="width:100%;padding:7px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:8px;font-family:inherit">
@@ -325,6 +336,7 @@ let _empresas   = [], _empsSel = []; // multi-select
 let _anio       = '2026';
 let _taskId     = null, _polling = null, _logSince = 0;
 let _modoManual = false, _manRutOk = false, _manLista = [];
+let _pinRut = false, _pinRazon = false;
 
 // ── Modo empresa ──────────────────────────────────────────
 function setModo(modo){
@@ -361,6 +373,16 @@ function validarManual(){
   rutErr.style.display = (rutRaw && !_manRutOk) ? 'block' : 'none';
 }
 
+function togglePin(campo){
+  if(campo === 'rut'){
+    _pinRut = !_pinRut;
+    document.getElementById('pin-btn-rut').classList.toggle('fijado', _pinRut);
+  } else {
+    _pinRazon = !_pinRazon;
+    document.getElementById('pin-btn-razon').classList.toggle('fijado', _pinRazon);
+  }
+}
+
 function agregarManual(){
   const rutRaw = document.getElementById('man-rut').value.trim();
   const razon  = document.getElementById('man-razon').value.trim();
@@ -371,10 +393,12 @@ function agregarManual(){
   const duplicado = _manLista.find(e=>e.rut===rutFmt && e.razon===razon);
   if(duplicado){ toast('Ya está en la lista'); return; }
   _manLista.push({rut: rutFmt, razon});
-  document.getElementById('man-rut').value   = '';
-  document.getElementById('man-razon').value = '';
-  document.getElementById('man-rut').classList.remove('input-ok');
-  _manRutOk = false;
+  if(!_pinRut){
+    document.getElementById('man-rut').value = '';
+    document.getElementById('man-rut').classList.remove('input-ok');
+    _manRutOk = false;
+  }
+  if(!_pinRazon) document.getElementById('man-razon').value = '';
   renderManLista();
 }
 

@@ -2,7 +2,7 @@
 Certificados de Cotizaciones — Versión Web
 Flask + SQLite nativo | Despliegue Railway
 """
-import os, json, re, shutil, secrets, threading, uuid, time as _time, zipfile
+import os, io, json, re, shutil, secrets, threading, uuid, time as _time, zipfile
 from datetime import datetime
 from functools import wraps
 from flask import (Flask, render_template, request, jsonify,
@@ -1759,7 +1759,7 @@ def previred_config_set():
 
 def _nueva_tarea() -> str:
     tid = uuid.uuid4().hex[:10]
-    _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None, "zip": None}
+    _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None, "zip": None, "zip_bytes": None, "zip_name": None}
     return tid
 
 def _log(tid: str, msg: str, tipo: str = "info"):
@@ -1793,6 +1793,24 @@ def previred_descargar_zip(tid):
     return send_file(t["zip"], as_attachment=True,
                      download_name=os.path.basename(t["zip"]),
                      mimetype="application/zip")
+
+@app.route("/api/previred/archivos-excels")
+@api_login_required
+def previred_listar_excels():
+    archivos = []
+    if os.path.isdir(_EXCELS_DIR):
+        for fn in sorted(os.listdir(_EXCELS_DIR)):
+            ruta = os.path.join(_EXCELS_DIR, fn)
+            archivos.append({"nombre": fn, "bytes": os.path.getsize(ruta)})
+    return jsonify(archivos)
+
+@app.route("/api/previred/descargar-archivo/<nombre>")
+@api_login_required
+def previred_descargar_archivo(nombre):
+    ruta = os.path.join(_EXCELS_DIR, nombre)
+    if not os.path.exists(ruta):
+        return jsonify({"error": "Archivo no encontrado"}), 404
+    return send_file(ruta, as_attachment=True, download_name=nombre)
 
 @app.route("/api/previred/descargar-excel/<tid>")
 @api_login_required

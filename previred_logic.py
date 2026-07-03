@@ -291,30 +291,13 @@ def buscar_planilla(driver, mes: int, anio: int, nombre_nomina: str) -> bool:
 def descargar_planilla(driver, mes: int, anio: int, nombre_nomina: str,
                        carpeta_temp: str, carpeta_dest: str, log) -> bool:
     wait = WebDriverWait(driver, 20)
-    log("  [D1] buscando btn planillas_masivas...", "info")
     btn_masivas = wait.until(EC.element_to_be_clickable(
         (By.XPATH, "//button[starts-with(@id,'planillas_masivas')]")
     ))
-    log("  [D2] click planillas_masivas...", "info")
     btn_masivas.click()
     time.sleep(2)
-    # Diagnostico: qué dialogs/modales aparecieron
     try:
-        info_dom = driver.execute_script("""
-            var btns = Array.from(document.querySelectorAll('button,input[type=button],input[type=submit]'))
-                .filter(function(b){ return b.id || b.type === 'submit'; })
-                .map(function(b){ return b.id + '|' + b.textContent.trim().substring(0,30); });
-            var dialogs = Array.from(document.querySelectorAll('[role="dialog"],.ui-dialog,.modal'))
-                .map(function(d){ return d.id + '|' + d.className.substring(0,40); });
-            return {btns: btns.slice(0,15), dialogs: dialogs.slice(0,8)};
-        """)
-        log(f"  [D2b] DOM btns: {info_dom.get('btns')}", "info")
-        log(f"  [D2b] DOM dialogs: {info_dom.get('dialogs')}", "info")
-    except Exception as ex:
-        log(f"  [D2b] err: {ex}", "info")
-    log("  [D3] buscando radio...", "info")
-    try:
-        radio = wait.until(EC.presence_of_element_located(
+        radio = WebDriverWait(driver, 3).until(EC.presence_of_element_located(
             (By.XPATH, "//input[@type='radio' and contains(@value,'total')] | //input[@type='radio'][1]")
         ))
         if not radio.is_selected():
@@ -322,16 +305,12 @@ def descargar_planilla(driver, mes: int, anio: int, nombre_nomina: str,
         time.sleep(1)
     except Exception:
         pass
-    log("  [D4] buscando aceptar_modal (opcional)...", "info")
     try:
-        wait_modal = WebDriverWait(driver, 5)
-        btn_imp = wait_modal.until(EC.element_to_be_clickable((By.ID, "aceptar_modal")))
-        log("  [D5] click aceptar_modal...", "info")
+        btn_imp = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "aceptar_modal")))
         btn_imp.click()
     except Exception:
-        log("  [D5] sin modal — descarga directa al click planillas_masivas", "info")
+        pass
     time.sleep(8)
-    log("  [D6] verificando ventanas...", "info")
     if len(driver.window_handles) > 1:
         driver.switch_to.window(driver.window_handles[-1])
         driver.close()

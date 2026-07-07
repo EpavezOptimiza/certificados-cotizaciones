@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Previred</title>
 <script src="/static/theme.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--accent:#2563eb;--accent-dark:#1d4ed8;--accent-rgb:37,99,235;--sidebar-bg:#0d1b2e}
@@ -49,6 +50,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .emp-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;transition:all .12s}
 .emp-row:hover{background:#f8fafc}
 .emp-row.selected{border-color:#1D9E75;background:#f0fdf4}
+.emp-row.done{border-color:#2563eb!important;background:#eff6ff!important}
+.emp-row.done .emp-name{color:#1d4ed8!important}
+.emp-row.done .emp-rut{color:#3b82f6!important}
 .emp-name{font-size:13px;font-weight:500;color:#0f172a}
 .emp-rut{font-size:11px;color:#64748b;font-family:monospace}
 .emp-row.selected .emp-name{color:#166534}
@@ -316,6 +320,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="btn-action btn-both" id="btn-both" onclick="accion('ambos')">▶ Descargar y convertir</button>
     </div>
 
+    <!-- Carpeta de destino -->
+    <div style="display:flex;align-items:center;gap:10px;margin-top:8px;padding:9px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;flex-wrap:wrap">
+      <button onclick="elegirCarpeta()" style="padding:5px 12px;border-radius:7px;border:1px solid #e2e8f0;background:#fff;font-size:12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px;white-space:nowrap">📁 Elegir carpeta destino</button>
+      <span id="carpeta-sel" style="display:none;font-size:12px;color:#1D9E75;font-weight:600;display:none;align-items:center;gap:6px">
+        ✓ <span id="carpeta-nombre" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <span onclick="limpiarCarpeta()" style="cursor:pointer;color:#94a3b8;font-weight:400">✕</span>
+      </span>
+      <span id="carpeta-hint" style="font-size:11px;color:#94a3b8">Elige una carpeta y los PDFs se guardarán directo ahí al terminar</span>
+    </div>
+
     <!-- Log en vivo -->
     <div class="log-card">
       <div class="log-header">
@@ -350,9 +364,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <input id="cfg-pass" type="password" placeholder="••••••••">
       <div style="font-size:11px;color:#94a3b8;margin-top:4px">Deja en blanco para mantener la contraseña actual</div>
     </div>
+    <div class="modal-field" style="margin-top:18px;padding-top:14px;border-top:1px solid #f1f5f9">
+      <label>Carpeta de descarga local (opcional)</label>
+      <input id="cfg-output-path" type="text" placeholder="C:\Users\Esteban\Downloads\Planillas">
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px">Los PDFs y el ZIP se copian directo aquí. Requiere ejecutar la app localmente.</div>
+    </div>
     <div class="modal-row">
       <button class="btn-cancel" onclick="cerrarConfig()">Cancelar</button>
-      <button class="btn-save" onclick="guardarConfig()">Guardar credenciales</button>
+      <button class="btn-save" onclick="guardarConfig()">Guardar</button>
     </div>
   </div>
 </div>
@@ -366,6 +385,7 @@ let _anio       = '2026';
 let _taskId     = null, _polling = null, _logSince = 0;
 let _modoManual = false, _manRutOk = false, _manLista = [];
 let _pinRut = false, _pinRazon = false;
+let _dirHandle = null;
 
 // ── Modo empresa ──────────────────────────────────────────
 function setModo(modo){
@@ -435,7 +455,7 @@ function renderManLista(){
   const el = document.getElementById('man-list');
   el.style.display = _manLista.length ? '' : 'none';
   el.innerHTML = _manLista.map((e,i)=>`
-    <div class="emp-row" onclick="selManual(this,'${esc(e.rut)}','${esc(e.razon)}')" data-rut="${esc(e.rut)}">
+    <div class="emp-row" onclick="selManual(this,'${esc(e.rut)}','${esc(e.razon)}')" data-rut="${esc(e.rut)}" data-razon="${esc(e.razon)}">
       <div>
         <div class="emp-name">${e.razon}</div>
         <div class="emp-rut">${e.rut}</div>
@@ -489,7 +509,7 @@ function renderEmpresas(list){
   el.innerHTML = list.slice(0,100).map(e=>`
     <div class="emp-row"
          onclick="selEmp(this,'${esc(e.rut)}','${esc(e.razon_social||e.grupo)}','${esc(e.grupo)}')"
-         data-rut="${esc(e.rut)}">
+         data-rut="${esc(e.rut)}" data-razon="${esc(e.razon_social||e.grupo)}">
       <div>
         <div class="emp-name">${e.razon_social||e.grupo||e.rut}</div>
         <div class="emp-rut">${e.rut} · ${e.grupo}</div>
@@ -740,7 +760,10 @@ async function pollLogs(){
       _polling = null;
       document.getElementById('estado-badge').style.display = 'none';
       setBotones(true);
-      if(data.zip)     document.getElementById('btn-zip').classList.add('show');
+      if(data.zip){
+        document.getElementById('btn-zip').classList.add('show');
+        if(_dirHandle) guardarEnCarpeta(_taskId);
+      }
       if(data.archivo) document.getElementById('btn-excel').classList.add('show');
       toast(data.error ? 'Proceso terminó con errores' : 'Proceso completado exitosamente');
     }
@@ -757,12 +780,71 @@ function descargarExcel(){
   if(_taskId) window.open(`/api/previred/descargar-excel/${_taskId}`);
 }
 
+// ── Carpeta destino ───────────────────────────────────────
+async function elegirCarpeta(){
+  if(!window.showDirectoryPicker){
+    toast('Tu navegador no soporta esta función — usa Chrome o Edge');
+    return;
+  }
+  try {
+    _dirHandle = await window.showDirectoryPicker();
+    document.getElementById('carpeta-nombre').textContent = _dirHandle.name;
+    const sel  = document.getElementById('carpeta-sel');
+    const hint = document.getElementById('carpeta-hint');
+    sel.style.display  = 'inline-flex';
+    hint.style.display = 'none';
+  } catch(e){
+    if(e.name !== 'AbortError') toast('Error al seleccionar carpeta');
+  }
+}
+
+function limpiarCarpeta(){
+  _dirHandle = null;
+  document.getElementById('carpeta-sel').style.display  = 'none';
+  document.getElementById('carpeta-hint').style.display = '';
+}
+
+async function guardarEnCarpeta(taskId){
+  if(!_dirHandle) return;
+  try {
+    addLogLine('Guardando PDFs en ' + _dirHandle.name + '...', 'info');
+    const resp = await fetch(`/api/previred/descargar-zip/${taskId}`);
+    if(!resp.ok) throw new Error('No se pudo obtener el ZIP');
+    const buf  = await resp.arrayBuffer();
+    const zip  = await JSZip.loadAsync(buf);
+    let count  = 0;
+    for(const [nombre, archivo] of Object.entries(zip.files)){
+      if(archivo.dir) continue;
+      const contenido  = await archivo.async('arraybuffer');
+      const fileHandle = await _dirHandle.getFileHandle(nombre, {create: true});
+      const writable   = await fileHandle.createWritable();
+      await writable.write(contenido);
+      await writable.close();
+      count++;
+    }
+    addLogLine(`${count} PDF(s) guardados en "${_dirHandle.name}"`, 'ok');
+  } catch(e){
+    addLogLine('Error al guardar en carpeta: ' + e.message, 'err');
+  }
+}
+
 // ── Log ───────────────────────────────────────────────────
 function limpiarLog(){
   document.getElementById('log-body').innerHTML = '';
 }
 
+function _marcarEmpresaDone(rut, razon){
+  document.querySelectorAll(`.emp-row[data-rut="${rut}"]`).forEach(card => {
+    if(!razon || card.dataset.razon === razon) card.classList.add('done');
+  });
+}
+
 function addLogLine(msg, tipo, hora){
+  if(msg.startsWith('__EMPRESA_OK__:')){
+    const [,rut,...rest] = msg.split(':');
+    _marcarEmpresaDone(rut, rest.join(':').trim());
+    return;
+  }
   const el    = document.getElementById('log-body');
   const empty = el.querySelector('.log-empty');
   if(empty) empty.remove();
@@ -804,6 +886,7 @@ async function cargarConfig(){
   const data = await res.json();
   const ind  = document.getElementById('cred-indicator');
   const sm   = document.getElementById('cred-status-modal');
+  document.getElementById('cfg-output-path').value = data.output_path || '';
   if(data.rut){
     document.getElementById('cfg-rut').value = data.rut;
     ind.style.display = 'block';
@@ -847,7 +930,7 @@ async function guardarConfig(){
   const res  = await fetch('/api/previred/config', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({rut, pwd})
+    body: JSON.stringify({rut, pwd, output_path: document.getElementById('cfg-output-path').value.trim()})
   });
   const data = await res.json();
   if(data.ok){

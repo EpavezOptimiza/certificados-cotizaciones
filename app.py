@@ -1928,6 +1928,65 @@ def previred_iniciar():
     return jsonify({"task_id": tid})
 
 
+@app.route("/api/previred/convertir_subidos", methods=["POST"])
+@api_login_required
+def previred_convertir_subidos():
+    """Convierte a Excel un lote de PDFs subidos manualmente por el usuario
+    (opción adicional a la conversión que escanea la carpeta destino)."""
+    archivos = request.files.getlist("pdfs")
+    if not archivos:
+        return jsonify({"error": "No se subió ningún PDF"}), 400
+
+    rut_empresa  = (request.form.get("rut_empresa")  or "").strip()
+    razon_social = (request.form.get("razon_social") or "").strip()
+
+    tid = _nueva_tarea()
+    carpeta_subida = os.path.join(_TEMP_DIR, f"subidos_{tid}")
+    os.makedirs(carpeta_subida, exist_ok=True)
+
+    rutas_pdf = []
+    for f in archivos:
+        if not f.filename.lower().endswith(".pdf"):
+            continue
+        destino = os.path.join(carpeta_subida, os.path.basename(f.filename))
+        f.save(destino)
+        rutas_pdf.append(destino)
+
+    def run():
+        import traceback
+        try:
+            _log(tid, f"Tarea iniciada — convertir {len(rutas_pdf)} PDF(s) subido(s)", "info")
+            if not rutas_pdf:
+                _log(tid, "Ningún archivo subido es un PDF válido", "err")
+                _tareas[tid]["error"] = True
+                _tareas[tid]["done"]  = True
+                return
+            from pdf_excel_logic import generar_excel_bytes
+            xls_bytes = generar_excel_bytes(
+                rutas_pdf, rut_empresa, razon_social,
+                log=lambda m, t: _log(tid, m, t)
+            )
+            nombre_archivo = f"Planillas_{_time.strftime('%Y%m%d_%H%M%S')}.xlsx"
+            ruta_excel = os.path.join(_EXCELS_DIR, nombre_archivo)
+            with open(ruta_excel, "wb") as f:
+                f.write(xls_bytes)
+            _tareas[tid]["archivo"] = ruta_excel
+            _log(tid, f"Excel listo: {nombre_archivo}", "ok")
+            _tareas[tid]["done"] = True
+            _log(tid, "Proceso finalizado", "ok")
+        except Exception as e:
+            tb = traceback.format_exc()
+            _log(tid, f"Error inesperado: {e}", "err")
+            _log(tid, tb[:400], "err")
+            _tareas[tid]["error"] = True
+            _tareas[tid]["done"]  = True
+        finally:
+            shutil.rmtree(carpeta_subida, ignore_errors=True)
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"task_id": tid})
+
+
 # ============================================================
 #  NOTAS
 # ============================================================

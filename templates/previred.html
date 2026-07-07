@@ -168,6 +168,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
 
+    <!-- Panel: subir PDFs para convertir (opción adicional a la carpeta destino) -->
+    <div class="card" id="panel-subir-pdfs" style="display:none;margin-bottom:16px;border-color:#185FA5">
+      <div class="card-title" style="justify-content:space-between">
+        <span><span>📤</span> Subir PDFs para convertir a Excel</span>
+        <button type="button" onclick="cerrarPanelSubir()"
+          style="border:none;background:transparent;font-size:14px;color:#94a3b8;cursor:pointer">✕</button>
+      </div>
+      <div id="subir-pdfs-zone"
+        style="border:2px dashed #cbd5e1;border-radius:10px;padding:22px;text-align:center;cursor:pointer;transition:.15s"
+        onclick="document.getElementById('input-pdfs-convertir').click()"
+        ondragover="event.preventDefault();this.style.borderColor='#185FA5';this.style.background='#eff6ff'"
+        ondragleave="this.style.borderColor='#cbd5e1';this.style.background='transparent'"
+        ondrop="handleDropPdfs(event)">
+        <div style="font-size:26px;margin-bottom:6px">📄</div>
+        <div style="font-size:13px;color:#64748b"><strong style="color:#185FA5">Click para seleccionar</strong> o arrastra aquí tus PDFs de Previred</div>
+      </div>
+      <input type="file" id="input-pdfs-convertir" accept=".pdf" multiple style="display:none"
+        onchange="handlePdfsSeleccionados(this.files)">
+      <div id="lista-pdfs-subidos" style="margin-top:10px;font-size:12px;color:#374151"></div>
+      <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
+        <button class="btn-action btn-conv" style="flex:0 0 auto;padding:10px 18px" id="btn-convertir-subidos"
+          onclick="convertirPdfsSubidos()" disabled>📊 Convertir estos PDFs</button>
+        <button type="button" onclick="usarCarpetaDestino()"
+          style="border:none;background:transparent;font-size:12px;color:#185FA5;cursor:pointer;text-decoration:underline">
+          o usar la carpeta destino en su lugar
+        </button>
+      </div>
+    </div>
+
     <div class="grid2">
       <!-- Empresa -->
       <div class="card">
@@ -283,7 +312,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <!-- Acciones -->
     <div class="actions-row">
       <button class="btn-action btn-dl"   id="btn-dl"   onclick="accion('descargar')">⬇ Solo descargar PDFs</button>
-      <button class="btn-action btn-conv" id="btn-conv" onclick="accion('convertir')">📊 Solo convertir a Excel</button>
+      <button class="btn-action btn-conv" id="btn-conv" onclick="mostrarPanelConvertir()">📊 Solo convertir a Excel</button>
       <button class="btn-action btn-both" id="btn-both" onclick="accion('ambos')">▶ Descargar y convertir</button>
     </div>
 
@@ -575,6 +604,91 @@ function limpiarPeriodos(){
   document.querySelectorAll('.mes-btn').forEach(b=>b.classList.remove('sel'));
   document.querySelectorAll('.anio-btn').forEach(b=>b.classList.remove('sel','sel-parcial'));
   updateTags();
+}
+
+// ── Subir PDFs para convertir (opción adicional a carpeta destino) ─────────
+let _pdfsParaConvertir = [];
+
+function mostrarPanelConvertir(){
+  document.getElementById('panel-subir-pdfs').style.display = '';
+  document.getElementById('panel-subir-pdfs').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function cerrarPanelSubir(){
+  document.getElementById('panel-subir-pdfs').style.display = 'none';
+  _pdfsParaConvertir = [];
+  renderListaPdfsSubidos();
+}
+
+function usarCarpetaDestino(){
+  cerrarPanelSubir();
+  accion('convertir');
+}
+
+function handleDropPdfs(e){
+  e.preventDefault();
+  e.currentTarget.style.borderColor = '#cbd5e1';
+  e.currentTarget.style.background = 'transparent';
+  agregarPdfsParaConvertir(e.dataTransfer.files);
+}
+
+function handlePdfsSeleccionados(files){
+  agregarPdfsParaConvertir(files);
+  document.getElementById('input-pdfs-convertir').value = '';
+}
+
+function agregarPdfsParaConvertir(fileList){
+  const nuevos = [...fileList].filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if(!nuevos.length){ toast('Selecciona archivos .pdf'); return; }
+  _pdfsParaConvertir.push(...nuevos);
+  renderListaPdfsSubidos();
+}
+
+function quitarPdfParaConvertir(idx){
+  _pdfsParaConvertir.splice(idx, 1);
+  renderListaPdfsSubidos();
+}
+
+function renderListaPdfsSubidos(){
+  const cont = document.getElementById('lista-pdfs-subidos');
+  const btn  = document.getElementById('btn-convertir-subidos');
+  if(!_pdfsParaConvertir.length){
+    cont.innerHTML = '';
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+  cont.innerHTML = `<div style="margin-bottom:6px">${_pdfsParaConvertir.length} archivo(s):</div>` +
+    _pdfsParaConvertir.map((f,i) =>
+      `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:#f8fafc;border-radius:6px;margin-bottom:4px">
+        <span>📄 ${f.name}</span>
+        <button type="button" onclick="quitarPdfParaConvertir(${i})" style="border:none;background:transparent;color:#dc2626;cursor:pointer;font-size:12px">✕</button>
+      </div>`).join('');
+}
+
+async function convertirPdfsSubidos(){
+  if(!_pdfsParaConvertir.length){ toast('Sube al menos un PDF'); return; }
+
+  setBotones(false);
+  limpiarLog();
+
+  const fd = new FormData();
+  _pdfsParaConvertir.forEach(f => fd.append('pdfs', f));
+  const empSel = _empsSel[0];
+  if(empSel){
+    fd.append('rut_empresa', empSel.rut || '');
+    fd.append('razon_social', empSel.razon || '');
+  }
+
+  const res  = await fetch('/api/previred/convertir_subidos', { method:'POST', body: fd });
+  const data = await res.json();
+  if(data.error){ toast(data.error); setBotones(true); return; }
+
+  _taskId   = data.task_id;
+  _logSince = 0;
+  document.getElementById('estado-badge').style.display = 'inline-flex';
+  document.getElementById('btn-excel').classList.remove('show');
+  _polling  = setInterval(pollLogs, 1200);
 }
 
 // ── Acciones ──────────────────────────────────────────────

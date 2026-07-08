@@ -326,12 +326,14 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                         href.toLowerCase().includes('imprimir') ||
                         onclick.toLowerCase().includes('pdf') ||
                         onclick.toLowerCase().includes('imprimir');
-            if (isPdf) links.push({href: href, onclick: onclick});
+            if (isPdf) links.push({href: href, onclick: onclick, src: src});
         });
         return links;
     }""")
 
     log(f"PDFs individuales encontrados: {len(pdf_links)}", "info")
+    for li in pdf_links[:5]:
+        log(f"  Link: href={li['href'][:80]} | onclick={li['onclick'][:80]} | src={li['src'][:60]}", "info")
 
     for i, link_info in enumerate(pdf_links):
         inst_num = i + 1

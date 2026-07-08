@@ -300,20 +300,7 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
     prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
     descargados = 0
 
-    # Expandir AFP: buscar imagen "mas_nomina.png" y hacer click en su <a> padre
-    try:
-        mas_loc = page.locator("img[src*='mas_nomina']").first
-        mas_loc.wait_for(state="visible", timeout=8000)
-        # Click en el <a> padre si existe, si no en la imagen misma
-        try:
-            page.evaluate("() => { var img = document.querySelector(\"img[src*='mas_nomina']\"); if(img){var a=img.closest('a'); if(a){a.click();}else{img.click();}} }")
-        except Exception:
-            mas_loc.click()
-        time.sleep(2)
-    except Exception:
-        pass
-
-    # Log diagnóstico del padre de cada planillas.gif para entender estructura
+    # Log diagnóstico del padre de cada planillas.gif
     ctx_info = page.evaluate("""() => {
         var results = [];
         document.querySelectorAll('img[src*="planillas.gif"]').forEach(function(img, i) {
@@ -339,22 +326,17 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         log("No se encontraron iconos planillas.gif", "warn")
         return 0
 
+    imgs_loc = page.locator('img[src*="planillas.gif"]')
+
     for i in range(total_iconos):
         inst_num = i + 1
         nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
         try:
-            # Intentar capturar como nueva pestaña
+            # Usar click nativo de Playwright (activa event listeners JS)
             with page.context.expect_page(timeout=15000) as nueva_pagina_info:
-                page.evaluate(f"""() => {{
-                    var imgs = document.querySelectorAll('img[src*="planillas.gif"]');
-                    if (imgs[{i}]) {{
-                        var a = imgs[{i}].closest('a');
-                        if (a) {{ a.click(); }}
-                        else {{ imgs[{i}].click(); }}
-                    }}
-                }}""")
+                imgs_loc.nth(i).click()
             nueva_pagina = nueva_pagina_info.value
             nueva_pagina.wait_for_load_state("networkidle", timeout=20000)
             pdf_url = nueva_pagina.url
@@ -367,18 +349,12 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             log(f"Guardado individual: {nombre_dest}", "ok")
             descargados += 1
 
-        except Exception:
-            # Fallback: intentar como descarga directa en la misma página
+        except Exception as e1:
+            log(f"expect_page falló inst{inst_num}: {e1.__class__.__name__}", "info")
+            # Fallback: descarga directa en la misma página
             try:
                 with page.expect_download(timeout=20000) as dl_info:
-                    page.evaluate(f"""() => {{
-                        var imgs = document.querySelectorAll('img[src*="planillas.gif"]');
-                        if (imgs[{i}]) {{
-                            var a = imgs[{i}].closest('a');
-                            if (a) {{ a.click(); }}
-                            else {{ imgs[{i}].click(); }}
-                        }}
-                    }}""")
+                    imgs_loc.nth(i).click()
                 dl = dl_info.value
                 dl.save_as(ruta_dest)
                 log(f"Guardado individual: {nombre_dest}", "ok")

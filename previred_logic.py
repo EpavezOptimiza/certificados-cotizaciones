@@ -90,17 +90,36 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
 
     page.wait_for_selector("li#empresa", timeout=20000)
     page.click("li#empresa")
-    # Esperar a que aparezcan botones de empresa antes de evaluar
+    # Esperar navegación completa antes de evaluar
+    try:
+        page.wait_for_load_state("networkidle", timeout=20000)
+    except Exception:
+        pass
     try:
         page.wait_for_selector(f'[id^="{patron}"]', timeout=15000)
     except Exception:
-        page.wait_for_load_state("networkidle", timeout=15000)
-    time.sleep(1)
+        time.sleep(3)
 
-    ids_encontrados = page.evaluate(
-        "(patron) => Array.from(document.querySelectorAll('[id^=\"' + patron + '\"]')).map(el => el.id)",
-        patron
-    )
+    # Retry si el contexto se destruye por redirección secundaria
+    ids_encontrados = None
+    for intento in range(3):
+        try:
+            time.sleep(1)
+            ids_encontrados = page.evaluate(
+                "(patron) => Array.from(document.querySelectorAll('[id^=\"' + patron + '\"]')).map(el => el.id)",
+                patron
+            )
+            break
+        except Exception as e:
+            if "context was destroyed" in str(e).lower() and intento < 2:
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+            else:
+                raise
+    if ids_encontrados is None:
+        ids_encontrados = []
     log(f"Botones empresa encontrados: {ids_encontrados}", "info")
 
     btn_id_elegido = None

@@ -54,10 +54,13 @@ def iniciar_driver(carpeta_temp: str) -> webdriver.Chrome:
 
     opciones = Options()
     opciones.binary_location = chrome_bin
-    opciones.add_argument("--headless=new")
+    opciones.add_argument("--headless=old")
     opciones.add_argument("--no-sandbox")
     opciones.add_argument("--disable-dev-shm-usage")
     opciones.add_argument("--disable-gpu")
+    opciones.add_argument("--disable-software-rasterizer")
+    opciones.add_argument("--disable-extensions")
+    opciones.add_argument("--remote-debugging-port=0")
     opciones.add_argument("--window-size=1920,1080")
     opciones.add_argument("--disable-notifications")
     prefs = {

@@ -23,27 +23,28 @@ def rut_a_btn_id(rut: str, razon_social: str = "") -> str:
 
 
 def _click_texto(page, texto: str, timeout: int = 15000) -> bool:
-    """Intenta hacer click en un elemento que contenga 'texto', probando varios selectores."""
-    # 1. Playwright has-text (case-insensitive)
+    """Hace click en el primer elemento visible que contenga 'texto'."""
+    # Primer intento: esperar que el elemento esté visible (respeta timeout)
     for tag in ["a", "span", "li", "button"]:
         try:
             loc = page.locator(f"{tag}:has-text('{texto}')").first
-            if loc.count() > 0:
-                loc.click(timeout=timeout)
-                return True
+            loc.wait_for(state="visible", timeout=timeout)
+            loc.click()
+            return True
         except Exception:
             pass
-    # 2. JavaScript directo como último recurso
+        # Los siguientes tags usan timeout corto, ya se esperó en el primero
+        timeout = 2000
+
+    # Fallback JS: pasar texto como argumento para evitar problemas con comillas
     try:
-        found = page.evaluate(f"""() => {{
-            var nodes = document.querySelectorAll('a, span, li, button');
-            for (var el of nodes) {{
-                if (el.offsetParent !== null && el.textContent.toLowerCase().includes('{texto.lower()}')) {{
-                    el.click(); return true;
-                }}
-            }}
-            return false;
-        }}""")
+        found = page.evaluate(
+            "(t) => { var nodes = document.querySelectorAll('a, span, li, button'); "
+            "for (var el of nodes) { "
+            "if (el.offsetParent !== null && el.textContent.toLowerCase().includes(t)) { el.click(); return true; } "
+            "} return false; }",
+            texto.lower()
+        )
         return bool(found)
     except Exception:
         return False
@@ -96,10 +97,10 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
         page.wait_for_load_state("networkidle", timeout=15000)
     time.sleep(1)
 
-    ids_encontrados = page.evaluate("""(patron) => {
-        return Array.from(document.querySelectorAll('[id^="' + patron + '"]'))
-                    .map(el => el.id);
-    }""", patron)
+    ids_encontrados = page.evaluate(
+        "(patron) => Array.from(document.querySelectorAll('[id^=\"' + patron + '\"]')).map(el => el.id)",
+        patron
+    )
     log(f"Botones empresa encontrados: {ids_encontrados}", "info")
 
     btn_id_elegido = None
@@ -159,16 +160,17 @@ def ir_a_planillas_pagadas(page, log):
     page.wait_for_load_state("networkidle", timeout=20000)
     time.sleep(2)
 
-    # Remuneraciones
+    # Remuneraciones — expande el submenú
     if _click_texto(page, "Remuneraciones", timeout=10000):
         log("Remuneraciones clickeado", "info")
+        page.wait_for_load_state("networkidle", timeout=10000)
         time.sleep(2)
     else:
         log("Remuneraciones no visible, continuando...", "warn")
 
     # Imprimir Documentos
     if not _click_texto(page, "Imprimir Documentos", timeout=15000):
-        if not _click_texto(page, "Imprimir", timeout=10000):
+        if not _click_texto(page, "Imprimir Documentos", timeout=5000):
             raise RuntimeError("No se encontró 'Imprimir Documentos' en el menú")
     time.sleep(2)
 
@@ -286,10 +288,8 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
     ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
     page.wait_for_selector("button[id^='planillas_masivas']", timeout=20000)
-
     descargado = False
 
-    # Intentar capturar la descarga con expect_download
     try:
         with page.expect_download(timeout=45000) as dl_info:
             page.click("button[id^='planillas_masivas']")
@@ -324,7 +324,8 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
             time.sleep(1)
         pdfs = [f for f in os.listdir(carpeta_temp) if f.endswith(".pdf")]
         if pdfs:
-            ultimo = max([os.path.join(carpeta_temp, f) for f in pdfs], key=os.path.getctime)
+            # getmtime es más confiable que getctime en Linux
+            ultimo = max([os.path.join(carpeta_temp, f) for f in pdfs], key=os.path.getmtime)
             shutil.move(ultimo, ruta_dest)
             descargado = True
 
@@ -336,19 +337,22 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
     return False
 
 
-def volver_a_busqueda(page, rut_usuario, contrasena, log):
+def volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log):
     _cerrar_tabs_extra(page)
+    # Intentar con el texto exacto del botón de Previred
     if _click_texto(page, "Nueva búsqueda", timeout=6000):
         time.sleep(2)
         return
-    if _click_texto(page, "Nueva", timeout=4000):
+    if _click_texto(page, "Búsqueda", timeout=4000):
         time.sleep(2)
         return
+    # Si nada funciona, volver a navegar directo a planillas
     try:
         ir_a_planillas_pagadas(page, log)
     except Exception:
         if esta_en_login(page):
             hacer_login(page, rut_usuario, contrasena, log)
+            ir_a_empresa(page, rut_empresa, log, razon_social)
             ir_a_planillas_pagadas(page, log)
 
 
@@ -380,8 +384,7 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
 
                 if periodos_con_nomina > 0 and periodos_con_nomina % 3 == 0:
                     log("Re-login preventivo...", "info")
-                    page.goto(URL_LOGIN)
-                    time.sleep(2)
+                    # hacer_login ya navega a URL_LOGIN, no duplicar goto
                     hacer_login(page, rut_usuario, contrasena, log)
                     ir_a_empresa(page, rut_empresa, log, razon_social)
                     ir_a_planillas_pagadas(page, log)
@@ -405,15 +408,15 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                         hay = buscar_planilla(page, mes, anio, nombre_nomina)
                         if not hay:
                             log(f"Sin planillas timbradas: {nombre_nomina}", "warn")
-                            volver_a_busqueda(page, rut_usuario, contrasena, log)
+                            volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log)
                             continue
                         descargar_planilla(page, mes, anio, nombre_nomina,
                                            carpeta_temp, carpeta_dest, log)
-                        volver_a_busqueda(page, rut_usuario, contrasena, log)
+                        volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log)
                     except Exception as e:
                         log(f"Error '{nombre_nomina}' ({type(e).__name__}): {str(e)[:200]}", "err")
                         try:
-                            volver_a_busqueda(page, rut_usuario, contrasena, log)
+                            volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log)
                         except Exception:
                             pass
 

@@ -281,6 +281,85 @@ def buscar_planilla(page, mes: int, anio: int, nombre_nomina: str) -> bool:
     return True
 
 
+def _hay_dialogo_email(page) -> bool:
+    """Detecta si Previred mostró el formulario de envío por email (planilla muy grande)."""
+    try:
+        cuerpo = page.inner_text("body")
+        return "enviará por email" in cuerpo.lower() or "enviara por email" in cuerpo.lower()
+    except Exception:
+        return False
+
+
+def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
+                                  carpeta_temp: str, carpeta_dest: str, log) -> int:
+    """
+    Descarga PDFs individuales por institución desde la tabla expandida.
+    Retorna la cantidad de PDFs descargados.
+    """
+    nombre_limpio = re.sub(r'[/\\:]', '-', nombre_nomina)
+    prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
+    descargados = 0
+
+    # Expandir todas las secciones colapsadas (botones "+")
+    try:
+        expandir = page.locator("img[src*='plus'], img[alt='+'], [class*='expand'], [id*='expand']")
+        for i in range(expandir.count()):
+            try:
+                expandir.nth(i).click()
+                time.sleep(0.5)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Buscar todos los links/botones de PDF en la columna "Ver Planillas"
+    # Previred usa íconos de PDF que son links o imágenes clickeables
+    hrefs = page.evaluate("""() => {
+        var links = [];
+        document.querySelectorAll('a[href], a[onclick]').forEach(function(a) {
+            var img = a.querySelector('img');
+            var href = a.getAttribute('href') || '';
+            var onclick = a.getAttribute('onclick') || '';
+            var src = img ? (img.src || img.getAttribute('src') || '') : '';
+            if (src.toLowerCase().includes('pdf') || href.toLowerCase().includes('pdf') ||
+                onclick.toLowerCase().includes('pdf') || onclick.toLowerCase().includes('imprimir')) {
+                links.push({href: href, onclick: onclick, id: a.id || '', idx: links.length});
+            }
+        });
+        return links;
+    }""")
+
+    log(f"PDFs individuales encontrados: {len(hrefs)}", "info")
+
+    for i, link_info in enumerate(hrefs):
+        try:
+            inst_num = i + 1
+            nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
+            ruta_dest = os.path.join(carpeta_dest, nombre_dest)
+
+            with page.expect_download(timeout=30000) as dl_info:
+                # Re-buscar el link por índice (DOM puede haber cambiado)
+                links_actuales = page.locator("a:has(img[src*='pdf']), a:has(img[alt*='pdf'])")
+                if links_actuales.count() > i:
+                    links_actuales.nth(i).click()
+                else:
+                    # Fallback: click por href u onclick via JS
+                    page.evaluate("(info) => { var a = document.querySelector('[id=\"' + info.id + '\"]'); if(a) a.click(); }", link_info)
+                time.sleep(3)
+
+            dl = dl_info.value
+            dl.save_as(ruta_dest)
+            log(f"Guardado individual: {nombre_dest}", "ok")
+            descargados += 1
+            _cerrar_tabs_extra(page)
+            time.sleep(1)
+        except Exception as e:
+            log(f"Error descargando PDF {i+1}: {e.__class__.__name__}", "warn")
+            _cerrar_tabs_extra(page)
+
+    return descargados
+
+
 def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
                        carpeta_temp: str, carpeta_dest: str, log) -> bool:
     nombre_limpio = re.sub(r'[/\\:]', '-', nombre_nomina)
@@ -306,13 +385,41 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
             except Exception:
                 pass
             time.sleep(8)
+
+            # Detectar si Previred pidió envío por email (planilla muy grande)
+            if _hay_dialogo_email(page):
+                raise RuntimeError("email_dialog")
+
         dl = dl_info.value
         dl.save_as(ruta_dest)
         descargado = True
+
+    except RuntimeError as e:
+        if "email_dialog" in str(e):
+            log("Planilla muy grande — Previred pide envío por email. Descargando PDFs individuales por institución...", "warn")
+            # Volver a la página de resultados y descargar uno por uno
+            try:
+                _click_texto(page, "Nueva Búsqueda", timeout=5000)
+                time.sleep(2)
+            except Exception:
+                pass
+            try:
+                buscar_planilla(page, mes, anio, nombre_nomina)
+                n = _descargar_pdfs_individuales(page, mes, anio, nombre_nomina, carpeta_temp, carpeta_dest, log)
+                if n > 0:
+                    log(f"Descargados {n} PDF(s) individuales para '{nombre_nomina}'", "ok")
+                    return True
+                log(f"No se pudo descargar ningún PDF individual para '{nombre_nomina}'", "err")
+                return False
+            except Exception as e2:
+                log(f"Error en descarga individual: {e2}", "err")
+                return False
+        log(f"Captura directa falló ({e.__class__.__name__}), buscando PDF en carpeta...", "warn")
+
     except Exception as e:
         log(f"Captura directa falló ({e.__class__.__name__}), buscando PDF en carpeta...", "warn")
 
-    # Cerrar pestañas extra que Previred pueda haber abierto
+    # Cerrar pestañas extra
     _cerrar_tabs_extra(page)
 
     # Fallback: escanear carpeta_temp por PDFs descargados automáticamente
@@ -324,7 +431,6 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
             time.sleep(1)
         pdfs = [f for f in os.listdir(carpeta_temp) if f.endswith(".pdf")]
         if pdfs:
-            # getmtime es más confiable que getctime en Linux
             ultimo = max([os.path.join(carpeta_temp, f) for f in pdfs], key=os.path.getmtime)
             shutil.move(ultimo, ruta_dest)
             descargado = True

@@ -336,6 +336,15 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         url_antes = page.url
         paginas_antes = set(id(p) for p in page.context.pages)
 
+        # Screenshot antes del click (solo inst1 para no saturar logs)
+        if i == 0:
+            try:
+                ss_path = os.path.join(carpeta_temp, f"debug_antes_{nombre_limpio[:30]}.png")
+                page.screenshot(path=ss_path, full_page=True)
+                log(f"Screenshot guardado: {ss_path}", "info")
+            except Exception:
+                pass
+
         # Click nativo de Playwright
         try:
             imgs_loc.nth(i).click(timeout=8000)
@@ -345,11 +354,27 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
 
         time.sleep(3)
 
+        # Screenshot después del click + texto de página (solo inst1)
+        if i == 0:
+            try:
+                ss_path2 = os.path.join(carpeta_temp, f"debug_despues_{nombre_limpio[:30]}.png")
+                page.screenshot(path=ss_path2, full_page=True)
+                log(f"Screenshot post-click: {ss_path2}", "info")
+            except Exception:
+                pass
+            try:
+                texto_pagina = page.inner_text("body")[:400]
+                log(f"Texto página post-click: {texto_pagina!r}", "info")
+            except Exception:
+                pass
+
         # Diagnóstico post-click
         url_despues = page.url
         paginas_despues = page.context.pages
         nuevas_paginas = [p for p in paginas_despues if id(p) not in paginas_antes]
         log(f"inst{inst_num}: url={url_despues[:80]} | páginas_nuevas={len(nuevas_paginas)}", "info")
+        for p_nueva in nuevas_paginas:
+            log(f"  nueva_pagina_url: {p_nueva.url[:80]}", "info")
 
         if nuevas_paginas:
             # Se abrió una nueva pestaña / popup

@@ -333,34 +333,80 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
-        try:
-            # Usar click nativo de Playwright (activa event listeners JS)
-            with page.context.expect_page(timeout=15000) as nueva_pagina_info:
-                imgs_loc.nth(i).click()
-            nueva_pagina = nueva_pagina_info.value
-            nueva_pagina.wait_for_load_state("networkidle", timeout=20000)
-            pdf_url = nueva_pagina.url
-            log(f"Nueva pestaña inst{inst_num}: {pdf_url[:80]}", "info")
-            with nueva_pagina.expect_download(timeout=30000) as dl_info:
-                nueva_pagina.goto(pdf_url)
-            dl = dl_info.value
-            dl.save_as(ruta_dest)
-            nueva_pagina.close()
-            log(f"Guardado individual: {nombre_dest}", "ok")
-            descargados += 1
+        url_antes = page.url
+        paginas_antes = set(id(p) for p in page.context.pages)
 
-        except Exception as e1:
-            log(f"expect_page falló inst{inst_num}: {e1.__class__.__name__}", "info")
-            # Fallback: descarga directa en la misma página
+        # Click nativo de Playwright
+        try:
+            imgs_loc.nth(i).click(timeout=8000)
+        except Exception as ec:
+            log(f"Click falló inst{inst_num}: {ec.__class__.__name__}", "warn")
+            continue
+
+        time.sleep(3)
+
+        # Diagnóstico post-click
+        url_despues = page.url
+        paginas_despues = page.context.pages
+        nuevas_paginas = [p for p in paginas_despues if id(p) not in paginas_antes]
+        log(f"inst{inst_num}: url={url_despues[:80]} | páginas_nuevas={len(nuevas_paginas)}", "info")
+
+        if nuevas_paginas:
+            # Se abrió una nueva pestaña / popup
+            nueva_pagina = nuevas_paginas[0]
             try:
-                with page.expect_download(timeout=20000) as dl_info:
-                    imgs_loc.nth(i).click()
-                dl = dl_info.value
-                dl.save_as(ruta_dest)
+                nueva_pagina.wait_for_load_state("networkidle", timeout=20000)
+                pdf_url = nueva_pagina.url
+                log(f"inst{inst_num}: popup URL={pdf_url[:80]}", "info")
+                # Descargar usando la URL con el contexto actual
+                resp = page.context.request.get(pdf_url)
+                with open(ruta_dest, 'wb') as f:
+                    f.write(resp.body())
+                nueva_pagina.close()
                 log(f"Guardado individual: {nombre_dest}", "ok")
                 descargados += 1
-            except Exception as e2:
-                log(f"Error descargando PDF inst{inst_num}: {e2.__class__.__name__}: {e2}", "warn")
+            except Exception as e_pop:
+                log(f"Error popup inst{inst_num}: {e_pop}", "warn")
+                try:
+                    nueva_pagina.close()
+                except Exception:
+                    pass
+
+        elif url_despues != url_antes:
+            # Navegó la misma pestaña
+            log(f"inst{inst_num}: navegación same-tab a {url_despues[:80]}", "info")
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+            resp = page.context.request.get(page.url)
+            content_type = resp.headers.get("content-type", "")
+            log(f"inst{inst_num}: content-type={content_type}", "info")
+            if "pdf" in content_type.lower():
+                with open(ruta_dest, 'wb') as f:
+                    f.write(resp.body())
+                log(f"Guardado individual: {nombre_dest}", "ok")
+                descargados += 1
+            else:
+                # Renderizar la página como PDF
+                try:
+                    pdf_bytes = page.pdf()
+                    with open(ruta_dest, 'wb') as f:
+                        f.write(pdf_bytes)
+                    log(f"Guardado individual (render): {nombre_dest}", "ok")
+                    descargados += 1
+                except Exception as e_r:
+                    log(f"Error render inst{inst_num}: {e_r}", "warn")
+            # Volver a resultados
+            try:
+                page.go_back()
+                page.wait_for_load_state("networkidle", timeout=10000)
+                imgs_loc = page.locator('img[src*="planillas.gif"]')
+            except Exception:
+                pass
+
+        else:
+            log(f"inst{inst_num}: URL no cambió ni se abrió pestaña nueva — acción desconocida", "warn")
 
         _cerrar_tabs_extra(page)
         time.sleep(1)

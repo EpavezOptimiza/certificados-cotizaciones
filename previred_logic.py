@@ -576,7 +576,12 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
         page = context.new_page()
         try:
             hacer_login(page, rut_usuario, contrasena, log)
-            ir_a_empresa(page, rut_empresa, log, razon_social)
+            try:
+                ir_a_empresa(page, rut_empresa, log, razon_social)
+            except Exception as e_emp:
+                log(f"ir_a_empresa falló ({e_emp.__class__.__name__}), reintentando con re-login...", "warn")
+                hacer_login(page, rut_usuario, contrasena, log)
+                ir_a_empresa(page, rut_empresa, log, razon_social)
             ir_a_planillas_pagadas(page, log)
 
             log(f"Períodos a procesar: {len(periodos)}", "info")

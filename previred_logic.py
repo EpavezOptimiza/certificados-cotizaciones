@@ -60,6 +60,8 @@ def iniciar_driver(carpeta_temp: str) -> webdriver.Chrome:
     opciones.add_argument("--disable-gpu")
     opciones.add_argument("--disable-software-rasterizer")
     opciones.add_argument("--disable-extensions")
+    opciones.add_argument("--no-zygote")
+    opciones.add_argument("--single-process")
     opciones.add_argument("--remote-debugging-port=0")
     opciones.add_argument("--window-size=1920,1080")
     opciones.add_argument("--disable-notifications")

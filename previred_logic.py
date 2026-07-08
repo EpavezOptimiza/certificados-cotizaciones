@@ -89,8 +89,12 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
 
     page.wait_for_selector("li#empresa", timeout=20000)
     page.click("li#empresa")
-    page.wait_for_load_state("networkidle", timeout=15000)
-    time.sleep(2)
+    # Esperar a que aparezcan botones de empresa antes de evaluar
+    try:
+        page.wait_for_selector(f'[id^="{patron}"]', timeout=15000)
+    except Exception:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    time.sleep(1)
 
     ids_encontrados = page.evaluate("""(patron) => {
         return Array.from(document.querySelectorAll('[id^="' + patron + '"]'))

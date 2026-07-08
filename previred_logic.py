@@ -22,19 +22,56 @@ def rut_a_btn_id(rut: str, razon_social: str = "") -> str:
     return f"empresa#{num}#{sub_id}#false"
 
 
+def _click_texto(page, texto: str, timeout: int = 15000) -> bool:
+    """Intenta hacer click en un elemento que contenga 'texto', probando varios selectores."""
+    # 1. Playwright has-text (case-insensitive)
+    for tag in ["a", "span", "li", "button"]:
+        try:
+            loc = page.locator(f"{tag}:has-text('{texto}')").first
+            if loc.count() > 0:
+                loc.click(timeout=timeout)
+                return True
+        except Exception:
+            pass
+    # 2. JavaScript directo como último recurso
+    try:
+        found = page.evaluate(f"""() => {{
+            var nodes = document.querySelectorAll('a, span, li, button');
+            for (var el of nodes) {{
+                if (el.offsetParent !== null && el.textContent.toLowerCase().includes('{texto.lower()}')) {{
+                    el.click(); return true;
+                }}
+            }}
+            return false;
+        }}""")
+        return bool(found)
+    except Exception:
+        return False
+
+
+def _select_anio(page, anio: int):
+    """Selecciona el año en #yearR0 probando value y label."""
+    anio_str = str(anio)
+    try:
+        page.select_option("#yearR0", value=anio_str)
+    except Exception:
+        page.select_option("#yearR0", label=anio_str)
+
+
 def hacer_login(page, rut_usuario: str, contrasena: str, log):
     log("Iniciando sesión en Previred...", "info")
-    page.goto(URL_LOGIN)
+    page.goto(URL_LOGIN, wait_until="networkidle", timeout=30000)
     page.wait_for_selector('[name="web_rut2"]', timeout=20000)
     page.fill('[name="web_rut2"]', rut_usuario)
     time.sleep(0.5)
     page.fill('[name="web_password"]', contrasena)
     time.sleep(0.5)
     try:
-        page.click("button:has-text('INGRESAR')")
+        page.click("button:has-text('INGRESAR')", timeout=5000)
     except Exception:
         page.click("button[type='submit']")
-    time.sleep(4)
+    page.wait_for_load_state("networkidle", timeout=20000)
+    time.sleep(2)
     log("Sesión iniciada", "ok")
 
 
@@ -52,7 +89,8 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
 
     page.wait_for_selector("li#empresa", timeout=20000)
     page.click("li#empresa")
-    time.sleep(3)
+    page.wait_for_load_state("networkidle", timeout=15000)
+    time.sleep(2)
 
     ids_encontrados = page.evaluate("""(patron) => {
         return Array.from(document.querySelectorAll('[id^="' + patron + '"]'))
@@ -108,25 +146,33 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
             log(f"Sin sufijo en razón social, usando empresa principal: {btn_id_elegido}", "info")
 
     page.click(f'[id="{btn_id_elegido}"]')
-    time.sleep(4)
+    page.wait_for_load_state("networkidle", timeout=15000)
+    time.sleep(3)
     log("Empresa seleccionada", "ok")
 
 
 def ir_a_planillas_pagadas(page, log):
-    page.wait_for_load_state("networkidle", timeout=15000)
-    try:
-        page.locator("a:has-text('Remuneraciones'), span:has-text('Remuneraciones')").first.click(timeout=15000)
+    page.wait_for_load_state("networkidle", timeout=20000)
+    time.sleep(2)
+
+    # Remuneraciones
+    if _click_texto(page, "Remuneraciones", timeout=10000):
         log("Remuneraciones clickeado", "info")
         time.sleep(2)
-    except Exception as e:
-        log(f"Remuneraciones no encontrado (continuando): {e}", "info")
-    try:
-        page.locator("a:has-text('Imprimir Documentos'), span:has-text('Imprimir Documentos')").first.click(timeout=20000)
-    except Exception:
-        page.locator("a:has-text('Imprimir'), span:has-text('Imprimir')").first.click(timeout=20000)
+    else:
+        log("Remuneraciones no visible, continuando...", "warn")
+
+    # Imprimir Documentos
+    if not _click_texto(page, "Imprimir Documentos", timeout=15000):
+        if not _click_texto(page, "Imprimir", timeout=10000):
+            raise RuntimeError("No se encontró 'Imprimir Documentos' en el menú")
     time.sleep(2)
-    page.locator("a:has-text('Planillas Pagadas'), span:has-text('Planillas Pagadas')").first.click(timeout=20000)
-    time.sleep(6)
+
+    # Planillas Pagadas
+    if not _click_texto(page, "Planillas Pagadas", timeout=15000):
+        raise RuntimeError("No se encontró 'Planillas Pagadas' en el menú")
+    page.wait_for_load_state("networkidle", timeout=15000)
+    time.sleep(4)
     log("En sección Planillas Pagadas", "ok")
 
 
@@ -140,11 +186,20 @@ def verificar_y_relogin(page, rut_usuario, contrasena, rut_empresa, razon_social
     return False
 
 
+def _cerrar_tabs_extra(page):
+    """Cierra pestañas extra que Previred pueda abrir (PDF en nueva pestaña)."""
+    for p in page.context.pages[1:]:
+        try:
+            p.close()
+        except Exception:
+            pass
+
+
 def obtener_nominas(page, mes: int, anio: int) -> list:
     page.wait_for_selector("#mesR0", timeout=15000)
     page.select_option("#mesR0", str(mes).zfill(2))
     time.sleep(1)
-    page.select_option("#yearR0", str(anio))
+    _select_anio(page, anio)
     time.sleep(2)
     page.wait_for_selector("#combo_nominas", timeout=15000)
     opciones = page.evaluate("""() => {
@@ -158,7 +213,7 @@ def buscar_planilla(page, mes: int, anio: int, nombre_nomina: str) -> bool:
     page.wait_for_selector("#mesR0", timeout=15000)
     page.select_option("#mesR0", str(mes).zfill(2))
     time.sleep(1)
-    page.select_option("#yearR0", str(anio))
+    _select_anio(page, anio)
     time.sleep(1)
     page.wait_for_selector("#combo_nominas", timeout=15000)
     opciones = page.evaluate("""() => {
@@ -168,11 +223,11 @@ def buscar_planilla(page, mes: int, anio: int, nombre_nomina: str) -> bool:
     objetivo = next((o for o in opciones if o == nombre_nomina.strip()), None)
     if not objetivo:
         objetivo = next((o for o in opciones if nombre_nomina.strip() in o), None)
-    if objetivo:
-        page.select_option("#combo_nominas", label=objetivo)
-    else:
+    if not objetivo:
         return False
+    page.select_option("#combo_nominas", label=objetivo)
     time.sleep(1)
+
     try:
         page.wait_for_selector("#combo_tipo_institucion", timeout=8000)
         opciones_tipo = page.evaluate("""() => {
@@ -196,6 +251,8 @@ def buscar_planilla(page, mes: int, anio: int, nombre_nomina: str) -> bool:
         time.sleep(1)
     except Exception:
         time.sleep(1)
+
+    # Cerrar dialogs flotantes antes de buscar
     try:
         page.evaluate("""() => {
             document.querySelectorAll('.ui-dialog').forEach(function(d){
@@ -205,8 +262,10 @@ def buscar_planilla(page, mes: int, anio: int, nombre_nomina: str) -> bool:
         time.sleep(1)
     except Exception:
         pass
+
     page.evaluate("() => document.getElementById('buscar').click()")
     time.sleep(3)
+
     try:
         cuerpo = page.inner_text("body")
         if "no est" in cuerpo.lower() and "timbradas" in cuerpo.lower():
@@ -218,41 +277,75 @@ def buscar_planilla(page, mes: int, anio: int, nombre_nomina: str) -> bool:
 
 def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
                        carpeta_temp: str, carpeta_dest: str, log) -> bool:
-    page.wait_for_selector("button[id^='planillas_masivas']", timeout=20000)
-    with page.expect_download(timeout=60000) as dl_info:
-        page.click("button[id^='planillas_masivas']")
-        time.sleep(2)
-        try:
-            radio = page.locator("input[type='radio'][value*='total'], input[type='radio']").first
-            if not radio.is_checked():
-                radio.click()
-            time.sleep(1)
-        except Exception:
-            pass
-        try:
-            page.click("#aceptar_modal", timeout=5000)
-        except Exception:
-            pass
-    download = dl_info.value
     nombre_limpio = re.sub(r'[/\\:]', '-', nombre_nomina)
     nombre_dest = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}.pdf"
     ruta_dest = os.path.join(carpeta_dest, nombre_dest)
-    download.save_as(ruta_dest)
-    log(f"Guardado: {nombre_dest}", "ok")
-    return True
+
+    page.wait_for_selector("button[id^='planillas_masivas']", timeout=20000)
+
+    descargado = False
+
+    # Intentar capturar la descarga con expect_download
+    try:
+        with page.expect_download(timeout=45000) as dl_info:
+            page.click("button[id^='planillas_masivas']")
+            time.sleep(2)
+            try:
+                radio = page.locator("input[type='radio'][value*='total']").first
+                if radio.count() > 0 and not radio.is_checked():
+                    radio.click()
+                time.sleep(1)
+            except Exception:
+                pass
+            try:
+                page.click("#aceptar_modal", timeout=5000)
+            except Exception:
+                pass
+            time.sleep(8)
+        dl = dl_info.value
+        dl.save_as(ruta_dest)
+        descargado = True
+    except Exception as e:
+        log(f"Captura directa falló ({e.__class__.__name__}), buscando PDF en carpeta...", "warn")
+
+    # Cerrar pestañas extra que Previred pueda haber abierto
+    _cerrar_tabs_extra(page)
+
+    # Fallback: escanear carpeta_temp por PDFs descargados automáticamente
+    if not descargado:
+        for _ in range(20):
+            pdfs = [f for f in os.listdir(carpeta_temp) if f.endswith(".pdf")]
+            if pdfs:
+                break
+            time.sleep(1)
+        pdfs = [f for f in os.listdir(carpeta_temp) if f.endswith(".pdf")]
+        if pdfs:
+            ultimo = max([os.path.join(carpeta_temp, f) for f in pdfs], key=os.path.getctime)
+            shutil.move(ultimo, ruta_dest)
+            descargado = True
+
+    if descargado:
+        log(f"Guardado: {nombre_dest}", "ok")
+        return True
+
+    log(f"Sin PDF para '{nombre_nomina}'", "err")
+    return False
 
 
 def volver_a_busqueda(page, rut_usuario, contrasena, log):
-    try:
-        page.click("button:has-text('Nueva')", timeout=6000)
+    _cerrar_tabs_extra(page)
+    if _click_texto(page, "Nueva búsqueda", timeout=6000):
         time.sleep(2)
+        return
+    if _click_texto(page, "Nueva", timeout=4000):
+        time.sleep(2)
+        return
+    try:
+        ir_a_planillas_pagadas(page, log)
     except Exception:
-        try:
+        if esta_en_login(page):
+            hacer_login(page, rut_usuario, contrasena, log)
             ir_a_planillas_pagadas(page, log)
-        except Exception:
-            if esta_en_login(page):
-                hacer_login(page, rut_usuario, contrasena, log)
-                ir_a_planillas_pagadas(page, log)
 
 
 def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
@@ -267,7 +360,8 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
             args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
             downloads_path=carpeta_temp,
         )
-        page = browser.new_page(accept_downloads=True)
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
         try:
             hacer_login(page, rut_usuario, contrasena, log)
             ir_a_empresa(page, rut_empresa, log, razon_social)
@@ -324,4 +418,5 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
             log(f"Error inesperado: {e}", "err")
             raise
         finally:
+            context.close()
             browser.close()

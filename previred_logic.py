@@ -300,73 +300,65 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
     prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
     descargados = 0
 
-    # Expandir todas las secciones colapsadas (botones "+" / imágenes de expand)
+    # Expandir AFP: buscar imagen "mas_nomina.png" y hacer click en su <a> padre
     try:
-        expandir = page.locator("img[src*='plus'], img[src*='expand'], img[alt='+']")
-        for i in range(expandir.count()):
-            try:
-                expandir.nth(i).click()
-                time.sleep(0.5)
-            except Exception:
-                pass
+        mas_loc = page.locator("img[src*='mas_nomina']").first
+        mas_loc.wait_for(state="visible", timeout=8000)
+        # Click en el <a> padre si existe, si no en la imagen misma
+        try:
+            page.evaluate("() => { var img = document.querySelector(\"img[src*='mas_nomina']\"); if(img){var a=img.closest('a'); if(a){a.click();}else{img.click();}} }")
+        except Exception:
+            mas_loc.click()
+        time.sleep(2)
     except Exception:
         pass
-    time.sleep(2)
 
-    # Obtener hrefs directos de links PDF (columna Ver Planillas)
-    # Diagnóstico: listar todos los elementos con onclick o con imagen en la página
-    todos = page.evaluate("""() => {
-        var items = [];
-        document.querySelectorAll('a, img, input[type=image]').forEach(function(el) {
-            var href = el.getAttribute('href') || '';
-            var onclick = el.getAttribute('onclick') || '';
-            var src = el.getAttribute('src') || '';
-            var imgSrc = el.querySelector ? (el.querySelector('img') ? el.querySelector('img').getAttribute('src') || '' : '') : '';
-            if (onclick || src.includes('.') || href) {
-                items.push({tag: el.tagName, href: href.substring(0,80), onclick: onclick.substring(0,80), src: (src||imgSrc).substring(0,60)});
-            }
+    # Log diagnóstico del padre de cada planillas.gif para entender estructura
+    ctx_info = page.evaluate("""() => {
+        var results = [];
+        document.querySelectorAll('img[src*="planillas.gif"]').forEach(function(img, i) {
+            var p = img.parentElement;
+            var gp = p ? p.parentElement : null;
+            results.push({
+                idx: i,
+                pTag: p ? p.tagName : '-',
+                pHref: p ? (p.getAttribute('href')||'') : '',
+                pOnclick: p ? (p.getAttribute('onclick')||'') : '',
+                gpTag: gp ? gp.tagName : '-',
+                gpOnclick: gp ? (gp.getAttribute('onclick')||'') : ''
+            });
         });
-        return items;
+        return results;
     }""")
-    log(f"Todos los elementos interactivos: {len(todos)}", "info")
-    for it in todos:
-        log(f"  [{it['tag']}] href={it['href']} | onclick={it['onclick']} | src={it['src']}", "info")
+    log(f"Iconos planillas.gif encontrados: {len(ctx_info)}", "info")
+    for it in ctx_info:
+        log(f"  [{it['idx']}] padre={it['pTag']} href={it['pHref']} onclick={it['pOnclick']} | abuelo={it['gpTag']} onclick={it['gpOnclick']}", "info")
 
-    pdf_links = []  # placeholder mientras diagnosticamos
+    total_iconos = len(ctx_info)
+    if total_iconos == 0:
+        log("No se encontraron iconos planillas.gif", "warn")
+        return 0
 
-    for i, link_info in enumerate(pdf_links):
+    for i in range(total_iconos):
         inst_num = i + 1
         nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
         try:
-            # Intentar capturar como nueva pestaña (forma más común en Previred)
+            # Intentar capturar como nueva pestaña
             with page.context.expect_page(timeout=15000) as nueva_pagina_info:
-                # Re-obtener el link por índice para evitar stale references
-                links_dom = page.locator("a").filter(has=page.locator("img"))
-                pdf_links_dom = []
-                for j in range(links_dom.count()):
-                    try:
-                        el = links_dom.nth(j)
-                        img = el.locator("img").first
-                        src = img.get_attribute("src") or ""
-                        href = el.get_attribute("href") or ""
-                        onclick = el.get_attribute("onclick") or ""
-                        if any(k in (src+href+onclick).lower() for k in ["pdf", "imprimir"]):
-                            pdf_links_dom.append(j)
-                    except Exception:
-                        pass
-
-                if i < len(pdf_links_dom):
-                    links_dom.nth(pdf_links_dom[i]).click()
-                else:
-                    page.evaluate(f"() => {{ var links = document.querySelectorAll('a'); if(links[{i}]) links[{i}].click(); }}")
-
+                page.evaluate(f"""() => {{
+                    var imgs = document.querySelectorAll('img[src*="planillas.gif"]');
+                    if (imgs[{i}]) {{
+                        var a = imgs[{i}].closest('a');
+                        if (a) {{ a.click(); }}
+                        else {{ imgs[{i}].click(); }}
+                    }}
+                }}""")
             nueva_pagina = nueva_pagina_info.value
             nueva_pagina.wait_for_load_state("networkidle", timeout=20000)
             pdf_url = nueva_pagina.url
-
-            # Descargar el PDF desde la URL de la nueva pestaña
+            log(f"Nueva pestaña inst{inst_num}: {pdf_url[:80]}", "info")
             with nueva_pagina.expect_download(timeout=30000) as dl_info:
                 nueva_pagina.goto(pdf_url)
             dl = dl_info.value
@@ -376,18 +368,23 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             descargados += 1
 
         except Exception:
-            # Fallback: intentar como descarga directa
+            # Fallback: intentar como descarga directa en la misma página
             try:
                 with page.expect_download(timeout=20000) as dl_info:
-                    links_dom = page.locator("a").filter(has=page.locator("img"))
-                    if i < links_dom.count():
-                        links_dom.nth(i).click()
+                    page.evaluate(f"""() => {{
+                        var imgs = document.querySelectorAll('img[src*="planillas.gif"]');
+                        if (imgs[{i}]) {{
+                            var a = imgs[{i}].closest('a');
+                            if (a) {{ a.click(); }}
+                            else {{ imgs[{i}].click(); }}
+                        }}
+                    }}""")
                 dl = dl_info.value
                 dl.save_as(ruta_dest)
                 log(f"Guardado individual: {nombre_dest}", "ok")
                 descargados += 1
             except Exception as e2:
-                log(f"Error descargando PDF inst{inst_num}: {e2.__class__.__name__}", "warn")
+                log(f"Error descargando PDF inst{inst_num}: {e2.__class__.__name__}: {e2}", "warn")
 
         _cerrar_tabs_extra(page)
         time.sleep(1)

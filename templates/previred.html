@@ -339,6 +339,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <div class="spinner"></div> Procesando...
           </span>
           <button id="btn-zip"   class="btn-dl-excel" style="background:#1D9E75" onclick="descargarZip()">⬇ Bajar PDFs (ZIP)</button>
+          <button id="btn-guardar-carpeta" class="btn-dl-excel" style="background:#0f766e" onclick="guardarEnCarpeta(_taskId)">📁 Guardar en carpeta</button>
           <button id="btn-excel" class="btn-dl-excel" onclick="descargarExcel()">⬇ Bajar Excel</button>
         </div>
       </div>
@@ -708,6 +709,7 @@ async function convertirPdfsSubidos(){
   _logSince = 0;
   document.getElementById('estado-badge').style.display = 'inline-flex';
   document.getElementById('btn-excel').classList.remove('show');
+  document.getElementById('btn-guardar-carpeta').classList.remove('show');
   _polling  = setInterval(pollLogs, 1200);
 }
 
@@ -744,6 +746,7 @@ async function accion(tipo){
   _logSince = 0;
   document.getElementById('estado-badge').style.display = 'inline-flex';
   document.getElementById('btn-excel').classList.remove('show');
+  document.getElementById('btn-guardar-carpeta').classList.remove('show');
   _polling  = setInterval(pollLogs, 1200);
 }
 
@@ -762,7 +765,7 @@ async function pollLogs(){
       setBotones(true);
       if(data.zip){
         document.getElementById('btn-zip').classList.add('show');
-        if(_dirHandle) guardarEnCarpeta(_taskId);
+        if(_dirHandle) document.getElementById('btn-guardar-carpeta').classList.add('show');
       }
       if(data.archivo) document.getElementById('btn-excel').classList.add('show');
       toast(data.error ? 'Proceso terminó con errores' : 'Proceso completado exitosamente');

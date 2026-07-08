@@ -314,26 +314,25 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
     time.sleep(2)
 
     # Obtener hrefs directos de links PDF (columna Ver Planillas)
-    pdf_links = page.evaluate("""() => {
-        var links = [];
-        document.querySelectorAll('a').forEach(function(a) {
-            var img = a.querySelector('img');
-            var href = a.getAttribute('href') || '';
-            var onclick = a.getAttribute('onclick') || '';
-            var src = img ? (img.src || '') : '';
-            var isPdf = src.toLowerCase().includes('pdf') ||
-                        href.toLowerCase().includes('pdf') ||
-                        href.toLowerCase().includes('imprimir') ||
-                        onclick.toLowerCase().includes('pdf') ||
-                        onclick.toLowerCase().includes('imprimir');
-            if (isPdf) links.push({href: href, onclick: onclick, src: src});
+    # Diagnóstico: listar todos los elementos con onclick o con imagen en la página
+    todos = page.evaluate("""() => {
+        var items = [];
+        document.querySelectorAll('a, img, input[type=image]').forEach(function(el) {
+            var href = el.getAttribute('href') || '';
+            var onclick = el.getAttribute('onclick') || '';
+            var src = el.getAttribute('src') || '';
+            var imgSrc = el.querySelector ? (el.querySelector('img') ? el.querySelector('img').getAttribute('src') || '' : '') : '';
+            if (onclick || src.includes('.') || href) {
+                items.push({tag: el.tagName, href: href.substring(0,80), onclick: onclick.substring(0,80), src: (src||imgSrc).substring(0,60)});
+            }
         });
-        return links;
+        return items;
     }""")
+    log(f"Todos los elementos interactivos: {len(todos)}", "info")
+    for it in todos:
+        log(f"  [{it['tag']}] href={it['href']} | onclick={it['onclick']} | src={it['src']}", "info")
 
-    log(f"PDFs individuales encontrados: {len(pdf_links)}", "info")
-    for li in pdf_links[:5]:
-        log(f"  Link: href={li['href'][:80]} | onclick={li['onclick'][:80]} | src={li['src'][:60]}", "info")
+    pdf_links = []  # placeholder mientras diagnosticamos
 
     for i, link_info in enumerate(pdf_links):
         inst_num = i + 1

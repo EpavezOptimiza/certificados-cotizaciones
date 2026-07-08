@@ -300,9 +300,9 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
     prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
     descargados = 0
 
-    # Expandir todas las secciones colapsadas (botones "+")
+    # Expandir todas las secciones colapsadas (botones "+" / imágenes de expand)
     try:
-        expandir = page.locator("img[src*='plus'], img[alt='+'], [class*='expand'], [id*='expand']")
+        expandir = page.locator("img[src*='plus'], img[src*='expand'], img[alt='+']")
         for i in range(expandir.count()):
             try:
                 expandir.nth(i).click()
@@ -311,51 +311,85 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                 pass
     except Exception:
         pass
+    time.sleep(2)
 
-    # Buscar todos los links/botones de PDF en la columna "Ver Planillas"
-    # Previred usa íconos de PDF que son links o imágenes clickeables
-    hrefs = page.evaluate("""() => {
+    # Obtener hrefs directos de links PDF (columna Ver Planillas)
+    pdf_links = page.evaluate("""() => {
         var links = [];
-        document.querySelectorAll('a[href], a[onclick]').forEach(function(a) {
+        document.querySelectorAll('a').forEach(function(a) {
             var img = a.querySelector('img');
             var href = a.getAttribute('href') || '';
             var onclick = a.getAttribute('onclick') || '';
-            var src = img ? (img.src || img.getAttribute('src') || '') : '';
-            if (src.toLowerCase().includes('pdf') || href.toLowerCase().includes('pdf') ||
-                onclick.toLowerCase().includes('pdf') || onclick.toLowerCase().includes('imprimir')) {
-                links.push({href: href, onclick: onclick, id: a.id || '', idx: links.length});
-            }
+            var src = img ? (img.src || '') : '';
+            var isPdf = src.toLowerCase().includes('pdf') ||
+                        href.toLowerCase().includes('pdf') ||
+                        href.toLowerCase().includes('imprimir') ||
+                        onclick.toLowerCase().includes('pdf') ||
+                        onclick.toLowerCase().includes('imprimir');
+            if (isPdf) links.push({href: href, onclick: onclick});
         });
         return links;
     }""")
 
-    log(f"PDFs individuales encontrados: {len(hrefs)}", "info")
+    log(f"PDFs individuales encontrados: {len(pdf_links)}", "info")
 
-    for i, link_info in enumerate(hrefs):
+    for i, link_info in enumerate(pdf_links):
+        inst_num = i + 1
+        nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
+        ruta_dest = os.path.join(carpeta_dest, nombre_dest)
+
         try:
-            inst_num = i + 1
-            nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
-            ruta_dest = os.path.join(carpeta_dest, nombre_dest)
+            # Intentar capturar como nueva pestaña (forma más común en Previred)
+            with page.context.expect_page(timeout=15000) as nueva_pagina_info:
+                # Re-obtener el link por índice para evitar stale references
+                links_dom = page.locator("a").filter(has=page.locator("img"))
+                pdf_links_dom = []
+                for j in range(links_dom.count()):
+                    try:
+                        el = links_dom.nth(j)
+                        img = el.locator("img").first
+                        src = img.get_attribute("src") or ""
+                        href = el.get_attribute("href") or ""
+                        onclick = el.get_attribute("onclick") or ""
+                        if any(k in (src+href+onclick).lower() for k in ["pdf", "imprimir"]):
+                            pdf_links_dom.append(j)
+                    except Exception:
+                        pass
 
-            with page.expect_download(timeout=30000) as dl_info:
-                # Re-buscar el link por índice (DOM puede haber cambiado)
-                links_actuales = page.locator("a:has(img[src*='pdf']), a:has(img[alt*='pdf'])")
-                if links_actuales.count() > i:
-                    links_actuales.nth(i).click()
+                if i < len(pdf_links_dom):
+                    links_dom.nth(pdf_links_dom[i]).click()
                 else:
-                    # Fallback: click por href u onclick via JS
-                    page.evaluate("(info) => { var a = document.querySelector('[id=\"' + info.id + '\"]'); if(a) a.click(); }", link_info)
-                time.sleep(3)
+                    page.evaluate(f"() => {{ var links = document.querySelectorAll('a'); if(links[{i}]) links[{i}].click(); }}")
 
+            nueva_pagina = nueva_pagina_info.value
+            nueva_pagina.wait_for_load_state("networkidle", timeout=20000)
+            pdf_url = nueva_pagina.url
+
+            # Descargar el PDF desde la URL de la nueva pestaña
+            with nueva_pagina.expect_download(timeout=30000) as dl_info:
+                nueva_pagina.goto(pdf_url)
             dl = dl_info.value
             dl.save_as(ruta_dest)
+            nueva_pagina.close()
             log(f"Guardado individual: {nombre_dest}", "ok")
             descargados += 1
-            _cerrar_tabs_extra(page)
-            time.sleep(1)
-        except Exception as e:
-            log(f"Error descargando PDF {i+1}: {e.__class__.__name__}", "warn")
-            _cerrar_tabs_extra(page)
+
+        except Exception:
+            # Fallback: intentar como descarga directa
+            try:
+                with page.expect_download(timeout=20000) as dl_info:
+                    links_dom = page.locator("a").filter(has=page.locator("img"))
+                    if i < links_dom.count():
+                        links_dom.nth(i).click()
+                dl = dl_info.value
+                dl.save_as(ruta_dest)
+                log(f"Guardado individual: {nombre_dest}", "ok")
+                descargados += 1
+            except Exception as e2:
+                log(f"Error descargando PDF inst{inst_num}: {e2.__class__.__name__}", "warn")
+
+        _cerrar_tabs_extra(page)
+        time.sleep(1)
 
     return descargados
 

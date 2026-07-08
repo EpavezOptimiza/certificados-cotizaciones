@@ -113,14 +113,19 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
 
 
 def ir_a_planillas_pagadas(page, log):
+    page.wait_for_load_state("networkidle", timeout=15000)
     try:
-        page.click("text=Remuneraciones", timeout=20000)
+        page.locator("a:has-text('Remuneraciones'), span:has-text('Remuneraciones')").first.click(timeout=15000)
+        log("Remuneraciones clickeado", "info")
         time.sleep(2)
+    except Exception as e:
+        log(f"Remuneraciones no encontrado (continuando): {e}", "info")
+    try:
+        page.locator("a:has-text('Imprimir Documentos'), span:has-text('Imprimir Documentos')").first.click(timeout=20000)
     except Exception:
-        pass
-    page.click("text=Imprimir Documentos", timeout=20000)
+        page.locator("a:has-text('Imprimir'), span:has-text('Imprimir')").first.click(timeout=20000)
     time.sleep(2)
-    page.click("text=Planillas Pagadas", timeout=20000)
+    page.locator("a:has-text('Planillas Pagadas'), span:has-text('Planillas Pagadas')").first.click(timeout=20000)
     time.sleep(6)
     log("En sección Planillas Pagadas", "ok")
 

@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
     libgbm1 libpango-1.0-0 libcairo2 libx11-6 libxext6 \
     libxshmfence1 libglib2.0-0 \
-    libdbus-1-3 libexpat1 libfontconfig1 libfreetype6 \
+    libasound2t64 libdbus-1-3 libexpat1 libfontconfig1 libfreetype6 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

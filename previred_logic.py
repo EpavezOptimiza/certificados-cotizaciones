@@ -1,11 +1,7 @@
-"""Lógica de descarga Selenium para Previred — sin credenciales hardcodeadas."""
+"""Lógica de descarga Playwright para Previred — sin credenciales hardcodeadas."""
 import os, re, time, shutil
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+
+from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 URL_LOGIN = "https://www.previred.com/wPortal/login/login.jsp"
 
@@ -16,11 +12,6 @@ MESES_NOMBRE = {
 
 
 def rut_a_btn_id(rut: str, razon_social: str = "") -> str:
-    """
-    Construye el ID del botón de empresa en Previred.
-    '76.098.152-4'               → 'empresa#76098152#00#false'
-    '76.098.152-4', 'Emp (I700)' → 'empresa#76098152#700#false'
-    """
     rut = (rut or '').strip()
     num = rut.split("-")[0].replace(".", "")
     sub_id = "00"
@@ -31,99 +22,44 @@ def rut_a_btn_id(rut: str, razon_social: str = "") -> str:
     return f"empresa#{num}#{sub_id}#false"
 
 
-def _encontrar_chrome():
-    """Busca el binario de Chrome/Chromium instalado en el sistema."""
-    candidatos = ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]
-    for nombre in candidatos:
-        ruta = shutil.which(nombre)
-        if ruta:
-            return ruta
-    raise RuntimeError("No se encontró Chrome/Chromium instalado en el servidor")
-
-def _encontrar_chromedriver():
-    """Busca chromedriver instalado en el sistema."""
-    ruta = shutil.which("chromedriver")
-    if ruta:
-        return ruta
-    raise RuntimeError("No se encontró chromedriver instalado en el servidor")
-
-
-def iniciar_driver(carpeta_temp: str) -> webdriver.Chrome:
-    chrome_bin = _encontrar_chrome()
-    driver_bin = _encontrar_chromedriver()
-
-    opciones = Options()
-    opciones.binary_location = chrome_bin
-    opciones.add_argument("--headless=new")
-    opciones.add_argument("--no-sandbox")
-    opciones.add_argument("--disable-dev-shm-usage")
-    opciones.add_argument("--disable-gpu")
-    opciones.add_argument("--window-size=1920,1080")
-    opciones.add_argument("--disable-notifications")
-    prefs = {
-        "download.default_directory": carpeta_temp,
-        "download.prompt_for_download": False,
-        "plugins.always_open_pdf_externally": True,
-    }
-    opciones.add_experimental_option("prefs", prefs)
-    servicio = Service(driver_bin)
-    driver = webdriver.Chrome(service=servicio, options=opciones)
-    # Habilitar descargas en modo headless
-    driver.execute_cdp_cmd("Page.setDownloadBehavior", {
-        "behavior": "allow",
-        "downloadPath": carpeta_temp,
-    })
-    return driver
-
-
-def hacer_login(driver, rut_usuario: str, contrasena: str, log):
+def hacer_login(page, rut_usuario: str, contrasena: str, log):
     log("Iniciando sesión en Previred...", "info")
-    driver.get(URL_LOGIN)
-    wait = WebDriverWait(driver, 20)
-    campo_rut = wait.until(EC.presence_of_element_located((By.NAME, "web_rut2")))
-    campo_rut.clear()
-    campo_rut.send_keys(rut_usuario)
+    page.goto(URL_LOGIN)
+    page.wait_for_selector('[name="web_rut2"]', timeout=20000)
+    page.fill('[name="web_rut2"]', rut_usuario)
     time.sleep(0.5)
-    campo_pass = wait.until(EC.presence_of_element_located((By.NAME, "web_password")))
-    campo_pass.clear()
-    campo_pass.send_keys(contrasena)
+    page.fill('[name="web_password"]', contrasena)
     time.sleep(0.5)
     try:
-        boton = driver.find_element(By.XPATH, "//button[contains(text(),'INGRESAR')] | //input[@value='INGRESAR']")
+        page.click("button:has-text('INGRESAR')")
     except Exception:
-        boton = driver.find_element(By.XPATH, "//button[@type='submit']")
-    boton.click()
+        page.click("button[type='submit']")
     time.sleep(4)
     log("Sesión iniciada", "ok")
 
 
-def esta_en_login(driver) -> bool:
+def esta_en_login(page) -> bool:
     try:
-        driver.find_element(By.NAME, "web_rut2")
-        return True
+        return page.locator('[name="web_rut2"]').count() > 0
     except Exception:
         return False
 
 
-def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
+def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
     rut_num = rut_empresa.replace(".", "").split("-")[0]
-    patron  = f"empresa#{rut_num}#"
+    patron = f"empresa#{rut_num}#"
     log(f"Navegando a empresa {rut_empresa}...", "info")
-    wait = WebDriverWait(driver, 20)
 
-    btn_menu = wait.until(EC.element_to_be_clickable((By.XPATH, "//li[@id='empresa']")))
-    btn_menu.click()
+    page.wait_for_selector("li#empresa", timeout=20000)
+    page.click("li#empresa")
     time.sleep(3)
 
-    # Obtener IDs de botones para este RUT (sin iterar el DOM desde Python)
-    ids_encontrados = driver.execute_script("""
-        var patron = arguments[0];
+    ids_encontrados = page.evaluate("""(patron) => {
         return Array.from(document.querySelectorAll('[id^="' + patron + '"]'))
-                    .map(function(el){ return el.id; });
-    """, patron)
+                    .map(el => el.id);
+    }""", patron)
     log(f"Botones empresa encontrados: {ids_encontrados}", "info")
 
-    # Elegir el botón correcto
     btn_id_elegido = None
     if not ids_encontrados:
         btn_id_elegido = f"{patron}00#false"
@@ -131,17 +67,11 @@ def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
     elif len(ids_encontrados) == 1:
         btn_id_elegido = ids_encontrados[0]
     else:
-        # Extraer el sufijo distintivo entre paréntesis: "Empresa (I700)" → "I700"
-        # Si no hay paréntesis, usar el botón #00# (empresa principal)
         m_suf = re.search(r'\(([^)]+)\)', razon_social or "")
         if m_suf:
             sufijo = m_suf.group(1).lower().strip()
             log(f"Buscando empresa con sufijo '{sufijo}'...", "info")
-            # Buscar el ancestro ÚNICO de cada botón (primer ancestro que contenga
-            # solo 1 botón del RUT). Ese es el "row" exclusivo de esa empresa.
-            resultado = driver.execute_script("""
-                var patron = arguments[0];
-                var sufijo = arguments[1];
+            resultado = page.evaluate("""([patron, sufijo]) => {
                 var btns = document.querySelectorAll('[id^="' + patron + '"]');
                 var diagnostico = [];
                 var encontrado = null;
@@ -151,25 +81,20 @@ def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
                     while (el && depth < 15) {
                         var cnt = el.querySelectorAll('[id^="' + patron + '"]').length;
                         if (cnt === 1) {
-                            // El nombre de empresa está en el padre del ancestro único (la fila completa)
                             var parent = el.parentElement;
                             var textoRow = parent ? parent.textContent.toLowerCase().trim().replace(/\\s+/g, ' ') : '';
                             var textoEl  = el.textContent.toLowerCase().trim().replace(/\\s+/g, ' ');
                             var textoCheck = textoEl + ' ' + textoRow;
-                            if (i < 8) {
-                                diagnostico.push(btns[i].id + ' | ' + textoRow.substring(0, 150));
-                            }
-                            if (!encontrado && textoCheck.indexOf(sufijo) !== -1) {
-                                encontrado = btns[i].id;
-                            }
+                            if (i < 8) diagnostico.push(btns[i].id + ' | ' + textoRow.substring(0, 150));
+                            if (!encontrado && textoCheck.indexOf(sufijo) !== -1) encontrado = btns[i].id;
                             break;
                         }
                         el = el.parentElement;
                         depth++;
                     }
                 }
-                return {encontrado: encontrado, diagnostico: diagnostico};
-            """, patron, sufijo)
+                return {encontrado, diagnostico};
+            }""", [patron, sufijo])
             for linea in (resultado.get("diagnostico") or []):
                 log(f"  ROW: {linea}", "info")
             btn_id_elegido = resultado.get("encontrado")
@@ -179,108 +104,106 @@ def ir_a_empresa(driver, rut_empresa: str, log, razon_social: str = ""):
                 btn_id_elegido = ids_encontrados[0]
                 log(f"Sufijo '{sufijo}' no encontrado, usando primer botón", "warn")
         else:
-            # Sin sufijo → empresa principal (#00#)
             btn_id_elegido = f"{patron}00#false"
             log(f"Sin sufijo en razón social, usando empresa principal: {btn_id_elegido}", "info")
 
-    wait.until(EC.element_to_be_clickable((By.ID, btn_id_elegido))).click()
+    page.click(f"#{btn_id_elegido}")
     time.sleep(4)
     log("Empresa seleccionada", "ok")
 
 
-def ir_a_planillas_pagadas(driver, log):
-    wait = WebDriverWait(driver, 20)
+def ir_a_planillas_pagadas(page, log):
     try:
-        btn_rem = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//a[contains(text(),'Remuneraciones')] | //span[contains(text(),'Remuneraciones')]")
-        ))
-        btn_rem.click()
+        page.click("text=Remuneraciones", timeout=20000)
         time.sleep(2)
     except Exception:
         pass
-    btn_imprimir = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, "//a[contains(text(),'Imprimir Documentos')] | //span[contains(text(),'Imprimir Documentos')]")
-    ))
-    btn_imprimir.click()
+    page.click("text=Imprimir Documentos", timeout=20000)
     time.sleep(2)
-    btn_planillas = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, "//a[contains(text(),'Planillas Pagadas')] | //span[contains(text(),'Planillas Pagadas')]")
-    ))
-    btn_planillas.click()
+    page.click("text=Planillas Pagadas", timeout=20000)
     time.sleep(6)
     log("En sección Planillas Pagadas", "ok")
 
 
-def verificar_y_relogin(driver, rut_usuario, contrasena, rut_empresa, razon_social, log):
-    if esta_en_login(driver):
+def verificar_y_relogin(page, rut_usuario, contrasena, rut_empresa, razon_social, log):
+    if esta_en_login(page):
         log("Sesión expirada — re-login automático...", "warn")
-        hacer_login(driver, rut_usuario, contrasena, log)
-        ir_a_empresa(driver, rut_empresa, log, razon_social)
-        ir_a_planillas_pagadas(driver, log)
+        hacer_login(page, rut_usuario, contrasena, log)
+        ir_a_empresa(page, rut_empresa, log, razon_social)
+        ir_a_planillas_pagadas(page, log)
         return True
     return False
 
 
-def obtener_nominas(driver, mes: int, anio: int) -> list:
-    wait = WebDriverWait(driver, 15)
-    Select(wait.until(EC.presence_of_element_located((By.ID, "mesR0")))).select_by_value(str(mes).zfill(2))
+def obtener_nominas(page, mes: int, anio: int) -> list:
+    page.wait_for_selector("#mesR0", timeout=15000)
+    page.select_option("#mesR0", str(mes).zfill(2))
     time.sleep(1)
-    Select(wait.until(EC.presence_of_element_located((By.ID, "yearR0")))).select_by_visible_text(str(anio))
+    page.select_option("#yearR0", str(anio))
     time.sleep(2)
-    select_nomina = Select(wait.until(EC.presence_of_element_located((By.ID, "combo_nominas"))))
-    nominas = []
-    for o in select_nomina.options:
-        texto = o.text.strip()
-        valor = o.get_attribute("value") or ""
-        if texto and valor and "seleccione" not in texto.lower():
-            nominas.append(texto)
-    return nominas
+    page.wait_for_selector("#combo_nominas", timeout=15000)
+    opciones = page.evaluate("""() => {
+        var sel = document.getElementById('combo_nominas');
+        return Array.from(sel.options).map(o => ({text: o.text.trim(), value: o.value}));
+    }""")
+    return [o["text"] for o in opciones if o["text"] and o["value"] and "seleccione" not in o["text"].lower()]
 
 
-def buscar_planilla(driver, mes: int, anio: int, nombre_nomina: str) -> bool:
-    wait = WebDriverWait(driver, 15)
-    Select(wait.until(EC.presence_of_element_located((By.ID, "mesR0")))).select_by_value(str(mes).zfill(2))
+def buscar_planilla(page, mes: int, anio: int, nombre_nomina: str) -> bool:
+    page.wait_for_selector("#mesR0", timeout=15000)
+    page.select_option("#mesR0", str(mes).zfill(2))
     time.sleep(1)
-    Select(wait.until(EC.presence_of_element_located((By.ID, "yearR0")))).select_by_visible_text(str(anio))
+    page.select_option("#yearR0", str(anio))
     time.sleep(1)
-    select_nomina = Select(wait.until(EC.presence_of_element_located((By.ID, "combo_nominas"))))
-    opciones = [o for o in select_nomina.options if o.text.strip() == nombre_nomina.strip()]
-    if not opciones:
-        opciones = [o for o in select_nomina.options if nombre_nomina.strip() in o.text.strip()]
-    if opciones:
-        select_nomina.select_by_visible_text(opciones[0].text)
+    page.wait_for_selector("#combo_nominas", timeout=15000)
+    opciones = page.evaluate("""() => {
+        var sel = document.getElementById('combo_nominas');
+        return Array.from(sel.options).map(o => o.text.trim());
+    }""")
+    objetivo = next((o for o in opciones if o == nombre_nomina.strip()), None)
+    if not objetivo:
+        objetivo = next((o for o in opciones if nombre_nomina.strip() in o), None)
+    if objetivo:
+        page.select_option("#combo_nominas", label=objetivo)
     else:
         return False
     time.sleep(1)
     try:
-        select_tipo = Select(wait.until(EC.presence_of_element_located((By.ID, "combo_tipo_institucion"))))
-        afp_opt = next((o for o in select_tipo.options if "AFP" in o.text.upper()), None)
+        page.wait_for_selector("#combo_tipo_institucion", timeout=8000)
+        opciones_tipo = page.evaluate("""() => {
+            var sel = document.getElementById('combo_tipo_institucion');
+            return Array.from(sel.options).map(o => o.text);
+        }""")
+        afp_opt = next((o for o in opciones_tipo if "AFP" in o.upper()), None)
         if afp_opt:
-            select_tipo.select_by_visible_text(afp_opt.text)
+            page.select_option("#combo_tipo_institucion", label=afp_opt)
         time.sleep(3)
-        wait_inst = WebDriverWait(driver, 8)
-        wait_inst.until(lambda d: len(Select(d.find_element(By.ID, "combo_instituciones")).options) >= 1)
-        sel_inst = Select(driver.find_element(By.ID, "combo_instituciones"))
-        textos_inst = [o.text for o in sel_inst.options]
+        page.wait_for_function("""() => {
+            var sel = document.getElementById('combo_instituciones');
+            return sel && sel.options.length >= 1;
+        }""", timeout=8000)
+        textos_inst = page.evaluate("""() => {
+            var sel = document.getElementById('combo_instituciones');
+            return Array.from(sel.options).map(o => o.text);
+        }""")
         if "Todas las Instituciones" in textos_inst:
-            sel_inst.select_by_visible_text("Todas las Instituciones")
+            page.select_option("#combo_instituciones", label="Todas las Instituciones")
         time.sleep(1)
     except Exception:
         time.sleep(1)
     try:
-        driver.execute_script("""
+        page.evaluate("""() => {
             document.querySelectorAll('.ui-dialog').forEach(function(d){
                 var btn=d.querySelector('button'); if(btn) btn.click();
             });
-        """)
+        }""")
         time.sleep(1)
     except Exception:
         pass
-    boton = wait.until(EC.presence_of_element_located((By.ID, "buscar")))
-    driver.execute_script("arguments[0].click();", boton)
+    page.evaluate("() => document.getElementById('buscar').click()")
     time.sleep(3)
     try:
-        cuerpo = driver.find_element(By.TAG_NAME, "body").text
+        cuerpo = page.inner_text("body")
         if "no est" in cuerpo.lower() and "timbradas" in cuerpo.lower():
             return False
     except Exception:
@@ -288,138 +211,112 @@ def buscar_planilla(driver, mes: int, anio: int, nombre_nomina: str) -> bool:
     return True
 
 
-def descargar_planilla(driver, mes: int, anio: int, nombre_nomina: str,
+def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
                        carpeta_temp: str, carpeta_dest: str, log) -> bool:
-    wait = WebDriverWait(driver, 20)
-    btn_masivas = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, "//button[starts-with(@id,'planillas_masivas')]")
-    ))
-    btn_masivas.click()
-    time.sleep(2)
-    try:
-        radio = WebDriverWait(driver, 3).until(EC.presence_of_element_located(
-            (By.XPATH, "//input[@type='radio' and contains(@value,'total')] | //input[@type='radio'][1]")
-        ))
-        if not radio.is_selected():
-            radio.click()
-        time.sleep(1)
-    except Exception:
-        pass
-    try:
-        btn_imp = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "aceptar_modal")))
-        btn_imp.click()
-    except Exception:
-        pass
-    time.sleep(8)
-    if len(driver.window_handles) > 1:
-        driver.switch_to.window(driver.window_handles[-1])
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
-    time.sleep(2)
+    page.wait_for_selector("button[id^='planillas_masivas']", timeout=20000)
+    with page.expect_download(timeout=60000) as dl_info:
+        page.click("button[id^='planillas_masivas']")
+        time.sleep(2)
+        try:
+            radio = page.locator("input[type='radio'][value*='total'], input[type='radio']").first
+            if not radio.is_checked():
+                radio.click()
+            time.sleep(1)
+        except Exception:
+            pass
+        try:
+            page.click("#aceptar_modal", timeout=5000)
+        except Exception:
+            pass
+    download = dl_info.value
     nombre_limpio = re.sub(r'[/\\:]', '-', nombre_nomina)
     nombre_dest = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}.pdf"
     ruta_dest = os.path.join(carpeta_dest, nombre_dest)
-    for _ in range(20):
-        pdfs = [f for f in os.listdir(carpeta_temp) if f.endswith(".pdf")]
-        if pdfs:
-            break
-        time.sleep(1)
-    pdfs = [f for f in os.listdir(carpeta_temp) if f.endswith(".pdf")]
-    if pdfs:
-        ultimo = max([os.path.join(carpeta_temp, f) for f in pdfs], key=os.path.getctime)
-        shutil.move(ultimo, ruta_dest)
-        log(f"Guardado: {nombre_dest}", "ok")
-        return True
-    log(f"Sin PDF para '{nombre_nomina}'", "err")
-    return False
+    download.save_as(ruta_dest)
+    log(f"Guardado: {nombre_dest}", "ok")
+    return True
 
 
-def volver_a_busqueda(driver, rut_usuario, contrasena, log):
+def volver_a_busqueda(page, rut_usuario, contrasena, log):
     try:
-        wait = WebDriverWait(driver, 6)
-        btn = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//button[contains(.,'Nueva') and contains(.,'squeda')]")
-        ))
-        btn.click()
+        page.click("button:has-text('Nueva')", timeout=6000)
         time.sleep(2)
     except Exception:
         try:
-            ir_a_planillas_pagadas(driver, log)
+            ir_a_planillas_pagadas(page, log)
         except Exception:
-            if esta_en_login(driver):
-                hacer_login(driver, rut_usuario, contrasena, log)
-                ir_a_planillas_pagadas(driver, log)
+            if esta_en_login(page):
+                hacer_login(page, rut_usuario, contrasena, log)
+                ir_a_planillas_pagadas(page, log)
 
 
 def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
               periodos: list, carpeta_dest: str, carpeta_temp: str, log,
               razon_social: str = ""):
-    """
-    Descarga planillas PDF de Previred para los períodos indicados.
-    periodos: lista de (mes:int, anio:int)
-    razon_social: si la empresa tiene variantes (I700, I358...) se usa para
-                  construir el botón correcto en Previred.
-    log: callable(msg, tipo) donde tipo ∈ 'info'|'ok'|'warn'|'err'
-    """
     os.makedirs(carpeta_dest, exist_ok=True)
     os.makedirs(carpeta_temp, exist_ok=True)
 
-    driver = iniciar_driver(carpeta_temp)
-    try:
-        hacer_login(driver, rut_usuario, contrasena, log)
-        ir_a_empresa(driver, rut_empresa, log, razon_social)
-        ir_a_planillas_pagadas(driver, log)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+            downloads_path=carpeta_temp,
+        )
+        page = browser.new_page(accept_downloads=True)
+        try:
+            hacer_login(page, rut_usuario, contrasena, log)
+            ir_a_empresa(page, rut_empresa, log, razon_social)
+            ir_a_planillas_pagadas(page, log)
 
-        log(f"Períodos a procesar: {len(periodos)}", "info")
+            log(f"Períodos a procesar: {len(periodos)}", "info")
 
-        periodos_con_nomina = 0
-        for (mes, anio) in periodos:
-            mes_nombre = MESES_NOMBRE.get(mes, str(mes))
-            log(f"── Período: {mes_nombre} {anio}", "info")
+            periodos_con_nomina = 0
+            for (mes, anio) in periodos:
+                mes_nombre = MESES_NOMBRE.get(mes, str(mes))
+                log(f"── Período: {mes_nombre} {anio}", "info")
 
-            if periodos_con_nomina > 0 and periodos_con_nomina % 3 == 0:
-                log("Re-login preventivo...", "info")
-                driver.get(URL_LOGIN)
-                time.sleep(2)
-                hacer_login(driver, rut_usuario, contrasena, log)
-                ir_a_empresa(driver, rut_empresa, log, razon_social)
-                ir_a_planillas_pagadas(driver, log)
+                if periodos_con_nomina > 0 and periodos_con_nomina % 3 == 0:
+                    log("Re-login preventivo...", "info")
+                    page.goto(URL_LOGIN)
+                    time.sleep(2)
+                    hacer_login(page, rut_usuario, contrasena, log)
+                    ir_a_empresa(page, rut_empresa, log, razon_social)
+                    ir_a_planillas_pagadas(page, log)
 
-            try:
-                nominas = obtener_nominas(driver, mes, anio)
-            except Exception as e:
-                log(f"Error obteniendo nóminas: {e}", "err")
-                continue
-
-            if not nominas:
-                log("Sin nóminas para este período", "warn")
-                continue
-
-            periodos_con_nomina += 1
-
-            log(f"Nóminas ({len(nominas)}): {', '.join(nominas)}", "info")
-
-            for nombre_nomina in nominas:
-                log(f"Procesando: {nombre_nomina}", "info")
                 try:
-                    hay = buscar_planilla(driver, mes, anio, nombre_nomina)
-                    if not hay:
-                        log(f"Sin planillas timbradas: {nombre_nomina}", "warn")
-                        volver_a_busqueda(driver, rut_usuario, contrasena, log)
-                        continue
-                    descargar_planilla(driver, mes, anio, nombre_nomina,
-                                       carpeta_temp, carpeta_dest, log)
-                    volver_a_busqueda(driver, rut_usuario, contrasena, log)
+                    nominas = obtener_nominas(page, mes, anio)
                 except Exception as e:
-                    log(f"Error '{nombre_nomina}' ({type(e).__name__}): {str(e)[:200]}", "err")
-                    try:
-                        volver_a_busqueda(driver, rut_usuario, contrasena, log)
-                    except Exception:
-                        pass
+                    log(f"Error obteniendo nóminas: {e}", "err")
+                    continue
 
-        log("Descarga completada", "ok")
-    except Exception as e:
-        log(f"Error inesperado: {e}", "err")
-        raise
-    finally:
-        driver.quit()
+                if not nominas:
+                    log("Sin nóminas para este período", "warn")
+                    continue
+
+                periodos_con_nomina += 1
+                log(f"Nóminas ({len(nominas)}): {', '.join(nominas)}", "info")
+
+                for nombre_nomina in nominas:
+                    log(f"Procesando: {nombre_nomina}", "info")
+                    try:
+                        hay = buscar_planilla(page, mes, anio, nombre_nomina)
+                        if not hay:
+                            log(f"Sin planillas timbradas: {nombre_nomina}", "warn")
+                            volver_a_busqueda(page, rut_usuario, contrasena, log)
+                            continue
+                        descargar_planilla(page, mes, anio, nombre_nomina,
+                                           carpeta_temp, carpeta_dest, log)
+                        volver_a_busqueda(page, rut_usuario, contrasena, log)
+                    except Exception as e:
+                        log(f"Error '{nombre_nomina}' ({type(e).__name__}): {str(e)[:200]}", "err")
+                        try:
+                            volver_a_busqueda(page, rut_usuario, contrasena, log)
+                        except Exception:
+                            pass
+
+            log("Descarga completada", "ok")
+        except Exception as e:
+            log(f"Error inesperado: {e}", "err")
+            raise
+        finally:
+            browser.close()

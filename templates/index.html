@@ -971,6 +971,7 @@ async function selEmpresa(eid,gid){
   document.getElementById("home-view").style.display="none";
   document.getElementById("sol-view").style.display="none";
   document.getElementById("tabla").style.display="";
+  document.getElementById("filters").style.display="";
   document.getElementById("nav-principal").style.background="rgba(255,255,255,.06)";
   const r=await fetch(`/api/empresas/${eid}`);
   const emp=await r.json();
@@ -1551,6 +1552,7 @@ async function verPrincipal(){
   document.getElementById("sol-view").style.display="none";
   document.getElementById("home-view").style.display="";
   document.getElementById("stats").innerHTML="";
+  document.getElementById("filters").style.display="none";
   document.getElementById("btn-reporte").style.display="none";
   document.getElementById("btn-mas").style.display="none";
   document.getElementById("btn-agregar").style.display="none";
@@ -1651,6 +1653,7 @@ async function verSolicitudes(){
   document.getElementById("home-view").style.display="none";
   document.getElementById("tabla").style.display="none";
   document.getElementById("sol-view").style.display="";
+  document.getElementById("filters").style.display="none";
   document.getElementById("stats").innerHTML="";
   document.getElementById("header-title").textContent="📄 Certificados de deuda";
   document.getElementById("header-meta").textContent="";

@@ -334,73 +334,77 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
-        paginas_antes = set(id(p) for p in page.context.pages)
-
+        # 1. Click en ícono planilla → modal aparece en página principal
         try:
             page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
             continue
 
-        # Esperar hasta 8s a que se abra la pestaña del diálogo
-        dialogo_pag = None
-        for _ in range(32):
-            page.wait_for_timeout(250)
-            dialogo_pag = next((p for p in page.context.pages if id(p) not in paginas_antes), None)
-            if dialogo_pag:
-                break
-
-        if not dialogo_pag:
-            log(f"inst{inst_num} ({nombre_inst}): no se abrió diálogo", "warn")
+        # 2. Esperar modal en página principal
+        try:
+            page.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
+        except Exception:
+            log(f"inst{inst_num} ({nombre_inst}): modal no apareció", "warn")
             time.sleep(1)
             continue
 
+        # 3. Seleccionar Total Empresa si no está marcado
         try:
-            dialogo_pag.wait_for_load_state('domcontentloaded', timeout=10000)
+            radio = page.locator("input[type='radio'][value*='total']").first
+            if radio.count() > 0 and not radio.is_checked():
+                radio.click()
+            page.wait_for_timeout(500)
+        except Exception:
+            pass
 
-            # Seleccionar Total Empresa si no está marcado
-            try:
-                radio = dialogo_pag.locator("input[type='radio'][value*='total']").first
-                if radio.count() > 0 and not radio.is_checked():
-                    radio.click()
-                dialogo_pag.wait_for_timeout(500)
-            except Exception:
-                pass
+        # 4. Click Imprimir → abre pestaña CtrlPdf con el PDF real
+        guardado = False
+        try:
+            with page.context.expect_page(timeout=12000) as nueva_pag_info:
+                page.click("#aceptar_modal")
+                log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
 
-            # Hacer clic en Imprimir y capturar la planilla real
-            dialogo_pag.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
-            guardado = False
+            ctrlpdf_pag = nueva_pag_info.value
+
+            # 5. Capturar PDF de la nueva pestaña (descarga o render)
             try:
-                with dialogo_pag.expect_download(timeout=20000) as dl_info:
-                    dialogo_pag.click("#aceptar_modal")
-                    log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
-                    dialogo_pag.wait_for_timeout(3000)
+                with ctrlpdf_pag.expect_download(timeout=20000) as dl_info:
+                    ctrlpdf_pag.wait_for_load_state('domcontentloaded', timeout=15000)
                 dl = dl_info.value
                 dl.save_as(ruta_dest)
                 guardado = True
             except Exception:
-                # Sin descarga directa — renderizar lo que cargó en el tab
                 try:
-                    dialogo_pag.wait_for_load_state('domcontentloaded', timeout=10000)
-                    dialogo_pag.wait_for_timeout(2000)
-                    pdf_bytes = dialogo_pag.pdf()
+                    ctrlpdf_pag.wait_for_load_state('domcontentloaded', timeout=10000)
+                    ctrlpdf_pag.wait_for_timeout(1500)
+                    pdf_bytes = ctrlpdf_pag.pdf()
                     with open(ruta_dest, 'wb') as f:
                         f.write(pdf_bytes)
                     guardado = True
-                except Exception as e_pdf:
-                    log(f"inst{inst_num} ({nombre_inst}): render falló {e_pdf.__class__.__name__}", "warn")
+                except Exception as e_r:
+                    log(f"inst{inst_num} ({nombre_inst}): render falló {e_r.__class__.__name__}", "warn")
 
-            dialogo_pag.close()
-            if guardado:
-                log(f"Guardado: {nombre_dest}", "ok")
-                descargados += 1
-
-        except Exception as e_tab:
-            log(f"inst{inst_num} ({nombre_inst}): error {e_tab.__class__.__name__}", "warn")
             try:
-                dialogo_pag.close()
+                ctrlpdf_pag.close()
             except Exception:
                 pass
+
+        except Exception as e_np:
+            log(f"inst{inst_num} ({nombre_inst}): no se abrió CtrlPdf ({e_np.__class__.__name__})", "warn")
+
+        # 6. Cerrar modal si quedó abierto
+        try:
+            cerrar = page.locator("button:has-text('Cerrar')").first
+            if cerrar.is_visible():
+                cerrar.click()
+            page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        if guardado:
+            log(f"Guardado: {nombre_dest}", "ok")
+            descargados += 1
 
         time.sleep(1)
 

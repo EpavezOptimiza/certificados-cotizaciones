@@ -431,8 +431,8 @@ body.dark .pref-label{color:#e2e8f0}
           </div>
         </div>
 
-        <!-- Notas recientes -->
-        <div style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)">
+        <!-- Notas recientes (oculto para consultor) -->
+        <div id="home-notas-card" style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)">
           <div style="padding:12px 14px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:13px;font-weight:700;color:#0f172a">📝 Notas recientes</span>
             <a href="/notas" style="font-size:10px;color:var(--accent);text-decoration:none;font-weight:600">Ver todas →</a>
@@ -1569,6 +1569,8 @@ async function verPrincipal(){
   const tituloTareas = document.getElementById("home-tareas-titulo");
   if(tituloTareas) tituloTareas.textContent = esConsultor ? "✅ Tareas del equipo" : "✅ Mis tareas";
   const urlTareas = esConsultor ? "/api/tareas/equipo" : "/api/tareas";
+  const notasCard = document.getElementById("home-notas-card");
+  if(notasCard) notasCard.style.display = esConsultor ? "none" : "";
 
   // Cargar tareas, notas y noticias en paralelo
   const [rTareas, rNotas, rNoticias] = await Promise.allSettled([

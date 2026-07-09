@@ -71,7 +71,7 @@ def hacer_login(page, rut_usuario: str, contrasena: str, log):
         page.click("button:has-text('INGRESAR')", timeout=5000)
     except Exception:
         page.click("button[type='submit']")
-    page.wait_for_load_state("networkidle", timeout=20000)
+    page.wait_for_load_state("domcontentloaded", timeout=20000)
     time.sleep(2)
     log("Sesión iniciada", "ok")
 
@@ -92,7 +92,7 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
     page.click("li#empresa")
     # Esperar navegación completa antes de evaluar
     try:
-        page.wait_for_load_state("networkidle", timeout=20000)
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
     except Exception:
         pass
     try:
@@ -113,7 +113,7 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
         except Exception as e:
             if "context was destroyed" in str(e).lower() and intento < 2:
                 try:
-                    page.wait_for_load_state("networkidle", timeout=15000)
+                    page.wait_for_load_state("domcontentloaded", timeout=15000)
                 except Exception:
                     pass
             else:
@@ -170,19 +170,19 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
             log(f"Sin sufijo en razón social, usando empresa principal: {btn_id_elegido}", "info")
 
     page.click(f'[id="{btn_id_elegido}"]')
-    page.wait_for_load_state("networkidle", timeout=15000)
+    page.wait_for_load_state("domcontentloaded", timeout=15000)
     time.sleep(3)
     log("Empresa seleccionada", "ok")
 
 
 def ir_a_planillas_pagadas(page, log):
-    page.wait_for_load_state("networkidle", timeout=20000)
+    page.wait_for_load_state("domcontentloaded", timeout=20000)
     time.sleep(2)
 
     # Remuneraciones — expande el submenú
     if _click_texto(page, "Remuneraciones", timeout=10000):
         log("Remuneraciones clickeado", "info")
-        page.wait_for_load_state("networkidle", timeout=10000)
+        page.wait_for_load_state("domcontentloaded", timeout=10000)
         time.sleep(2)
     else:
         log("Remuneraciones no visible, continuando...", "warn")
@@ -196,7 +196,7 @@ def ir_a_planillas_pagadas(page, log):
     # Planillas Pagadas
     if not _click_texto(page, "Planillas Pagadas", timeout=15000):
         raise RuntimeError("No se encontró 'Planillas Pagadas' en el menú")
-    page.wait_for_load_state("networkidle", timeout=15000)
+    page.wait_for_load_state("domcontentloaded", timeout=15000)
     time.sleep(4)
     log("En sección Planillas Pagadas", "ok")
 
@@ -399,7 +399,7 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             # Se abrió una nueva pestaña / popup
             nueva_pagina = nuevas_paginas[0]
             try:
-                nueva_pagina.wait_for_load_state("networkidle", timeout=20000)
+                nueva_pagina.wait_for_load_state("domcontentloaded", timeout=20000)
                 pdf_url = nueva_pagina.url
                 log(f"inst{inst_num}: popup URL={pdf_url[:80]}", "info")
                 # Descargar usando la URL con el contexto actual
@@ -420,7 +420,7 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             # Navegó la misma pestaña
             log(f"inst{inst_num}: navegación same-tab a {url_despues[:80]}", "info")
             try:
-                page.wait_for_load_state("networkidle", timeout=10000)
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
             except Exception:
                 pass
             resp = page.context.request.get(page.url)
@@ -444,7 +444,7 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             # Volver a resultados
             try:
                 page.go_back()
-                page.wait_for_load_state("networkidle", timeout=10000)
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
                 imgs_loc = page.locator('img[src*="planillas.gif"]')
             except Exception:
                 pass
@@ -574,6 +574,9 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
         )
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
+        # Timeout global: ninguna operación Playwright puede colgar más de 45s
+        page.set_default_timeout(45000)
+        page.set_default_navigation_timeout(45000)
         try:
             hacer_login(page, rut_usuario, contrasena, log)
             try:

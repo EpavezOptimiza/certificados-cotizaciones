@@ -399,18 +399,27 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         # Limpiar URLs capturadas anteriores
         page.evaluate("window._previredOpenedUrls = []")
 
+        # Monitorear requests de red post-click
+        network_urls = []
+        def _on_req(req):
+            network_urls.append(f"{req.method} {req.url}")
+        page.on("request", _on_req)
+
         # Click JS en el ícono
         try:
             page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
+            page.remove_listener("request", _on_req)
             continue
 
-        time.sleep(2)
+        time.sleep(3)
+        page.remove_listener("request", _on_req)
 
         # Ver si window.open fue llamado
         opened_urls = page.evaluate("window._previredOpenedUrls || []")
-        log(f"inst{inst_num} ({nombre_inst}): window.open URLs={opened_urls}", "info")
+        log(f"inst{inst_num} ({nombre_inst}): window.open={opened_urls}", "info")
+        log(f"inst{inst_num} ({nombre_inst}): network={network_urls}", "info")
 
         for pdf_url in opened_urls:
             if not pdf_url:

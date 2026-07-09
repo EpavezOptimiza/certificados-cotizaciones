@@ -368,57 +368,102 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
 
     imgs_loc = page.locator('img[src*="planillas.gif"]')
 
+    # Extraer IDs de los imgs para obtener parámetros de descarga
+    ids_info = page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('img[src*="planillas.gif"]')).map(function(img) {
+            return img.id || '';
+        });
+    }""")
+    log(f"IDs planillas: {ids_info}", "info")
+
+    # Interceptar window.open para capturar URLs que abre Previred
+    page.evaluate("""() => {
+        window._previredOpenedUrls = [];
+        var orig = window.open;
+        window.open = function(url, name, opts) {
+            window._previredOpenedUrls.push(url || '');
+            return orig.apply(this, arguments);
+        };
+    }""")
+
     for i in range(total_iconos):
         inst_num = i + 1
-        nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
+        img_id = ids_info[i] if i < len(ids_info) else ''
+        # Nombre de institución desde el id: planilla_individual#folio#0#token#NombreInst
+        partes_id = img_id.split('#')
+        nombre_inst = partes_id[-1] if len(partes_id) > 1 else f"inst{inst_num:02d}"
+        nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
         guardado = False
 
-        # Intentar capturar popup (Previred suele abrir PDF en nueva ventana)
+        # Limpiar URLs capturadas anteriores
+        page.evaluate("window._previredOpenedUrls = []")
+
+        # Click JS en el ícono
         try:
-            with page.expect_popup(timeout=15000) as popup_info:
-                page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
-            popup = popup_info.value
+            page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
+        except Exception as ec:
+            log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
+            continue
+
+        time.sleep(2)
+
+        # Ver si window.open fue llamado
+        opened_urls = page.evaluate("window._previredOpenedUrls || []")
+        log(f"inst{inst_num} ({nombre_inst}): window.open URLs={opened_urls}", "info")
+
+        for pdf_url in opened_urls:
+            if not pdf_url:
+                continue
+            # Construir URL absoluta si es relativa
+            if pdf_url.startswith('/'):
+                base = page.url.split('/wPortal')[0] if '/wPortal' in page.url else 'https://www.previred.com'
+                pdf_url = base + pdf_url
             try:
-                popup.wait_for_load_state("domcontentloaded", timeout=15000)
-                pdf_url = popup.url
-                log(f"inst{inst_num}: popup={pdf_url[:80]}", "info")
                 resp = page.context.request.get(pdf_url)
                 content_type = resp.headers.get("content-type", "")
+                log(f"  URL={pdf_url[:80]} content-type={content_type}", "info")
                 if "pdf" in content_type.lower():
                     with open(ruta_dest, 'wb') as f:
                         f.write(resp.body())
                     log(f"Guardado: {nombre_dest}", "ok")
                     guardado = True
+                    break
                 else:
-                    # Renderizar como PDF si no es descarga directa
-                    pdf_bytes = popup.pdf()
+                    # Renderizar la página abierta como PDF
+                    with page.expect_popup(timeout=8000) as pp:
+                        page.evaluate(f"window.open({repr(pdf_url)})")
+                    pop = pp.value
+                    pop.wait_for_load_state("domcontentloaded", timeout=10000)
+                    pdf_bytes = pop.pdf()
+                    pop.close()
                     with open(ruta_dest, 'wb') as f:
                         f.write(pdf_bytes)
                     log(f"Guardado (render): {nombre_dest}", "ok")
                     guardado = True
-            finally:
-                try:
-                    popup.close()
-                except Exception:
-                    pass
-        except Exception as e_popup:
-            log(f"inst{inst_num}: sin popup ({e_popup.__class__.__name__}), intentando download directo...", "info")
+                    break
+            except Exception as e_url:
+                log(f"  Error descargando URL: {e_url}", "warn")
 
-        # Fallback: capturar como descarga directa
         if not guardado:
+            # Fallback: capturar popup directamente
             try:
-                with page.expect_download(timeout=15000) as dl_info:
+                with page.expect_popup(timeout=10000) as popup_info:
                     page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
-                dl = dl_info.value
-                dl.save_as(ruta_dest)
-                log(f"Guardado (download): {nombre_dest}", "ok")
-                guardado = True
-            except Exception as e_dl:
-                log(f"inst{inst_num}: download directo falló ({e_dl.__class__.__name__})", "warn")
+                popup = popup_info.value
+                popup.wait_for_load_state("domcontentloaded", timeout=15000)
+                resp = page.context.request.get(popup.url)
+                popup.close()
+                if "pdf" in resp.headers.get("content-type", "").lower():
+                    with open(ruta_dest, 'wb') as f:
+                        f.write(resp.body())
+                    log(f"Guardado (popup): {nombre_dest}", "ok")
+                    guardado = True
+            except Exception as e_fb:
+                log(f"inst{inst_num} ({nombre_inst}): fallback popup falló {e_fb.__class__.__name__}", "warn")
 
         if not guardado:
-            log(f"inst{inst_num}: no se pudo descargar", "warn")
+            log(f"inst{inst_num} ({nombre_inst}): no se pudo descargar", "warn")
         else:
             descargados += 1
 

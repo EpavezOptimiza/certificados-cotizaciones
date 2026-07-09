@@ -1915,8 +1915,10 @@ def previred_iniciar():
                     _log(tid, f"── Empresa: {rut_empresa} {('— ' + razon_social) if razon_social else ''}", "info")
                     carpeta_emp = os.path.join(_oi["base"], rut_empresa.replace(".", "").replace("-", ""))
                     os.makedirs(carpeta_emp, exist_ok=True)
+                    carpeta_temp_tarea = os.path.join(_TEMP_DIR, tid)
+                    os.makedirs(carpeta_temp_tarea, exist_ok=True)
                     descargar(rut_usr, cont_usr, rut_empresa, periodos,
-                              carpeta_emp, _TEMP_DIR, lambda m, t: _log(tid, m, t),
+                              carpeta_emp, carpeta_temp_tarea, lambda m, t: _log(tid, m, t),
                               razon_social=razon_social)
                     pdfs_emp = [os.path.join(carpeta_emp, f) for f in os.listdir(carpeta_emp) if f.endswith(".pdf")]
                     todas_rutas_pdf.extend(pdfs_emp)

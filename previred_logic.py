@@ -312,146 +312,79 @@ def _hay_dialogo_email(page) -> bool:
 def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                                   carpeta_temp: str, carpeta_dest: str, log) -> int:
     """
-    Descarga PDFs individuales por institución desde la tabla expandida.
-    Retorna la cantidad de PDFs descargados.
+    Descarga PDFs individuales por institución interceptando el POST a CtrlFce.
     """
     nombre_limpio = re.sub(r'[/\\:]', '-', nombre_nomina)
     prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
     descargados = 0
 
-    # Buscar iconos planillas.gif individuales
-    ctx_info = page.evaluate("""() => {
-        var results = [];
-        document.querySelectorAll('img[src*="planillas.gif"]').forEach(function(img, i) {
-            var p = img.parentElement;
-            var gp = p ? p.parentElement : null;
-            results.push({
-                idx: i,
-                pTag: p ? p.tagName : '-',
-                pHref: p ? (p.getAttribute('href')||'') : '',
-                pOnclick: p ? (p.getAttribute('onclick')||'') : '',
-                gpTag: gp ? gp.tagName : '-',
-                gpOnclick: gp ? (gp.getAttribute('onclick')||'') : ''
-            });
-        });
-        return results;
-    }""")
-    log(f"Iconos planillas.gif encontrados tras expandir: {len(ctx_info)}", "info")
-
-    total_iconos = len(ctx_info)
-    if total_iconos == 0:
-        log("No se encontraron iconos planillas.gif", "warn")
-        return 0
-
-    imgs_loc = page.locator('img[src*="planillas.gif"]')
-
-    # Extraer IDs de los imgs para obtener parámetros de descarga
+    # Extraer IDs (contienen nombre de institución)
     ids_info = page.evaluate("""() => {
         return Array.from(document.querySelectorAll('img[src*="planillas.gif"]')).map(function(img) {
             return img.id || '';
         });
     }""")
-    log(f"IDs planillas: {ids_info}", "info")
-
-    # Interceptar window.open para capturar URLs que abre Previred
-    page.evaluate("""() => {
-        window._previredOpenedUrls = [];
-        var orig = window.open;
-        window.open = function(url, name, opts) {
-            window._previredOpenedUrls.push(url || '');
-            return orig.apply(this, arguments);
-        };
-    }""")
+    total_iconos = len(ids_info)
+    log(f"Instituciones a descargar: {total_iconos}", "info")
+    if total_iconos == 0:
+        log("No se encontraron iconos planillas.gif", "warn")
+        return 0
 
     for i in range(total_iconos):
         inst_num = i + 1
         img_id = ids_info[i] if i < len(ids_info) else ''
-        # Nombre de institución desde el id: planilla_individual#folio#0#token#NombreInst
         partes_id = img_id.split('#')
         nombre_inst = partes_id[-1] if len(partes_id) > 1 else f"inst{inst_num:02d}"
         nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
-        guardado = False
 
-        # Limpiar URLs capturadas anteriores
-        page.evaluate("window._previredOpenedUrls = []")
+        # Interceptar la respuesta del POST a CtrlFce
+        captured = {}
 
-        # Monitorear requests de red post-click
-        network_urls = []
-        def _on_req(req):
-            network_urls.append(f"{req.method} {req.url}")
-        page.on("request", _on_req)
+        def handle_route(route, request, _cap=captured):
+            if 'CtrlFce' in request.url and request.method == 'POST':
+                try:
+                    response = route.fetch()
+                    _cap['content_type'] = response.headers.get('content-type', '')
+                    _cap['body'] = response.body()
+                    route.fulfill(response=response)
+                except Exception as e_r:
+                    _cap['error'] = str(e_r)
+                    route.continue_()
+            else:
+                route.continue_()
 
-        # Click JS en el ícono
+        page.route("**/*", handle_route)
         try:
             page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
+            time.sleep(4)
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
-            page.remove_listener("request", _on_req)
+            page.unroute("**/*", handle_route)
             continue
+        page.unroute("**/*", handle_route)
 
-        time.sleep(3)
-        page.remove_listener("request", _on_req)
-
-        # Ver si window.open fue llamado
-        opened_urls = page.evaluate("window._previredOpenedUrls || []")
-        log(f"inst{inst_num} ({nombre_inst}): window.open={opened_urls}", "info")
-        log(f"inst{inst_num} ({nombre_inst}): network={network_urls}", "info")
-
-        for pdf_url in opened_urls:
-            if not pdf_url:
-                continue
-            # Construir URL absoluta si es relativa
-            if pdf_url.startswith('/'):
-                base = page.url.split('/wPortal')[0] if '/wPortal' in page.url else 'https://www.previred.com'
-                pdf_url = base + pdf_url
-            try:
-                resp = page.context.request.get(pdf_url)
-                content_type = resp.headers.get("content-type", "")
-                log(f"  URL={pdf_url[:80]} content-type={content_type}", "info")
-                if "pdf" in content_type.lower():
-                    with open(ruta_dest, 'wb') as f:
-                        f.write(resp.body())
-                    log(f"Guardado: {nombre_dest}", "ok")
-                    guardado = True
-                    break
-                else:
-                    # Renderizar la página abierta como PDF
-                    with page.expect_popup(timeout=8000) as pp:
-                        page.evaluate(f"window.open({repr(pdf_url)})")
-                    pop = pp.value
-                    pop.wait_for_load_state("domcontentloaded", timeout=10000)
-                    pdf_bytes = pop.pdf()
-                    pop.close()
+        if 'body' in captured:
+            ct = captured.get('content_type', '')
+            log(f"inst{inst_num} ({nombre_inst}): content-type={ct}", "info")
+            if 'pdf' in ct.lower():
+                with open(ruta_dest, 'wb') as f:
+                    f.write(captured['body'])
+                log(f"Guardado: {nombre_dest}", "ok")
+                descargados += 1
+            else:
+                # Respuesta no es PDF — renderizar con Playwright
+                try:
+                    pdf_bytes = page.pdf()
                     with open(ruta_dest, 'wb') as f:
                         f.write(pdf_bytes)
                     log(f"Guardado (render): {nombre_dest}", "ok")
-                    guardado = True
-                    break
-            except Exception as e_url:
-                log(f"  Error descargando URL: {e_url}", "warn")
-
-        if not guardado:
-            # Fallback: capturar popup directamente
-            try:
-                with page.expect_popup(timeout=10000) as popup_info:
-                    page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
-                popup = popup_info.value
-                popup.wait_for_load_state("domcontentloaded", timeout=15000)
-                resp = page.context.request.get(popup.url)
-                popup.close()
-                if "pdf" in resp.headers.get("content-type", "").lower():
-                    with open(ruta_dest, 'wb') as f:
-                        f.write(resp.body())
-                    log(f"Guardado (popup): {nombre_dest}", "ok")
-                    guardado = True
-            except Exception as e_fb:
-                log(f"inst{inst_num} ({nombre_inst}): fallback popup falló {e_fb.__class__.__name__}", "warn")
-
-        if not guardado:
-            log(f"inst{inst_num} ({nombre_inst}): no se pudo descargar", "warn")
+                    descargados += 1
+                except Exception as e_r:
+                    log(f"inst{inst_num} ({nombre_inst}): render falló {e_r}", "warn")
         else:
-            descargados += 1
+            err = captured.get('error', 'sin respuesta POST')
+            log(f"inst{inst_num} ({nombre_inst}): {err}", "warn")
 
         _cerrar_tabs_extra(page)
         time.sleep(1)

@@ -319,7 +319,30 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
     prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
     descargados = 0
 
-    # Log diagnóstico del padre de cada planillas.gif
+    # Expandir todos los grupos (+) antes de buscar iconos PDF
+    botones_expand = page.evaluate("""() => {
+        var btns = [];
+        document.querySelectorAll('button, span, td, div').forEach(function(el) {
+            var txt = (el.textContent || '').trim();
+            if(txt === '+' && el.offsetParent !== null) btns.push(el.tagName + ':' + txt);
+        });
+        return btns.length;
+    }""")
+    log(f"Botones '+' para expandir encontrados: {botones_expand}", "info")
+
+    try:
+        page.evaluate("""() => {
+            document.querySelectorAll('button, span, td, div').forEach(function(el) {
+                if((el.textContent || '').trim() === '+' && el.offsetParent !== null) {
+                    el.click();
+                }
+            });
+        }""")
+        time.sleep(3)
+    except Exception as e_exp:
+        log(f"Error al expandir grupos: {e_exp}", "warn")
+
+    # Ahora buscar iconos planillas.gif individuales
     ctx_info = page.evaluate("""() => {
         var results = [];
         document.querySelectorAll('img[src*="planillas.gif"]').forEach(function(img, i) {
@@ -336,9 +359,7 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         });
         return results;
     }""")
-    log(f"Iconos planillas.gif encontrados: {len(ctx_info)}", "info")
-    for it in ctx_info:
-        log(f"  [{it['idx']}] padre={it['pTag']} href={it['pHref']} onclick={it['pOnclick']} | abuelo={it['gpTag']} onclick={it['gpOnclick']}", "info")
+    log(f"Iconos planillas.gif encontrados tras expandir: {len(ctx_info)}", "info")
 
     total_iconos = len(ctx_info)
     if total_iconos == 0:

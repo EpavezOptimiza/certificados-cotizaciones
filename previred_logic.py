@@ -446,52 +446,65 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
     except Exception:
         pass
 
-    # Esperar que el botón Imprimir sea visible y hacer clic
+    # Esperar que el botón Imprimir sea visible
     try:
         page.wait_for_selector("#aceptar_modal", state="visible", timeout=10000)
-        page.click("#aceptar_modal")
-        log("Imprimir clickeado", "info")
     except Exception as e_imp:
-        log(f"No se pudo hacer clic en Imprimir: {e_imp.__class__.__name__}", "err")
+        log(f"Botón Imprimir no apareció: {e_imp.__class__.__name__}", "err")
         return False
 
-    # Esperar respuesta de Previred
-    time.sleep(3)
+    descargado = False
+    try:
+        with page.expect_download(timeout=30000) as dl_info:
+            page.click("#aceptar_modal")
+            log("Imprimir clickeado", "info")
+            time.sleep(3)
+            if _hay_dialogo_email(page):
+                raise RuntimeError("email_dialog")
 
-    # Detectar si Previred pidió envío por email (planilla muy grande)
-    if _hay_dialogo_email(page):
-        log("Planilla muy grande — Previred pide envío por email. Descargando PDFs individuales por institución...", "warn")
-        try:
-            _click_texto(page, "Nueva Búsqueda", timeout=5000)
-            time.sleep(2)
-        except Exception:
-            pass
-        try:
-            buscar_planilla(page, mes, anio, nombre_nomina)
-            n = _descargar_pdfs_individuales(page, mes, anio, nombre_nomina, carpeta_temp, carpeta_dest, log)
-            if n > 0:
-                log(f"Descargados {n} PDF(s) individuales para '{nombre_nomina}'", "ok")
-                return True
-            log(f"No se pudo descargar ningún PDF individual para '{nombre_nomina}'", "err")
-            return False
-        except Exception as e2:
-            log(f"Error en descarga individual: {e2}", "err")
-            return False
+        dl = dl_info.value
+        dl.save_as(ruta_dest)
+        descargado = True
 
-    # Esperar hasta 20s a que aparezca un PDF en carpeta_temp
-    log("Esperando descarga directa...", "info")
-    for _ in range(20):
-        pdfs = [f for f in os.listdir(carpeta_temp) if f.lower().endswith(".pdf")]
-        if pdfs:
-            break
-        time.sleep(1)
+    except RuntimeError as e:
+        if "email_dialog" in str(e):
+            log("Planilla muy grande — Previred pide envío por email. Descargando PDFs individuales por institución...", "warn")
+            try:
+                _click_texto(page, "Nueva Búsqueda", timeout=5000)
+                time.sleep(2)
+            except Exception:
+                pass
+            try:
+                buscar_planilla(page, mes, anio, nombre_nomina)
+                n = _descargar_pdfs_individuales(page, mes, anio, nombre_nomina, carpeta_temp, carpeta_dest, log)
+                if n > 0:
+                    log(f"Descargados {n} PDF(s) individuales para '{nombre_nomina}'", "ok")
+                    return True
+                log(f"No se pudo descargar ningún PDF individual para '{nombre_nomina}'", "err")
+                return False
+            except Exception as e2:
+                log(f"Error en descarga individual: {e2}", "err")
+                return False
+        log(f"Captura directa falló ({e.__class__.__name__}), buscando PDF en carpeta...", "warn")
+
+    except Exception as e:
+        log(f"Captura directa falló ({e.__class__.__name__}), buscando PDF en carpeta...", "warn")
 
     _cerrar_tabs_extra(page)
 
-    pdfs = [f for f in os.listdir(carpeta_temp) if f.lower().endswith(".pdf")]
-    if pdfs:
-        ultimo = max([os.path.join(carpeta_temp, f) for f in pdfs], key=os.path.getmtime)
-        shutil.move(ultimo, ruta_dest)
+    if not descargado:
+        for _ in range(20):
+            pdfs = [f for f in os.listdir(carpeta_temp) if f.lower().endswith(".pdf")]
+            if pdfs:
+                break
+            time.sleep(1)
+        pdfs = [f for f in os.listdir(carpeta_temp) if f.lower().endswith(".pdf")]
+        if pdfs:
+            ultimo = max([os.path.join(carpeta_temp, f) for f in pdfs], key=os.path.getmtime)
+            shutil.move(ultimo, ruta_dest)
+            descargado = True
+
+    if descargado:
         log(f"Guardado: {nombre_dest}", "ok")
         return True
 
@@ -501,14 +514,30 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
 
 def volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log):
     _cerrar_tabs_extra(page)
-    # Intentar con el texto exacto del botón de Previred
-    if _click_texto(page, "Nueva búsqueda", timeout=6000):
+    # Intentar con el texto exacto (timeout corto)
+    if _click_texto(page, "Nueva búsqueda", timeout=3000):
         time.sleep(2)
         return
-    if _click_texto(page, "Búsqueda", timeout=4000):
-        time.sleep(2)
-        return
-    # Si nada funciona, volver a navegar directo a planillas
+    # JS agresivo: buscar en cualquier elemento visible
+    try:
+        found = page.evaluate("""() => {
+            var all = document.querySelectorAll('*');
+            for (var el of all) {
+                if (el.offsetParent !== null && el.childElementCount === 0) {
+                    var t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    if (t === 'nueva búsqueda' || t === 'nueva busqueda') {
+                        el.click(); return true;
+                    }
+                }
+            }
+            return false;
+        }""")
+        if found:
+            time.sleep(2)
+            return
+    except Exception:
+        pass
+    # Último recurso: navegar directo a planillas
     try:
         ir_a_planillas_pagadas(page, log)
     except Exception:

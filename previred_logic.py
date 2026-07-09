@@ -372,106 +372,55 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         inst_num = i + 1
         nombre_dest = f"{prefijo}-inst{inst_num:02d}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
+        guardado = False
 
-        url_antes = page.url
-        paginas_antes = set(id(p) for p in page.context.pages)
-
-        # Screenshot antes del click (solo inst1 para no saturar logs)
-        if i == 0:
-            try:
-                ss_path = os.path.join(carpeta_temp, f"debug_antes_{nombre_limpio[:30]}.png")
-                page.screenshot(path=ss_path, full_page=True)
-                log(f"Screenshot guardado: {ss_path}", "info")
-            except Exception:
-                pass
-
-        # Click vía JavaScript (evita problemas de visibilidad/accionabilidad)
+        # Intentar capturar popup (Previred suele abrir PDF en nueva ventana)
         try:
-            page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
-        except Exception as ec:
-            log(f"Click JS falló inst{inst_num}: {ec.__class__.__name__}", "warn")
-            continue
-
-        time.sleep(3)
-
-        # Screenshot después del click + texto de página (solo inst1)
-        if i == 0:
+            with page.expect_popup(timeout=15000) as popup_info:
+                page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
+            popup = popup_info.value
             try:
-                ss_path2 = os.path.join(carpeta_temp, f"debug_despues_{nombre_limpio[:30]}.png")
-                page.screenshot(path=ss_path2, full_page=True)
-                log(f"Screenshot post-click: {ss_path2}", "info")
-            except Exception:
-                pass
-            try:
-                texto_pagina = page.inner_text("body")[:400]
-                log(f"Texto página post-click: {texto_pagina!r}", "info")
-            except Exception:
-                pass
-
-        # Diagnóstico post-click
-        url_despues = page.url
-        paginas_despues = page.context.pages
-        nuevas_paginas = [p for p in paginas_despues if id(p) not in paginas_antes]
-        log(f"inst{inst_num}: url={url_despues[:80]} | páginas_nuevas={len(nuevas_paginas)}", "info")
-        for p_nueva in nuevas_paginas:
-            log(f"  nueva_pagina_url: {p_nueva.url[:80]}", "info")
-
-        if nuevas_paginas:
-            # Se abrió una nueva pestaña / popup
-            nueva_pagina = nuevas_paginas[0]
-            try:
-                nueva_pagina.wait_for_load_state("domcontentloaded", timeout=20000)
-                pdf_url = nueva_pagina.url
-                log(f"inst{inst_num}: popup URL={pdf_url[:80]}", "info")
-                # Descargar usando la URL con el contexto actual
+                popup.wait_for_load_state("domcontentloaded", timeout=15000)
+                pdf_url = popup.url
+                log(f"inst{inst_num}: popup={pdf_url[:80]}", "info")
                 resp = page.context.request.get(pdf_url)
-                with open(ruta_dest, 'wb') as f:
-                    f.write(resp.body())
-                nueva_pagina.close()
-                log(f"Guardado individual: {nombre_dest}", "ok")
-                descargados += 1
-            except Exception as e_pop:
-                log(f"Error popup inst{inst_num}: {e_pop}", "warn")
-                try:
-                    nueva_pagina.close()
-                except Exception:
-                    pass
-
-        elif url_despues != url_antes:
-            # Navegó la misma pestaña
-            log(f"inst{inst_num}: navegación same-tab a {url_despues[:80]}", "info")
-            try:
-                page.wait_for_load_state("domcontentloaded", timeout=10000)
-            except Exception:
-                pass
-            resp = page.context.request.get(page.url)
-            content_type = resp.headers.get("content-type", "")
-            log(f"inst{inst_num}: content-type={content_type}", "info")
-            if "pdf" in content_type.lower():
-                with open(ruta_dest, 'wb') as f:
-                    f.write(resp.body())
-                log(f"Guardado individual: {nombre_dest}", "ok")
-                descargados += 1
-            else:
-                # Renderizar la página como PDF
-                try:
-                    pdf_bytes = page.pdf()
+                content_type = resp.headers.get("content-type", "")
+                if "pdf" in content_type.lower():
+                    with open(ruta_dest, 'wb') as f:
+                        f.write(resp.body())
+                    log(f"Guardado: {nombre_dest}", "ok")
+                    guardado = True
+                else:
+                    # Renderizar como PDF si no es descarga directa
+                    pdf_bytes = popup.pdf()
                     with open(ruta_dest, 'wb') as f:
                         f.write(pdf_bytes)
-                    log(f"Guardado individual (render): {nombre_dest}", "ok")
-                    descargados += 1
-                except Exception as e_r:
-                    log(f"Error render inst{inst_num}: {e_r}", "warn")
-            # Volver a resultados
-            try:
-                page.go_back()
-                page.wait_for_load_state("domcontentloaded", timeout=10000)
-                imgs_loc = page.locator('img[src*="planillas.gif"]')
-            except Exception:
-                pass
+                    log(f"Guardado (render): {nombre_dest}", "ok")
+                    guardado = True
+            finally:
+                try:
+                    popup.close()
+                except Exception:
+                    pass
+        except Exception as e_popup:
+            log(f"inst{inst_num}: sin popup ({e_popup.__class__.__name__}), intentando download directo...", "info")
 
+        # Fallback: capturar como descarga directa
+        if not guardado:
+            try:
+                with page.expect_download(timeout=15000) as dl_info:
+                    page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
+                dl = dl_info.value
+                dl.save_as(ruta_dest)
+                log(f"Guardado (download): {nombre_dest}", "ok")
+                guardado = True
+            except Exception as e_dl:
+                log(f"inst{inst_num}: download directo falló ({e_dl.__class__.__name__})", "warn")
+
+        if not guardado:
+            log(f"inst{inst_num}: no se pudo descargar", "warn")
         else:
-            log(f"inst{inst_num}: URL no cambió ni se abrió pestaña nueva — acción desconocida", "warn")
+            descargados += 1
 
         _cerrar_tabs_extra(page)
         time.sleep(1)

@@ -364,11 +364,11 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             except Exception:
                 pass
 
-        # Click nativo de Playwright
+        # Click vía JavaScript (evita problemas de visibilidad/accionabilidad)
         try:
-            imgs_loc.nth(i).click(timeout=8000)
+            page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
         except Exception as ec:
-            log(f"Click falló inst{inst_num}: {ec.__class__.__name__}", "warn")
+            log(f"Click JS falló inst{inst_num}: {ec.__class__.__name__}", "warn")
             continue
 
         time.sleep(3)

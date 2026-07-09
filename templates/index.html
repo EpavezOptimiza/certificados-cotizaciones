@@ -383,8 +383,8 @@ body.dark .pref-label{color:#e2e8f0}
 <div id="main">
   <div id="header">
     <div id="header-left">
-      <h2 id="header-title">Selecciona una empresa</h2>
-      <p id="header-meta"></p>
+      <h2 id="header-title">🏠 Página principal</h2>
+      <p id="header-meta">Resumen y noticias previsionales</p>
     </div>
     <div id="header-right" id="header-right">
       <button class="btn btn-primary admin-ahorro-only" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
@@ -415,7 +415,7 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="btn btn-orange admin-ahorro-only" onclick="moverGeneracionEmpresa()" id="btn-mover-gen" style="display:none;margin-left:4px" title="Mover todos los Posteriores a Iniciales">🔄 Mover Posteriores → Iniciales</button>
   </div>
   <div id="table-wrap">
-    <div id="home-view" style="display:none;padding:4px">
+    <div id="home-view" style="padding:4px">
       <h3 style="margin-bottom:4px;font-size:15px;color:#0f172a">📰 Noticias sobre mora previsional</h3>
       <p style="margin-bottom:14px;font-size:11px;color:#64748b">Últimas noticias relacionadas con deuda previsional, cotizaciones impagas y AFP en Chile.</p>
       <div id="noticias-list" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -837,9 +837,9 @@ async function init(){
   await cargarPreferencias();
   await cargarDevicePrefs();
   initColorChips();
-  await loadGrupos();
   if(currentUser.rol === "terreno") verSolicitudes();
   else verPrincipal();
+  await loadGrupos();
   // Mostrar modal cambio de clave si es primer login
   if(!currentUser.clave_cambiada){
     setTimeout(()=>{
@@ -1533,9 +1533,13 @@ async function verPrincipal(){
     list.innerHTML=noticias.map(n=>{
       let fechaFmt="";
       try{ fechaFmt=new Date(n.fecha).toLocaleDateString("es-CL",{day:"2-digit",month:"short",year:"numeric"}); }catch(e){}
-      return `<a href="${n.link}" target="_blank" rel="noopener" style="text-decoration:none;display:block;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='#e2e8f0'">
-        <div style="font-size:13px;font-weight:600;color:#0f172a;line-height:1.4">${n.titulo}</div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:6px">${n.fuente||""}${n.fuente&&fechaFmt?" · ":""}${fechaFmt}</div>
+      const img = n.imagen ? `<img src="${n.imagen}" alt="" style="width:100px;min-width:100px;height:70px;object-fit:cover;border-radius:7px;margin-left:12px;flex-shrink:0" onerror="this.style.display='none'">` : "";
+      return `<a href="${n.link}" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='#e2e8f0'">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:#0f172a;line-height:1.4">${n.titulo}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:6px">${n.fuente||""}${n.fuente&&fechaFmt?" · ":""}${fechaFmt}</div>
+        </div>
+        ${img}
       </a>`;
     }).join("");
   }catch(e){

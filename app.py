@@ -403,11 +403,25 @@ def index():
 # ── Noticias (página principal) ────────────────────────────────────────────────
 _noticias_cache = {"ts": 0, "data": []}
 
+def _fetch_og_image(link):
+    import urllib.request, re
+    try:
+        req = urllib.request.Request(link, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            html = r.read(65536).decode("utf-8", errors="ignore")
+        m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
+        if not m:
+            m = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', html, re.I)
+        return m.group(1).strip() if m else ""
+    except Exception:
+        return ""
+
 @app.route("/api/noticias")
 @api_login_required
 def get_noticias():
     import urllib.request, urllib.parse
     import xml.etree.ElementTree as ET
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     if _time.time() - _noticias_cache["ts"] < 1800 and _noticias_cache["data"]:
         return jsonify({"ok": True, "noticias": _noticias_cache["data"]})
@@ -420,14 +434,21 @@ def get_noticias():
         with urllib.request.urlopen(req, timeout=8) as r:
             xml_data = r.read()
         root = ET.fromstring(xml_data)
-        for item in root.findall(".//item")[:15]:
+        for item in root.findall(".//item")[:12]:
             titulo = (item.findtext("title") or "").strip()
             link = (item.findtext("link") or "").strip()
             fecha = (item.findtext("pubDate") or "").strip()
             fuente_el = item.find("source")
             fuente = fuente_el.text.strip() if fuente_el is not None and fuente_el.text else ""
             if titulo and link:
-                noticias.append({"titulo": titulo, "link": link, "fecha": fecha, "fuente": fuente})
+                noticias.append({"titulo": titulo, "link": link, "fecha": fecha, "fuente": fuente, "imagen": ""})
+
+        # Obtener og:image en paralelo
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            futures = {ex.submit(_fetch_og_image, n["link"]): i for i, n in enumerate(noticias)}
+            for fut in as_completed(futures):
+                noticias[futures[fut]]["imagen"] = fut.result()
+
         _noticias_cache["ts"] = _time.time()
         _noticias_cache["data"] = noticias
     except Exception as e:

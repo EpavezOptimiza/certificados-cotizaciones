@@ -169,6 +169,8 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
             btn_id_elegido = f"{patron}00#false"
             log(f"Sin sufijo en razón social, usando empresa principal: {btn_id_elegido}", "info")
 
+    if not page.locator(f'[id="{btn_id_elegido}"]').count():
+        raise RuntimeError(f"Botón empresa {btn_id_elegido} no encontrado en DOM")
     page.click(f'[id="{btn_id_elegido}"]')
     page.wait_for_load_state("domcontentloaded", timeout=15000)
     time.sleep(3)

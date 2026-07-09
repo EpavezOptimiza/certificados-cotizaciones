@@ -334,82 +334,73 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
-        # Registrar pestañas existentes antes del click
         paginas_antes = set(id(p) for p in page.context.pages)
 
-        # Interceptar POST a CtrlFce como fallback
-        captured = {}
-
-        def handle_route(route, request, _cap=captured):
-            try:
-                response = route.fetch()
-                _cap['content_type'] = response.headers.get('content-type', '')
-                _cap['body'] = response.body()
-                route.fulfill(response=response)
-            except Exception as e_r:
-                _cap['error'] = str(e_r)
-                route.continue_()
-
-        page.route("**/CtrlFce*", handle_route)
         try:
             page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
-            page.wait_for_timeout(5000)
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
-            page.unroute("**/CtrlFce*", handle_route)
             continue
-        page.unroute("**/CtrlFce*", handle_route)
 
-        # Prioridad 1: nueva pestaña abierta por Previred (tiene sesión + CSS completo)
-        nueva_pag = next((p for p in page.context.pages if id(p) not in paginas_antes), None)
-        if nueva_pag:
+        # Esperar hasta 8s a que se abra la pestaña del diálogo
+        dialogo_pag = None
+        for _ in range(32):
+            page.wait_for_timeout(250)
+            dialogo_pag = next((p for p in page.context.pages if id(p) not in paginas_antes), None)
+            if dialogo_pag:
+                break
+
+        if not dialogo_pag:
+            log(f"inst{inst_num} ({nombre_inst}): no se abrió diálogo", "warn")
+            time.sleep(1)
+            continue
+
+        try:
+            dialogo_pag.wait_for_load_state('domcontentloaded', timeout=10000)
+
+            # Seleccionar Total Empresa si no está marcado
             try:
-                nueva_pag.wait_for_load_state('domcontentloaded', timeout=15000)
-                pdf_bytes = nueva_pag.pdf()
-                nueva_pag.close()
-                with open(ruta_dest, 'wb') as f:
-                    f.write(pdf_bytes)
-                log(f"Guardado: {nombre_dest}", "ok")
-                descargados += 1
-            except Exception as e_tab:
-                log(f"inst{inst_num} ({nombre_inst}): error en pestaña {e_tab.__class__.__name__}", "warn")
-                try:
-                    nueva_pag.close()
-                except Exception:
-                    pass
+                radio = dialogo_pag.locator("input[type='radio'][value*='total']").first
+                if radio.count() > 0 and not radio.is_checked():
+                    radio.click()
+                dialogo_pag.wait_for_timeout(500)
+            except Exception:
+                pass
 
-        # Prioridad 2: HTML capturado por route — renderizar con base URL de Previred
-        elif 'body' in captured:
-            ct = captured.get('content_type', '')
-            log(f"inst{inst_num} ({nombre_inst}): content-type={ct}", "info")
-            if 'pdf' in ct.lower():
-                with open(ruta_dest, 'wb') as f:
-                    f.write(captured['body'])
-                log(f"Guardado: {nombre_dest}", "ok")
-                descargados += 1
-            else:
+            # Hacer clic en Imprimir y capturar la planilla real
+            dialogo_pag.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
+            guardado = False
+            try:
+                with dialogo_pag.expect_download(timeout=20000) as dl_info:
+                    dialogo_pag.click("#aceptar_modal")
+                    log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
+                    dialogo_pag.wait_for_timeout(3000)
+                dl = dl_info.value
+                dl.save_as(ruta_dest)
+                guardado = True
+            except Exception:
+                # Sin descarga directa — renderizar lo que cargó en el tab
                 try:
-                    html = captured['body'].decode('utf-8', errors='replace')
-                    # Inyectar base URL para que CSS/imágenes de Previred carguen
-                    base_tag = '<base href="https://www.previred.com/wEmpresas/">'
-                    idx = html.lower().find('<head>')
-                    if idx >= 0:
-                        html = html[:idx+6] + base_tag + html[idx+6:]
-                    else:
-                        html = '<head>' + base_tag + '</head>' + html
-                    nueva = page.context.new_page()
-                    nueva.set_content(html, wait_until='load')
-                    pdf_bytes = nueva.pdf()
-                    nueva.close()
+                    dialogo_pag.wait_for_load_state('domcontentloaded', timeout=10000)
+                    dialogo_pag.wait_for_timeout(2000)
+                    pdf_bytes = dialogo_pag.pdf()
                     with open(ruta_dest, 'wb') as f:
                         f.write(pdf_bytes)
-                    log(f"Guardado: {nombre_dest}", "ok")
-                    descargados += 1
-                except Exception as e_r:
-                    log(f"inst{inst_num} ({nombre_inst}): render falló {e_r}", "warn")
-        else:
-            err = captured.get('error', 'sin respuesta POST y sin nueva pestaña')
-            log(f"inst{inst_num} ({nombre_inst}): {err}", "warn")
+                    guardado = True
+                except Exception as e_pdf:
+                    log(f"inst{inst_num} ({nombre_inst}): render falló {e_pdf.__class__.__name__}", "warn")
+
+            dialogo_pag.close()
+            if guardado:
+                log(f"Guardado: {nombre_dest}", "ok")
+                descargados += 1
+
+        except Exception as e_tab:
+            log(f"inst{inst_num} ({nombre_inst}): error {e_tab.__class__.__name__}", "warn")
+            try:
+                dialogo_pag.close()
+            except Exception:
+                pass
 
         time.sleep(1)
 

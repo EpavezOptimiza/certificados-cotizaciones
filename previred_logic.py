@@ -311,14 +311,10 @@ def _hay_dialogo_email(page) -> bool:
 
 def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                                   carpeta_temp: str, carpeta_dest: str, log) -> int:
-    """
-    Descarga PDFs individuales por institución interceptando el POST a CtrlFce.
-    """
     nombre_limpio = re.sub(r'[/\\:]', '-', nombre_nomina)
     prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
     descargados = 0
 
-    # Extraer IDs (contienen nombre de institución)
     ids_info = page.evaluate("""() => {
         return Array.from(document.querySelectorAll('img[src*="planillas.gif"]')).map(function(img) {
             return img.id || '';
@@ -338,7 +334,10 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
-        # Interceptar solo el POST a CtrlFce
+        # Registrar pestañas existentes antes del click
+        paginas_antes = set(id(p) for p in page.context.pages)
+
+        # Interceptar POST a CtrlFce como fallback
         captured = {}
 
         def handle_route(route, request, _cap=captured):
@@ -361,7 +360,26 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             continue
         page.unroute("**/CtrlFce*", handle_route)
 
-        if 'body' in captured:
+        # Prioridad 1: nueva pestaña abierta por Previred (tiene sesión + CSS completo)
+        nueva_pag = next((p for p in page.context.pages if id(p) not in paginas_antes), None)
+        if nueva_pag:
+            try:
+                nueva_pag.wait_for_load_state('domcontentloaded', timeout=15000)
+                pdf_bytes = nueva_pag.pdf()
+                nueva_pag.close()
+                with open(ruta_dest, 'wb') as f:
+                    f.write(pdf_bytes)
+                log(f"Guardado: {nombre_dest}", "ok")
+                descargados += 1
+            except Exception as e_tab:
+                log(f"inst{inst_num} ({nombre_inst}): error en pestaña {e_tab.__class__.__name__}", "warn")
+                try:
+                    nueva_pag.close()
+                except Exception:
+                    pass
+
+        # Prioridad 2: HTML capturado por route — renderizar con base URL de Previred
+        elif 'body' in captured:
             ct = captured.get('content_type', '')
             log(f"inst{inst_num} ({nombre_inst}): content-type={ct}", "info")
             if 'pdf' in ct.lower():
@@ -370,11 +388,17 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                 log(f"Guardado: {nombre_dest}", "ok")
                 descargados += 1
             else:
-                # HTML — renderizar en pestaña nueva para obtener PDF limpio
                 try:
                     html = captured['body'].decode('utf-8', errors='replace')
+                    # Inyectar base URL para que CSS/imágenes de Previred carguen
+                    base_tag = '<base href="https://www.previred.com/wEmpresas/">'
+                    idx = html.lower().find('<head>')
+                    if idx >= 0:
+                        html = html[:idx+6] + base_tag + html[idx+6:]
+                    else:
+                        html = '<head>' + base_tag + '</head>' + html
                     nueva = page.context.new_page()
-                    nueva.set_content(html, wait_until='domcontentloaded')
+                    nueva.set_content(html, wait_until='load')
                     pdf_bytes = nueva.pdf()
                     nueva.close()
                     with open(ruta_dest, 'wb') as f:
@@ -384,10 +408,9 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                 except Exception as e_r:
                     log(f"inst{inst_num} ({nombre_inst}): render falló {e_r}", "warn")
         else:
-            err = captured.get('error', 'sin respuesta POST')
+            err = captured.get('error', 'sin respuesta POST y sin nueva pestaña')
             log(f"inst{inst_num} ({nombre_inst}): {err}", "warn")
 
-        _cerrar_tabs_extra(page)
         time.sleep(1)
 
     return descargados

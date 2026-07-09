@@ -423,7 +423,7 @@ body.dark .pref-label{color:#e2e8f0}
         <!-- Tareas pendientes -->
         <div style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)">
           <div style="padding:12px 14px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:13px;font-weight:700;color:#0f172a">✅ Tareas pendientes</span>
+            <span style="font-size:13px;font-weight:700;color:#0f172a" id="home-tareas-titulo">✅ Tareas pendientes</span>
             <a href="/tareas" style="font-size:10px;color:var(--accent);text-decoration:none;font-weight:600">Ver todas →</a>
           </div>
           <div id="home-tareas" style="padding:8px 10px;display:flex;flex-direction:column;gap:4px">
@@ -615,7 +615,9 @@ body.dark .pref-label{color:#e2e8f0}
     <label>Rol *</label>
     <select id="u-rol">
       <option value="admin">Admin</option>
-      <option value="ahorro">Ahorro</option>
+      <option value="consultor">Consultor (Deuda — supervisor)</option>
+      <option value="asistente">Asistente (Deuda — trabajador)</option>
+      <option value="ahorro">Ahorro (legado)</option>
       <option value="ingreso">Ingreso</option>
       <option value="terreno">Terreno</option>
     </select>
@@ -862,7 +864,8 @@ const INST_MAP={};
 INST_MAP["{{ inst }}"]={tipo:"{{ tipo }}",cat:"{{ cat }}"};
 {% endfor %}
 
-const ROLES={admin:"Admin",ahorro:"Ahorro",consultor:"Ahorro",terreno:"Terreno",ingreso:"Ingreso"};
+const ROLES={admin:"Admin",ahorro:"Ahorro",consultor:"Consultor",asistente:"Asistente",terreno:"Terreno",ingreso:"Ingreso"};
+const ROLES_DEUDA = new Set(["ahorro","consultor","asistente"]);
 
 async function init(){
   const r = await fetch("/api/me");
@@ -897,7 +900,7 @@ function applyRoleUI(){
     el.style.display = (rol==="admin") ? "" : "none";
   });
   document.querySelectorAll(".ahorro-only").forEach(el=>{
-    el.style.display = (rol==="ahorro" || rol==="consultor") ? "" : "none";
+    el.style.display = ROLES_DEUDA.has(rol) ? "" : "none";
   });
   document.querySelectorAll(".terreno-only").forEach(el=>{
     el.style.display = (rol==="terreno") ? "" : "none";
@@ -1562,9 +1565,14 @@ async function verPrincipal(){
   const navEl=document.getElementById("nav-principal");
   if(navEl) navEl.style.background="rgba(var(--accent-rgb),.18)";
 
+  const esConsultor = currentUser.rol === "consultor";
+  const tituloTareas = document.getElementById("home-tareas-titulo");
+  if(tituloTareas) tituloTareas.textContent = esConsultor ? "✅ Tareas del equipo" : "✅ Mis tareas";
+  const urlTareas = esConsultor ? "/api/tareas/equipo" : "/api/tareas";
+
   // Cargar tareas, notas y noticias en paralelo
   const [rTareas, rNotas, rNoticias] = await Promise.allSettled([
-    fetch("/api/tareas").then(r=>r.json()),
+    fetch(urlTareas).then(r=>r.json()),
     fetch("/api/notas").then(r=>r.json()),
     fetch("/api/noticias").then(r=>r.json())
   ]);
@@ -1572,20 +1580,54 @@ async function verPrincipal(){
   // ── Tareas ──
   const elTareas = document.getElementById("home-tareas");
   if(rTareas.status==="fulfilled"){
-    const pendientes = rTareas.value.filter(t=>t.estado!=="completada").slice(0,6);
-    if(!pendientes.length){
-      elTareas.innerHTML='<p style="font-size:12px;color:#94a3b8;padding:6px 4px">Sin tareas pendientes 🎉</p>';
+    if(esConsultor){
+      // Vista consultor: agrupa por asistente
+      const todas = rTareas.value;
+      if(!todas.length){
+        elTareas.innerHTML='<p style="font-size:12px;color:#94a3b8;padding:6px 4px">Los asistentes no tienen tareas pendientes 🎉</p>';
+      } else {
+        const porUsuario = {};
+        todas.forEach(t=>{
+          const nombre = t.usuario_nombre || "Sin nombre";
+          if(!porUsuario[nombre]) porUsuario[nombre]=[];
+          porUsuario[nombre].push(t);
+        });
+        elTareas.innerHTML = Object.entries(porUsuario).map(([nombre, tareas])=>{
+          const pendientes = tareas.filter(t=>t.estado!=="completada");
+          if(!pendientes.length) return "";
+          const filas = pendientes.slice(0,4).map(t=>{
+            const pr = t.prioridad||"baja";
+            return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:${PRIORIDAD_BG[pr]}">
+              <span style="width:6px;height:6px;border-radius:50%;background:${PRIORIDAD_COLOR[pr]};flex-shrink:0"></span>
+              <span style="font-size:11px;color:#0f172a;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(t.titulo||"")}</span>
+              <span style="font-size:9px;color:${PRIORIDAD_COLOR[pr]};font-weight:600;text-transform:capitalize">${pr}</span>
+            </div>`;
+          }).join("");
+          const extras = pendientes.length > 4 ? `<div style="font-size:10px;color:#94a3b8;padding:2px 6px">+ ${pendientes.length-4} más</div>` : "";
+          return `<div style="border:1px solid #e8edf2;border-radius:8px;overflow:hidden;margin-bottom:6px">
+            <div style="background:#f8fafc;padding:5px 8px;font-size:11px;font-weight:700;color:#475569;border-bottom:1px solid #e8edf2">👤 ${escHtml(nombre)} <span style="font-weight:400;color:#94a3b8">(${pendientes.length})</span></div>
+            <div style="padding:5px 6px;display:flex;flex-direction:column;gap:3px">${filas}${extras}</div>
+          </div>`;
+        }).join("");
+        if(!elTareas.innerHTML.trim()) elTareas.innerHTML='<p style="font-size:12px;color:#94a3b8;padding:6px 4px">Sin tareas pendientes 🎉</p>';
+      }
     } else {
-      elTareas.innerHTML = pendientes.map(t=>{
-        const pr = t.prioridad||"baja";
-        return `<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:7px;background:${PRIORIDAD_BG[pr]}">
-          <span style="width:7px;height:7px;border-radius:50%;background:${PRIORIDAD_COLOR[pr]};flex-shrink:0"></span>
-          <span style="font-size:12px;color:#0f172a;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(t.titulo||t.texto||"")}</span>
-          <span style="font-size:10px;color:${PRIORIDAD_COLOR[pr]};font-weight:600;text-transform:capitalize">${pr}</span>
-        </div>`;
-      }).join("");
-      const resto = rTareas.value.filter(t=>t.estado!=="completada").length - pendientes.length;
-      if(resto>0) elTareas.innerHTML += `<div style="text-align:center;padding:4px;font-size:11px;color:#94a3b8">+ ${resto} más</div>`;
+      // Vista asistente/ahorro: solo las propias
+      const pendientes = rTareas.value.filter(t=>t.estado!=="completada").slice(0,6);
+      if(!pendientes.length){
+        elTareas.innerHTML='<p style="font-size:12px;color:#94a3b8;padding:6px 4px">Sin tareas pendientes 🎉</p>';
+      } else {
+        elTareas.innerHTML = pendientes.map(t=>{
+          const pr = t.prioridad||"baja";
+          return `<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:7px;background:${PRIORIDAD_BG[pr]}">
+            <span style="width:7px;height:7px;border-radius:50%;background:${PRIORIDAD_COLOR[pr]};flex-shrink:0"></span>
+            <span style="font-size:12px;color:#0f172a;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(t.titulo||t.texto||"")}</span>
+            <span style="font-size:10px;color:${PRIORIDAD_COLOR[pr]};font-weight:600;text-transform:capitalize">${pr}</span>
+          </div>`;
+        }).join("");
+        const resto = rTareas.value.filter(t=>t.estado!=="completada").length - pendientes.length;
+        if(resto>0) elTareas.innerHTML += `<div style="text-align:center;padding:4px;font-size:11px;color:#94a3b8">+ ${resto} más</div>`;
+      }
     }
   } else {
     elTareas.innerHTML='<p style="font-size:12px;color:#dc2626;padding:4px">Error al cargar</p>';

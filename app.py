@@ -784,7 +784,7 @@ def editar_grupo(gid):
 @api_login_required
 def eliminar_grupo(gid):
     user = get_current_user()
-    if user["rol"] not in ("admin","ahorro"):
+    if user["rol"] not in ("admin","ahorro","consultor","asistente"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         conn.execute("DELETE FROM grupos WHERE id=?", (gid,))
@@ -875,7 +875,7 @@ def editar_empresa(eid):
 @api_login_required
 def eliminar_empresa(eid):
     user = get_current_user()
-    if user["rol"] not in ("admin","ahorro"):
+    if user["rol"] not in ("admin","ahorro","consultor","asistente"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         conn.execute("DELETE FROM empresas WHERE id=?", (eid,))
@@ -935,7 +935,7 @@ def eliminar_cert(cid):
 def upload_adjunto(cid):
     user = get_current_user()
     # Consultor y Admin también pueden subir adjuntos
-    if user["rol"] not in ("admin", "ahorro", "terreno"):
+    if user["rol"] not in ("admin", "ahorro", "consultor", "asistente", "terreno"):
         return jsonify({"error": "Sin permisos"}), 403
     f = request.files.get("file")
     if not f: return jsonify({"error":"No file"}), 400
@@ -957,7 +957,7 @@ def ver_adjunto(fname):
 def mover_generacion_cert(cid):
     """Mueve un certificado Posterior a Inicial, eliminando el Inicial anterior de la misma institución."""
     user = get_current_user()
-    if user["rol"] not in ("admin", "ahorro"):
+    if user["rol"] not in ("admin", "ahorro", "consultor", "asistente"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         cert = conn.execute("SELECT * FROM certificados WHERE id=?", (cid,)).fetchone()
@@ -981,7 +981,7 @@ def mover_generacion_cert(cid):
 def mover_generacion_empresa(eid):
     """Mueve TODOS los Posteriores de una empresa a Iniciales, eliminando los Iniciales anteriores."""
     user = get_current_user()
-    if user["rol"] not in ("admin", "ahorro"):
+    if user["rol"] not in ("admin", "ahorro", "consultor", "asistente"):
         return jsonify({"error": "Sin permisos"}), 403
     with get_conn() as conn:
         posteriores = conn.execute(
@@ -1006,7 +1006,7 @@ def mover_generacion_empresa(eid):
 def get_solicitudes():
     user = get_current_user()
     with get_conn() as conn:
-        if user["rol"] == "ahorro":
+        if user["rol"] in ("ahorro", "consultor", "asistente"):
             rows = conn.execute("""
                 SELECT s.*,
                        COALESCE(e.nombre, JSON_EXTRACT(s.empresa_excel,'$.nombre'), '—') as empresa_nombre,
@@ -1038,7 +1038,7 @@ def get_solicitudes():
 def crear_solicitud():
     try:
         user = get_current_user()
-        if user["rol"] not in ("admin","ahorro"):
+        if user["rol"] not in ("admin","ahorro","consultor","asistente"):
             return jsonify({"error": "Sin permisos"}), 403
         d = request.json
 
@@ -2198,6 +2198,8 @@ def eliminar_nota(nid):
 #  TAREAS
 # ============================================================
 
+ROLES_DEUDA = ('ahorro', 'consultor', 'asistente')
+
 @app.route("/api/tareas")
 @api_login_required
 def get_tareas():
@@ -2210,6 +2212,26 @@ def get_tareas():
             ORDER BY CASE t.prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,
                      t.estado, t.creada DESC""",
             (user["id"],)).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/tareas/equipo")
+@api_login_required
+def get_tareas_equipo():
+    """Solo para consultor: devuelve tareas de todos los asistentes agrupadas por usuario."""
+    user = get_current_user()
+    if user["rol"] != "consultor":
+        return jsonify({"error": "Sin permisos"}), 403
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT t.*, n.titulo as nota_titulo,
+                   u.nombre as usuario_nombre, u.rol as usuario_rol
+            FROM tareas t
+            LEFT JOIN notas n ON n.id = t.nota_id
+            JOIN usuarios u ON u.id = t.usuario_id
+            WHERE u.rol = 'asistente'
+            ORDER BY u.nombre,
+                     CASE t.prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,
+                     t.estado, t.creada DESC""").fetchall()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/tareas", methods=["POST"])

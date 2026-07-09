@@ -2165,16 +2165,23 @@ function _detectarPrioridad(txt){
 }
 
 function _detectarPlazo(txt){
-  const t = txt.toLowerCase();
-  const m = t.match(/\b(hoy|mañana|pasado mañana|lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo|\d{1,2}\s*(?:de\s*)?(?:ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?))\b/);
-  return m ? m[0] : null;
+  const t = ' ' + txt.toLowerCase() + ' ';
+  const candidatos = ['pasado mañana','mañana','hoy','lunes','martes','miércoles','miercoles','jueves','viernes','sábado','sabado','domingo'];
+  for(const p of candidatos){
+    if(t.indexOf(' '+p+' ') !== -1 || t.indexOf(' '+p+',') !== -1) return p;
+  }
+  const dm = t.match(/\s(\d{1,2}(?:\s*de\s*)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*)\s/);
+  return dm ? dm[1].trim() : null;
 }
 
 function _limpiarTitulo(txt, prioridad, plazo){
-  let t = txt;
-  if(prioridad) t = t.replace(new RegExp('\\b(?:prioridad\\s+)?'+prioridad+'\\b','gi'), '');
-  if(plazo)     t = t.replace(new RegExp('\\b'+plazo.replace(/\s+/g,'\\s+')+'\\b','gi'), '');
-  return t.replace(/\s{2,}/g,' ').trim();
+  let t = ' ' + txt.toLowerCase() + ' ';
+  if(plazo)     t = t.split(' '+plazo+' ').join(' ');
+  if(prioridad){
+    t = t.split(' prioridad '+prioridad+' ').join(' ');
+    t = t.split(' '+prioridad+' ').join(' ');
+  }
+  return t.trim().replace(/\s{2,}/g,' ');
 }
 
 async function optiSend(){

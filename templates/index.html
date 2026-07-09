@@ -1895,6 +1895,8 @@ const OPTI_IMGS = {
 function getOptiFAQ(){
   const rol = currentUser?.rol || 'consultor';
   const faq = {
+    "📝 Nueva nota": "NOTA_CMD",
+    "✅ Nueva tarea": "TAREA_CMD",
     "¿Cómo marco sin deuda?":
       "En la tabla de certificados, haz clic directo en la casilla ☐ de la columna 'Sin deuda'. Cambia inmediatamente a ✅.",
     "¿Cómo cambio el formato?":
@@ -2030,7 +2032,25 @@ function optiAnswer(q){
   optiAddMsg('user', q);
   document.getElementById('opti-options').innerHTML = '';
   setOptiImg('think');
-  if(faq[q] === 'REPORT'){
+  if(faq[q] === 'NOTA_CMD'){
+    setTimeout(()=>{
+      setOptiImg('listen');
+      optiAddMsg('bot', '📝 ¿Qué quieres anotar?');
+      const inp = document.getElementById('opti-input');
+      inp.dataset.mode = 'nota_cmd';
+      inp.placeholder = 'Escribe el contenido de la nota…';
+      inp.focus();
+    }, 400);
+  } else if(faq[q] === 'TAREA_CMD'){
+    setTimeout(()=>{
+      setOptiImg('listen');
+      optiAddMsg('bot', '✅ ¿Cuál es la tarea?');
+      const inp = document.getElementById('opti-input');
+      inp.dataset.mode = 'tarea_titulo';
+      inp.placeholder = 'Describe la tarea…';
+      inp.focus();
+    }, 400);
+  } else if(faq[q] === 'REPORT'){
     optiShowTyping();
     setTimeout(()=>{
       optiHideTyping();
@@ -2058,6 +2078,37 @@ function optiAnswer(q){
   }
 }
 
+// ── Estado pendiente para comandos NOTA / TAREA ──
+let _optiPendiente = {};
+
+function _optiReset(input){
+  input.dataset.mode = '';
+  input.placeholder = 'Escribe tu mensaje...';
+  _optiPendiente = {};
+}
+
+async function _optiGuardarNota(titulo){
+  const r = await fetch('/api/notas',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({titulo})});
+  return r.ok;
+}
+
+async function _optiGuardarTarea(titulo, prioridad, plazo){
+  const r = await fetch('/api/tareas',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({titulo, prioridad, descripcion: plazo ? '📅 Plazo: '+plazo : ''})});
+  return r.ok;
+}
+
+function _detectarPrioridad(txt){
+  const t = txt.toLowerCase();
+  if(/\balta\b/.test(t)) return 'alta';
+  if(/\bmedia\b|\bnormal\b/.test(t)) return 'media';
+  if(/\bbaja\b/.test(t)) return 'baja';
+  return null;
+}
+
 async function optiSend(){
   const input = document.getElementById('opti-input');
   const text  = input.value.trim();
@@ -2066,6 +2117,132 @@ async function optiSend(){
   optiAddMsg('user', text);
   input.value = '';
   document.getElementById('opti-options').innerHTML = '';
+
+  // ── Flujo NOTA ──────────────────────────────────────────
+  if(input.dataset.mode === 'nota_cmd'){
+    _optiReset(input);
+    optiShowTyping();
+    const ok = await _optiGuardarNota(text);
+    optiHideTyping();
+    setOptiImg('talk');
+    if(ok){
+      optiAddMsg('bot', `✅ Nota guardada: "${text}"`);
+      if(document.getElementById('home-notas')) verPrincipal();
+    } else {
+      optiAddMsg('bot', '❌ No pude guardar la nota. Intenta de nuevo.');
+    }
+    setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 600);
+    return;
+  }
+
+  // ── Flujo TAREA — paso prioridad ─────────────────────────
+  if(input.dataset.mode === 'tarea_prioridad'){
+    const pr = _detectarPrioridad(text);
+    if(!pr){
+      optiAddMsg('bot', 'No entendí. Dime: ¿Alta, Media o Baja?');
+      return;
+    }
+    _optiPendiente.prioridad = pr;
+    if(!_optiPendiente.plazo){
+      input.dataset.mode = 'tarea_plazo';
+      input.placeholder = 'Ej: mañana, viernes, 15 jul…';
+      optiAddMsg('bot', `Prioridad ${pr} ✓ ¿Para cuándo es la tarea?`);
+    } else {
+      await _optiFinalizarTarea(input);
+    }
+    return;
+  }
+
+  // ── Flujo TAREA — paso plazo ─────────────────────────────
+  if(input.dataset.mode === 'tarea_plazo'){
+    _optiPendiente.plazo = text;
+    if(!_optiPendiente.prioridad){
+      input.dataset.mode = 'tarea_prioridad';
+      input.placeholder = 'Alta / Media / Baja';
+      optiAddMsg('bot', `Plazo "${text}" ✓ ¿Cuál es la prioridad? (Alta / Media / Baja)`);
+    } else {
+      await _optiFinalizarTarea(input);
+    }
+    return;
+  }
+
+  async function _optiFinalizarTarea(input){
+    const {titulo, prioridad, plazo} = _optiPendiente;
+    _optiReset(input);
+    optiShowTyping();
+    const ok = await _optiGuardarTarea(titulo, prioridad, plazo);
+    optiHideTyping();
+    setOptiImg('talk');
+    if(ok){
+      optiAddMsg('bot', `✅ Tarea creada:\n📌 ${titulo}\n⚡ Prioridad: ${prioridad}\n📅 Plazo: ${plazo}`);
+      if(document.getElementById('home-tareas')) verPrincipal();
+    } else {
+      optiAddMsg('bot', '❌ No pude guardar la tarea. Intenta de nuevo.');
+    }
+    setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 600);
+  }
+
+  // ── Detección de comandos NOTA / TAREA en texto libre ────
+  const upper = text.toUpperCase();
+
+  if(upper.startsWith('NOTA')){
+    const contenido = text.slice(4).trim();
+    if(contenido){
+      optiShowTyping();
+      const ok = await _optiGuardarNota(contenido);
+      optiHideTyping();
+      setOptiImg('talk');
+      if(ok){
+        optiAddMsg('bot', `✅ Nota guardada: "${contenido}"`);
+        if(document.getElementById('home-notas')) verPrincipal();
+      } else {
+        optiAddMsg('bot', '❌ No pude guardar la nota.');
+      }
+      setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 600);
+    } else {
+      setOptiImg('talk');
+      input.dataset.mode = 'nota_cmd';
+      input.placeholder = 'Escribe el contenido de la nota…';
+      optiAddMsg('bot', '📝 ¿Qué quieres anotar?');
+    }
+    return;
+  }
+
+  if(upper.startsWith('TAREA')){
+    const resto = text.slice(5).trim();
+    const titulo = resto || null;
+    if(!titulo){
+      setOptiImg('talk');
+      input.dataset.mode = 'tarea_titulo';
+      input.placeholder = 'Describe la tarea…';
+      optiAddMsg('bot', '✅ ¿Cuál es la tarea?');
+      return;
+    }
+    _optiPendiente = {titulo};
+    const pr = _detectarPrioridad(titulo);
+    if(pr) _optiPendiente.prioridad = pr;
+    if(!_optiPendiente.prioridad){
+      setOptiImg('talk');
+      input.dataset.mode = 'tarea_prioridad';
+      input.placeholder = 'Alta / Media / Baja';
+      optiAddMsg('bot', `Tarea: "${titulo}" ✓\n¿Cuál es la prioridad? (Alta / Media / Baja)`);
+    } else {
+      setOptiImg('talk');
+      input.dataset.mode = 'tarea_plazo';
+      input.placeholder = 'Ej: mañana, viernes, 15 jul…';
+      optiAddMsg('bot', `Tarea: "${titulo}" · Prioridad: ${_optiPendiente.prioridad} ✓\n¿Para cuándo es?`);
+    }
+    return;
+  }
+
+  // ── Flujo TAREA — paso título (si vino vacío) ─────────────
+  if(input.dataset.mode === 'tarea_titulo'){
+    _optiPendiente.titulo = text;
+    input.dataset.mode = 'tarea_prioridad';
+    input.placeholder = 'Alta / Media / Baja';
+    optiAddMsg('bot', `Tarea: "${text}" ✓\n¿Cuál es la prioridad? (Alta / Media / Baja)`);
+    return;
+  }
 
   if(input.dataset.mode === 'report'){
     input.dataset.mode = '';

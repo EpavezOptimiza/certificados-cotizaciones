@@ -415,10 +415,46 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="btn btn-orange admin-ahorro-only" onclick="moverGeneracionEmpresa()" id="btn-mover-gen" style="display:none;margin-left:4px" title="Mover todos los Posteriores a Iniciales">🔄 Mover Posteriores → Iniciales</button>
   </div>
   <div id="table-wrap">
-    <div id="home-view" style="padding:4px">
-      <h3 style="margin-bottom:4px;font-size:15px;color:#0f172a">📰 Noticias sobre mora previsional</h3>
-      <p style="margin-bottom:14px;font-size:11px;color:#64748b">Últimas noticias relacionadas con deuda previsional, cotizaciones impagas y AFP en Chile.</p>
-      <div id="noticias-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div id="home-view" style="padding:16px;display:flex;gap:16px;align-items:flex-start">
+
+      <!-- ── Columna izquierda: resumen ── -->
+      <div style="width:320px;min-width:280px;display:flex;flex-direction:column;gap:12px">
+
+        <!-- Tareas pendientes -->
+        <div style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)">
+          <div style="padding:12px 14px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:13px;font-weight:700;color:#0f172a">✅ Tareas pendientes</span>
+            <a href="/tareas" style="font-size:10px;color:var(--accent);text-decoration:none;font-weight:600">Ver todas →</a>
+          </div>
+          <div id="home-tareas" style="padding:8px 10px;display:flex;flex-direction:column;gap:4px">
+            <p style="font-size:12px;color:#94a3b8;padding:4px 4px">Cargando…</p>
+          </div>
+        </div>
+
+        <!-- Notas recientes -->
+        <div style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)">
+          <div style="padding:12px 14px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:13px;font-weight:700;color:#0f172a">📝 Notas recientes</span>
+            <a href="/notas" style="font-size:10px;color:var(--accent);text-decoration:none;font-weight:600">Ver todas →</a>
+          </div>
+          <div id="home-notas" style="padding:8px 10px;display:flex;flex-direction:column;gap:4px">
+            <p style="font-size:12px;color:#94a3b8;padding:4px 4px">Cargando…</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Columna derecha: noticias ── -->
+      <div style="flex:1;min-width:0">
+        <div style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)">
+          <div style="padding:12px 14px 10px;border-bottom:1px solid #f1f5f9">
+            <span style="font-size:13px;font-weight:700;color:#0f172a">📰 Noticias previsionales</span>
+            <p style="font-size:10px;color:#64748b;margin-top:2px">Deuda previsional, cotizaciones impagas y AFP en Chile</p>
+          </div>
+          <div id="noticias-list" style="display:flex;flex-direction:column;gap:0;max-height:calc(100vh - 220px);overflow-y:auto"></div>
+        </div>
+      </div>
+
     </div>
     <div id="sol-view" style="display:none;padding:4px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -1505,6 +1541,9 @@ async function enviarSolicitud(){
     : `✅ ${creadas} solicitud${creadas!==1?"es":""} enviada${creadas!==1?"s":""}`;
   toast(msg, errores ? 8000 : 3000);
 }
+const PRIORIDAD_COLOR={alta:"#dc2626",media:"#d97706",baja:"#94a3b8"};
+const PRIORIDAD_BG={alta:"#fef2f2",media:"#fffbeb",baja:"transparent"};
+
 async function verPrincipal(){
   empresaId=null;
   document.querySelectorAll(".e-node").forEach(n=>n.classList.remove("active"));
@@ -1520,31 +1559,91 @@ async function verPrincipal(){
   document.getElementById("header-meta").textContent="Resumen y noticias previsionales";
   const navEl=document.getElementById("nav-principal");
   if(navEl) navEl.style.background="rgba(var(--accent-rgb),.18)";
-  const list=document.getElementById("noticias-list");
-  list.innerHTML='<p style="color:#94a3b8;font-size:12px">Cargando noticias…</p>';
-  try{
-    const r=await fetch("/api/noticias");
-    const d=await r.json();
-    const noticias=d.noticias||[];
-    if(!noticias.length){
-      list.innerHTML='<p style="color:#94a3b8;font-size:12px">No se encontraron noticias por el momento.</p>';
-      return;
+
+  // Cargar tareas, notas y noticias en paralelo
+  const [rTareas, rNotas, rNoticias] = await Promise.allSettled([
+    fetch("/api/tareas").then(r=>r.json()),
+    fetch("/api/notas").then(r=>r.json()),
+    fetch("/api/noticias").then(r=>r.json())
+  ]);
+
+  // ── Tareas ──
+  const elTareas = document.getElementById("home-tareas");
+  if(rTareas.status==="fulfilled"){
+    const pendientes = rTareas.value.filter(t=>t.estado!=="completada").slice(0,6);
+    if(!pendientes.length){
+      elTareas.innerHTML='<p style="font-size:12px;color:#94a3b8;padding:6px 4px">Sin tareas pendientes 🎉</p>';
+    } else {
+      elTareas.innerHTML = pendientes.map(t=>{
+        const pr = t.prioridad||"baja";
+        return `<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:7px;background:${PRIORIDAD_BG[pr]}">
+          <span style="width:7px;height:7px;border-radius:50%;background:${PRIORIDAD_COLOR[pr]};flex-shrink:0"></span>
+          <span style="font-size:12px;color:#0f172a;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(t.titulo||t.texto||"")}</span>
+          <span style="font-size:10px;color:${PRIORIDAD_COLOR[pr]};font-weight:600;text-transform:capitalize">${pr}</span>
+        </div>`;
+      }).join("");
+      const resto = rTareas.value.filter(t=>t.estado!=="completada").length - pendientes.length;
+      if(resto>0) elTareas.innerHTML += `<div style="text-align:center;padding:4px;font-size:11px;color:#94a3b8">+ ${resto} más</div>`;
     }
-    list.innerHTML=noticias.map(n=>{
-      let fechaFmt="";
-      try{ fechaFmt=new Date(n.fecha).toLocaleDateString("es-CL",{day:"2-digit",month:"short",year:"numeric"}); }catch(e){}
-      const img = n.imagen ? `<img src="${n.imagen}" alt="" style="width:100px;min-width:100px;height:70px;object-fit:cover;border-radius:7px;margin-left:12px;flex-shrink:0" onerror="this.style.display='none'">` : "";
-      return `<a href="${n.link}" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='#e2e8f0'">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600;color:#0f172a;line-height:1.4">${n.titulo}</div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:6px">${n.fuente||""}${n.fuente&&fechaFmt?" · ":""}${fechaFmt}</div>
-        </div>
-        ${img}
-      </a>`;
-    }).join("");
-  }catch(e){
-    list.innerHTML='<p style="color:#dc2626;font-size:12px">Error al cargar noticias.</p>';
+  } else {
+    elTareas.innerHTML='<p style="font-size:12px;color:#dc2626;padding:4px">Error al cargar</p>';
   }
+
+  // ── Notas ──
+  const elNotas = document.getElementById("home-notas");
+  if(rNotas.status==="fulfilled"){
+    const notas = rNotas.value.slice(0,4);
+    if(!notas.length){
+      elNotas.innerHTML='<p style="font-size:12px;color:#94a3b8;padding:6px 4px">Sin notas aún</p>';
+    } else {
+      elNotas.innerHTML = notas.map(n=>{
+        const cuando = _tiempoRelativo(n.actualizada||n.creada);
+        const fijada = n.fijada ? "📌 " : "";
+        return `<div style="padding:6px 8px;border-radius:7px;border-left:3px solid ${n.fijada?"#f59e0b":"#e2e8f0"};background:#f8fafc;overflow:hidden">
+          <div style="font-size:12px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fijada}${escHtml(n.titulo)}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px">${cuando}</div>
+        </div>`;
+      }).join("");
+    }
+  } else {
+    elNotas.innerHTML='<p style="font-size:12px;color:#dc2626;padding:4px">Error al cargar</p>';
+  }
+
+  // ── Noticias ──
+  const list = document.getElementById("noticias-list");
+  if(rNoticias.status==="fulfilled"){
+    const noticias=(rNoticias.value.noticias||[]);
+    if(!noticias.length){
+      list.innerHTML='<p style="color:#94a3b8;font-size:12px;padding:14px">No se encontraron noticias por el momento.</p>';
+    } else {
+      list.innerHTML=noticias.map((n,i)=>{
+        let fechaFmt="";
+        try{ fechaFmt=new Date(n.fecha).toLocaleDateString("es-CL",{day:"2-digit",month:"short",year:"numeric"}); }catch(e){}
+        const img = n.imagen
+          ? `<img src="${n.imagen}" alt="" style="width:80px;min-width:80px;height:54px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.style.display='none'">`
+          : `<div style="width:80px;min-width:80px;height:54px;border-radius:8px;background:#f1f5f9;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px">📰</div>`;
+        const borde = i<noticias.length-1 ? "border-bottom:1px solid #f1f5f9;" : "";
+        return `<a href="${n.link}" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 14px;${borde}transition:background .15s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:#0f172a;line-height:1.45">${n.titulo}</div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:4px">${n.fuente||""}${n.fuente&&fechaFmt?" · ":""}${fechaFmt}</div>
+          </div>
+          ${img}
+        </a>`;
+      }).join("");
+    }
+  } else {
+    list.innerHTML='<p style="color:#dc2626;font-size:12px;padding:14px">Error al cargar noticias.</p>';
+  }
+}
+
+function _tiempoRelativo(ts){
+  if(!ts) return "";
+  const diff = (Date.now() - new Date(ts.replace(" ","T")+"Z")) / 1000;
+  if(diff<3600) return "hace "+ Math.max(1,Math.round(diff/60))+" min";
+  if(diff<86400) return "hace "+Math.round(diff/3600)+" h";
+  if(diff<172800) return "ayer";
+  return new Date(ts).toLocaleDateString("es-CL",{day:"2-digit",month:"short"});
 }
 
 async function verSolicitudes(){

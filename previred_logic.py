@@ -338,31 +338,28 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
-        # Interceptar la respuesta del POST a CtrlFce
+        # Interceptar solo el POST a CtrlFce
         captured = {}
 
         def handle_route(route, request, _cap=captured):
-            if 'CtrlFce' in request.url and request.method == 'POST':
-                try:
-                    response = route.fetch()
-                    _cap['content_type'] = response.headers.get('content-type', '')
-                    _cap['body'] = response.body()
-                    route.fulfill(response=response)
-                except Exception as e_r:
-                    _cap['error'] = str(e_r)
-                    route.continue_()
-            else:
+            try:
+                response = route.fetch()
+                _cap['content_type'] = response.headers.get('content-type', '')
+                _cap['body'] = response.body()
+                route.fulfill(response=response)
+            except Exception as e_r:
+                _cap['error'] = str(e_r)
                 route.continue_()
 
-        page.route("**/*", handle_route)
+        page.route("**/CtrlFce*", handle_route)
         try:
             page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(5000)
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
-            page.unroute("**/*", handle_route)
+            page.unroute("**/CtrlFce*", handle_route)
             continue
-        page.unroute("**/*", handle_route)
+        page.unroute("**/CtrlFce*", handle_route)
 
         if 'body' in captured:
             ct = captured.get('content_type', '')
@@ -373,12 +370,16 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                 log(f"Guardado: {nombre_dest}", "ok")
                 descargados += 1
             else:
-                # Respuesta no es PDF — renderizar con Playwright
+                # HTML — renderizar en pestaña nueva para obtener PDF limpio
                 try:
-                    pdf_bytes = page.pdf()
+                    html = captured['body'].decode('utf-8', errors='replace')
+                    nueva = page.context.new_page()
+                    nueva.set_content(html, wait_until='domcontentloaded')
+                    pdf_bytes = nueva.pdf()
+                    nueva.close()
                     with open(ruta_dest, 'wb') as f:
                         f.write(pdf_bytes)
-                    log(f"Guardado (render): {nombre_dest}", "ok")
+                    log(f"Guardado: {nombre_dest}", "ok")
                     descargados += 1
                 except Exception as e_r:
                     log(f"inst{inst_num} ({nombre_inst}): render falló {e_r}", "warn")

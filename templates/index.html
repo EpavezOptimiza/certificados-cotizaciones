@@ -332,7 +332,7 @@ body.dark .pref-label{color:#e2e8f0}
   </div>
   <div id="sidebar-label" style="padding-top:14px">Herramientas</div>
   <div style="flex:1;min-height:0;overflow-y:auto;padding:4px 10px 10px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid rgba(255,255,255,.06)">
-    <a href="/empresas" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(59,130,246,.1);color:#93c5fd;border-color:rgba(59,130,246,.2)">
+    <a href="/empresas" class="sb-btn nav-admin-ahorro" style="display:none;text-decoration:none;align-items:center;gap:8px;background:rgba(59,130,246,.1);color:#93c5fd;border-color:rgba(59,130,246,.2)">
       <span style="font-size:15px">🏢</span>
       <div>
         <div style="font-size:12px;font-weight:600">Empresas</div>
@@ -346,31 +346,31 @@ body.dark .pref-label{color:#e2e8f0}
         <div style="font-size:10px;opacity:.65;font-weight:400">Descarga y conversión</div>
       </div>
     </a>
-    <a href="/base-deudas" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(217,119,6,.1);color:#fcd34d;border-color:rgba(217,119,6,.2)">
+    <a href="/base-deudas" class="sb-btn nav-no-ingreso" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(217,119,6,.1);color:#fcd34d;border-color:rgba(217,119,6,.2)">
       <span style="font-size:15px">📋</span>
       <div>
         <div style="font-size:12px;font-weight:600">Base Deudas</div>
         <div style="font-size:10px;opacity:.65;font-weight:400">Consolidar deudas AFP</div>
       </div>
     </a>
-    <a href="#" onclick="verSolicitudes();return false" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(148,163,184,.1);color:#cbd5e1;border-color:rgba(148,163,184,.2)">
+    <a href="#" onclick="verSolicitudes();return false" class="sb-btn nav-no-ingreso" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(148,163,184,.1);color:#cbd5e1;border-color:rgba(148,163,184,.2)">
       <span style="font-size:15px">📄</span>
       <div>
         <div style="font-size:12px;font-weight:600">Certificados de deuda</div>
         <div style="font-size:10px;opacity:.65;font-weight:400">Pendientes y atendidas</div>
       </div>
     </a>
-    <a href="/notas" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(234,179,8,.1);color:#fde68a;border-color:rgba(234,179,8,.2)">
+    <a href="/notas" class="sb-btn nav-no-ingreso" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(234,179,8,.1);color:#fde68a;border-color:rgba(234,179,8,.2)">
         <span style="font-size:15px">📝</span>
         <div><div>Notas</div><div style="font-size:10px;opacity:.65;font-weight:400">Notas rápidas</div></div>
         <span id="badge-notas" style="margin-left:auto;font-size:10px;background:rgba(234,179,8,.3);color:#fde68a;padding:2px 6px;border-radius:10px;display:none"></span>
     </a>
-    <a href="/tareas" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(34,197,94,.1);color:#86efac;border-color:rgba(34,197,94,.2)">
+    <a href="/tareas" class="sb-btn nav-no-ingreso" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(34,197,94,.1);color:#86efac;border-color:rgba(34,197,94,.2)">
         <span style="font-size:15px">✅</span>
         <div><div>Tareas</div><div style="font-size:10px;opacity:.65;font-weight:400">Pendientes</div></div>
         <span id="badge-tareas" style="margin-left:auto;font-size:10px;background:rgba(239,68,68,.3);color:#fca5a5;padding:2px 6px;border-radius:10px;display:none"></span>
     </a>
-    <a href="#" onclick="abrirCartas();return false" class="sb-btn" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(139,92,246,.1);color:#c4b5fd;border-color:rgba(139,92,246,.2)">
+    <a href="#" onclick="abrirCartas();return false" class="sb-btn nav-admin-ahorro" style="display:none;text-decoration:none;align-items:center;gap:8px;background:rgba(139,92,246,.1);color:#c4b5fd;border-color:rgba(139,92,246,.2)">
       <span style="font-size:15px">✉</span>
       <div>
         <div style="font-size:12px;font-weight:600">Cartas Previsionales</div>
@@ -907,6 +907,14 @@ function applyRoleUI(){
   });
   document.querySelectorAll(".admin-ahorro-only").forEach(el=>{
     el.style.display = (rol==="terreno") ? "none" : "";
+  });
+  // Módulos del sidebar: solo admin y ahorro
+  document.querySelectorAll(".nav-admin-ahorro").forEach(el=>{
+    el.style.display = (rol==="admin"||rol==="ahorro") ? "flex" : "none";
+  });
+  // Módulos del sidebar: todos excepto ingreso
+  document.querySelectorAll(".nav-no-ingreso").forEach(el=>{
+    el.style.display = (rol==="ingreso") ? "none" : "flex";
   });
   // Menú más
   const canEdit = rol === "admin";

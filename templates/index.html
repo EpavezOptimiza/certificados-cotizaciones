@@ -1553,7 +1553,7 @@ async function verPrincipal(){
   document.querySelectorAll(".e-node").forEach(n=>n.classList.remove("active"));
   document.getElementById("tabla").style.display="none";
   document.getElementById("sol-view").style.display="none";
-  document.getElementById("home-view").style.display="";
+  document.getElementById("home-view").style.display="flex";
   document.getElementById("stats").innerHTML="";
   document.getElementById("filters").style.display="none";
   document.getElementById("btn-reporte").style.display="none";
@@ -2135,7 +2135,7 @@ function _optiReset(input){
 async function _optiGuardarNota(titulo){
   const r = await fetch('/api/notas',{method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({titulo})});
+    body:JSON.stringify({titulo, skip_tarea: true})});
   return r.ok;
 }
 

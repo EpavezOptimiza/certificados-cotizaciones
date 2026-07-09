@@ -2161,7 +2161,7 @@ def crear_nota():
         palabras = (cfg["palabras_clave"].split(",") if cfg and cfg["palabras_clave"] else PALABRAS_TAREA_DEFAULT)
         texto_completo = titulo + " " + d.get("contenido","")
         tarea_id = None
-        if _detectar_tareas(texto_completo, palabras):
+        if not d.get("skip_tarea") and _detectar_tareas(texto_completo, palabras):
             prioridad = "alta" if d.get("etiqueta") == "urgente" else "media"
             cur2 = conn.execute(
                 "INSERT INTO tareas(usuario_id,titulo,descripcion,prioridad,estado,nota_id,creada) VALUES(?,?,?,?,?,?,?)",

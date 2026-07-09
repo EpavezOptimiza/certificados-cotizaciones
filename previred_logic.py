@@ -360,40 +360,52 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         except Exception:
             pass
 
-        # 4. Click Imprimir → abre pestaña CtrlPdf con el PDF real
+        # 4. Click Imprimir → Previred abre CtrlPdf en nueva pestaña y descarga el PDF.
+        # El download event se dispara tan pronto llega la respuesta del servidor,
+        # antes de que podamos registrar expect_download() en la nueva pestaña.
+        # Solución: registrar listener en el contexto ANTES del click para capturarlo.
         guardado = False
+        downloaded = []
+        ctrlpdf_tabs = []
+
+        def _on_new_page(p):
+            ctrlpdf_tabs.append(p)
+            p.on("download", lambda dl: downloaded.append(dl))
+
+        page.context.on("page", _on_new_page)
         try:
-            with page.context.expect_page(timeout=12000) as nueva_pag_info:
-                page.click("#aceptar_modal")
-                log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
+            page.click("#aceptar_modal")
+            log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
 
-            ctrlpdf_pag = nueva_pag_info.value
+            # Esperar hasta 20s a que llegue la descarga
+            for _ in range(80):
+                page.wait_for_timeout(250)
+                if downloaded:
+                    break
 
-            # 5. Capturar PDF de la nueva pestaña (descarga o render)
-            try:
-                with ctrlpdf_pag.expect_download(timeout=20000) as dl_info:
-                    ctrlpdf_pag.wait_for_load_state('domcontentloaded', timeout=15000)
-                dl = dl_info.value
-                dl.save_as(ruta_dest)
+            if downloaded:
+                downloaded[0].save_as(ruta_dest)
                 guardado = True
-            except Exception:
+            elif ctrlpdf_tabs:
+                # Pestaña abierta pero sin descarga — intentar render
                 try:
-                    ctrlpdf_pag.wait_for_load_state('domcontentloaded', timeout=10000)
-                    ctrlpdf_pag.wait_for_timeout(1500)
-                    pdf_bytes = ctrlpdf_pag.pdf()
+                    ctrlpdf_tabs[0].wait_for_load_state('domcontentloaded', timeout=10000)
+                    ctrlpdf_tabs[0].wait_for_timeout(1000)
+                    pdf_bytes = ctrlpdf_tabs[0].pdf()
                     with open(ruta_dest, 'wb') as f:
                         f.write(pdf_bytes)
                     guardado = True
                 except Exception as e_r:
                     log(f"inst{inst_num} ({nombre_inst}): render falló {e_r.__class__.__name__}", "warn")
-
-            try:
-                ctrlpdf_pag.close()
-            except Exception:
-                pass
-
-        except Exception as e_np:
-            log(f"inst{inst_num} ({nombre_inst}): no se abrió CtrlPdf ({e_np.__class__.__name__})", "warn")
+            else:
+                log(f"inst{inst_num} ({nombre_inst}): no se abrió pestaña CtrlPdf", "warn")
+        finally:
+            page.context.remove_listener("page", _on_new_page)
+            for p in ctrlpdf_tabs:
+                try:
+                    p.close()
+                except Exception:
+                    pass
 
         # 6. Cerrar modal si quedó abierto
         try:

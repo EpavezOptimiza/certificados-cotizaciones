@@ -357,7 +357,7 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         page.route("**/*", handle_route)
         try:
             page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
-            time.sleep(4)
+            page.wait_for_timeout(4000)
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
             page.unroute("**/*", handle_route)

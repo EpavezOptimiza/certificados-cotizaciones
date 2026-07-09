@@ -2164,6 +2164,19 @@ function _detectarPrioridad(txt){
   return null;
 }
 
+function _detectarPlazo(txt){
+  const t = txt.toLowerCase();
+  const m = t.match(/\b(hoy|mañana|pasado mañana|lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo|\d{1,2}\s*(?:de\s*)?(?:ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?))\b/);
+  return m ? m[0] : null;
+}
+
+function _limpiarTitulo(txt, prioridad, plazo){
+  let t = txt;
+  if(prioridad) t = t.replace(new RegExp('\\b(?:prioridad\\s+)?'+prioridad+'\\b','gi'), '');
+  if(plazo)     t = t.replace(new RegExp('\\b'+plazo.replace(/\s+/g,'\\s+')+'\\b','gi'), '');
+  return t.replace(/\s{2,}/g,' ').trim();
+}
+
 async function optiSend(){
   const input = document.getElementById('opti-input');
   const text  = input.value.trim();
@@ -2265,18 +2278,21 @@ async function optiSend(){
 
   if(upper.startsWith('TAREA')){
     const resto = text.slice(5).trim();
-    const titulo = resto || null;
-    if(!titulo){
+    if(!resto){
       setOptiImg('talk');
       input.dataset.mode = 'tarea_titulo';
       input.placeholder = 'Describe la tarea…';
       optiAddMsg('bot', '✅ ¿Cuál es la tarea?');
       return;
     }
-    _optiPendiente = {titulo};
-    const pr = _detectarPrioridad(titulo);
-    if(pr) _optiPendiente.prioridad = pr;
-    if(!_optiPendiente.prioridad){
+    const pr    = _detectarPrioridad(resto);
+    const plazo = _detectarPlazo(resto);
+    const titulo = _limpiarTitulo(resto, pr, plazo);
+    _optiPendiente = {titulo, prioridad: pr||null, plazo: plazo||null};
+    if(pr && plazo){
+      // Todo completo → guardar directo
+      _optiFinalizarTarea(input);
+    } else if(!pr){
       setOptiImg('talk');
       input.dataset.mode = 'tarea_prioridad';
       input.placeholder = 'Alta / Media / Baja';
@@ -2285,7 +2301,7 @@ async function optiSend(){
       setOptiImg('talk');
       input.dataset.mode = 'tarea_plazo';
       input.placeholder = 'Ej: mañana, viernes, 15 jul…';
-      optiAddMsg('bot', `Tarea: "${titulo}" · Prioridad: ${_optiPendiente.prioridad} ✓\n¿Para cuándo es?`);
+      optiAddMsg('bot', `Tarea: "${titulo}" · Prioridad: ${pr} ✓\n¿Para cuándo es?`);
     }
     return;
   }

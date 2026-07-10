@@ -55,6 +55,25 @@ def _formato_pesos(val) -> str:
         return str(val)
 
 
+def _extraer_empresa_del_pdf(texto: str):
+    """Intenta extraer RUT empresa y razón social desde el texto del PDF."""
+    rut = ""
+    razon = ""
+    for linea in texto.split("\n"):
+        linea = linea.strip()
+        if not rut:
+            m = re.search(r"(?:rut\s*empresa\s*[:\-]?\s*|empresa\s*rut\s*[:\-]?\s*)(\d[\d\.]{6,11}-[\dkK])", linea, re.IGNORECASE)
+            if m:
+                rut = m.group(1)
+        if not razon:
+            m = re.search(r"(?:raz[oó]n\s*social\s*[:\-]?\s*)(.+)", linea, re.IGNORECASE)
+            if m:
+                razon = m.group(1).strip()
+        if rut and razon:
+            break
+    return rut, razon
+
+
 def extraer_trabajadores(ruta_pdf: str, nombre_archivo: str,
                          rut_empresa: str, razon_social: str) -> list:
     filas = []
@@ -67,6 +86,13 @@ def extraer_trabajadores(ruta_pdf: str, nombre_archivo: str,
                 texto = page.extract_text()
                 if not texto or "DETALLE DE PAGO" not in texto.upper():
                     continue
+                # Extraer RUT/Razón Social del PDF si no fueron provistos
+                if not rut_empresa or not razon_social:
+                    rut_pdf, razon_pdf = _extraer_empresa_del_pdf(texto)
+                    if not rut_empresa:
+                        rut_empresa = rut_pdf
+                    if not razon_social:
+                        razon_social = razon_pdf
                 afp = _detectar_afp(texto)
                 for linea in texto.split("\n"):
                     linea = linea.strip()

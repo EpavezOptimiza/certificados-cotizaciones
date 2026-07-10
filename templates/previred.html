@@ -190,7 +190,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <input type="file" id="input-pdfs-convertir" accept=".pdf" multiple style="display:none"
         onchange="handlePdfsSeleccionados(this.files)">
-      <div id="lista-pdfs-subidos" style="margin-top:10px;font-size:12px;color:#374151"></div>
       <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
         <button class="btn-action btn-conv" style="flex:0 0 auto;padding:10px 18px" id="btn-convertir-subidos"
           onclick="convertirPdfsSubidos()" disabled>📊 Convertir estos PDFs</button>
@@ -199,6 +198,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           o usar la carpeta destino en su lugar
         </button>
       </div>
+      <div id="lista-pdfs-subidos" style="margin-top:10px;font-size:12px;color:#374151"></div>
     </div>
 
     <div class="grid2">

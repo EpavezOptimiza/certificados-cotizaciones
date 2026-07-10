@@ -56,21 +56,31 @@ def _formato_pesos(val) -> str:
 
 
 def _extraer_empresa_del_pdf(texto: str):
-    """Intenta extraer RUT empresa y razón social desde el texto del PDF."""
+    """Extrae RUT empresa y razón social del PDF de Previred.
+
+    Estructura del PDF: línea con 'Nombre o Razón Social' seguida de
+    una línea con 'NombreEmpresa XX.XXX.XXX-X'
+    """
     rut = ""
     razon = ""
-    for linea in texto.split("\n"):
-        linea = linea.strip()
-        if not rut:
-            m = re.search(r"(?:rut\s*empresa\s*[:\-]?\s*|empresa\s*rut\s*[:\-]?\s*)(\d[\d\.]{6,11}-[\dkK])", linea, re.IGNORECASE)
+    lineas = texto.split("\n")
+    for i, linea in enumerate(lineas):
+        s = linea.strip()
+        # Header: "Nombre o Razón Social ... RUT"
+        if ("razón social" in s.lower() or "razon social" in s.lower()) and i + 1 < len(lineas):
+            siguiente = lineas[i + 1].strip()
+            # La siguiente línea tiene: "Nombre Empresa XX.XXX.XXX-X"
+            m = re.search(r'(\d{1,2}\.\d{3}\.\d{3}-[\dkK])\s*$', siguiente)
             if m:
                 rut = m.group(1)
-        if not razon:
-            m = re.search(r"(?:raz[oó]n\s*social\s*[:\-]?\s*)(.+)", linea, re.IGNORECASE)
-            if m:
+                razon = siguiente[:m.start()].strip()
+                break
+        # Fallback: buscar RUT formato chileno en cualquier línea con texto previo
+        if not rut:
+            m = re.search(r'^(.+?)\s+(\d{1,2}\.\d{3}\.\d{3}-[\dkK])\s*$', s)
+            if m and len(m.group(1)) > 8:
                 razon = m.group(1).strip()
-        if rut and razon:
-            break
+                rut = m.group(2)
     return rut, razon
 
 

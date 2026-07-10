@@ -55,53 +55,90 @@ def _formato_pesos(val) -> str:
         return str(val)
 
 
-def _extraer_empresa_del_pdf(texto: str):
-    """Extrae RUT empresa y razón social del PDF de Previred.
+_SKIP_KW = ['rut empresa', 'período', 'periodo', 'institución', 'institucion',
+            'nombre o', 'folio', 'página', 'pagina', 'detalle de pago', 'totales']
+_RUT_RE  = re.compile(r'(\d{1,2}\.\d{3}\.\d{3}-[\dkK])')
 
-    Estructura del PDF: línea con 'Nombre o Razón Social' seguida de
-    una línea con 'NombreEmpresa XX.XXX.XXX-X'
-    """
+
+def _extraer_empresa_del_pdf(texto: str, log=None):
+    """Extrae RUT empresa y razón social del texto extraído por pdfplumber."""
     rut = ""
     razon = ""
     lineas = texto.split("\n")
+
+    if log:
+        preview = " | ".join(
+            f"[{i}]{l.strip()[:55]}" for i, l in enumerate(lineas[:20]) if l.strip()
+        )
+        log(f"[empresa-debug] {preview}", "debug")
+
+    # Estrategia 1: línea con "razón social" → buscar empresa en las siguientes 5 líneas
     for i, linea in enumerate(lineas):
         s = linea.strip()
-        # Header: "Nombre o Razón Social ... RUT"
-        if ("razón social" in s.lower() or "razon social" in s.lower()) and i + 1 < len(lineas):
-            siguiente = lineas[i + 1].strip()
-            # La siguiente línea tiene: "Nombre Empresa XX.XXX.XXX-X"
-            m = re.search(r'(\d{1,2}\.\d{3}\.\d{3}-[\dkK])\s*$', siguiente)
+        if not ("razón social" in s.lower() or "razon social" in s.lower()):
+            continue
+        for j in range(i + 1, min(i + 6, len(lineas))):
+            sig = lineas[j].strip()
+            if not sig:
+                continue
+            m = _RUT_RE.search(sig)
             if m:
-                rut = m.group(1)
-                razon = siguiente[:m.start()].strip()
-                break
-        # Fallback: buscar RUT formato chileno en cualquier línea con texto previo
-        if not rut:
-            m = re.search(r'^(.+?)\s+(\d{1,2}\.\d{3}\.\d{3}-[\dkK])\s*$', s)
-            if m and len(m.group(1)) > 8:
-                razon = m.group(1).strip()
-                rut = m.group(2)
+                candidate = sig[:m.start()].strip()
+                if len(candidate) > 5:
+                    rut = m.group(1)
+                    razon = candidate
+                    if log:
+                        log(f"[empresa] strat1 → {razon} | {rut}", "info")
+                    return rut, razon
+
+    # Estrategia 2: cualquier línea con nombre >10 chars + RUT (no empieza con dígito)
+    for linea in lineas:
+        s = linea.strip()
+        m = _RUT_RE.search(s)
+        if not m:
+            continue
+        before = s[:m.start()].strip()
+        if (len(before) > 10
+                and not re.match(r'^\d', before)
+                and not any(kw in before.lower() for kw in _SKIP_KW)):
+            rut = m.group(1)
+            razon = before
+            if log:
+                log(f"[empresa] strat2 → {razon} | {rut}", "info")
+            return rut, razon
+
+    if log:
+        log("[empresa] no se pudo extraer empresa del PDF", "warn")
     return rut, razon
 
 
 def extraer_trabajadores(ruta_pdf: str, nombre_archivo: str,
-                         rut_empresa: str, razon_social: str) -> list:
+                         rut_empresa: str, razon_social: str, log=None) -> list:
     filas = []
     periodo = _extraer_periodo(nombre_archivo)
     nomina  = _extraer_nomina(nombre_archivo)
 
     try:
         with pdfplumber.open(ruta_pdf) as pdf:
+            # Extraer empresa de la primera página (sin filtro DETALLE DE PAGO)
+            if (not rut_empresa or not razon_social) and pdf.pages:
+                texto_p1 = pdf.pages[0].extract_text() or ""
+                rut_pdf, razon_pdf = _extraer_empresa_del_pdf(texto_p1, log)
+                if not rut_empresa and rut_pdf:
+                    rut_empresa = rut_pdf
+                if not razon_social and razon_pdf:
+                    razon_social = razon_pdf
+
             for page in pdf.pages:
                 texto = page.extract_text()
                 if not texto or "DETALLE DE PAGO" not in texto.upper():
                     continue
-                # Extraer RUT/Razón Social del PDF si no fueron provistos
+                # Si aún no tenemos empresa, intentar con esta página también
                 if not rut_empresa or not razon_social:
-                    rut_pdf, razon_pdf = _extraer_empresa_del_pdf(texto)
-                    if not rut_empresa:
+                    rut_pdf, razon_pdf = _extraer_empresa_del_pdf(texto, log)
+                    if not rut_empresa and rut_pdf:
                         rut_empresa = rut_pdf
-                    if not razon_social:
+                    if not razon_social and razon_pdf:
                         razon_social = razon_pdf
                 afp = _detectar_afp(texto)
                 for linea in texto.split("\n"):
@@ -184,7 +221,7 @@ def generar_excel_bytes(rutas_pdf: list, rut_empresa: str,
     todas = []
     for i, ruta in enumerate(rutas_pdf, 1):
         nombre = os.path.basename(ruta)
-        filas = extraer_trabajadores(ruta, nombre, rut_empresa, razon_social)
+        filas = extraer_trabajadores(ruta, nombre, rut_empresa, razon_social, log)
         if log:
             log(f"[{i}/{len(rutas_pdf)}] {nombre} → {len(filas)} trabajadores", "info")
         todas.extend(filas)

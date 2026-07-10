@@ -35,6 +35,24 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;m
 .nav-opti{height:52px;flex-shrink:0;filter:drop-shadow(0 0 10px rgba(37,99,235,.35));transition:transform .25s;cursor:default;margin-right:-4px}
 .nav-opti:hover{transform:scale(1.1) rotate(-3deg)}
 
+/* ── Opti Nav Button ── */
+.opti-nav-wrap{position:relative}
+.opti-nav-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:5px 12px 5px 8px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.18s;font-family:inherit;color:#fff}
+.opti-nav-btn:hover,.opti-nav-btn.open{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22)}
+.opti-avatar{width:32px;height:32px;border-radius:50%;background:#1e3a5f;border:2px solid #2563eb;display:flex;align-items:center;justify-content:center;font-size:16px}
+.opti-label span{display:block;text-align:left}
+.opti-label-name{color:#e2e8f0;font-size:11px;font-weight:600;line-height:1.3}
+.opti-label-role{color:#4f83c4;font-size:10px;line-height:1.3}
+.opti-chevron{font-size:11px;color:#4f83c4;margin-left:2px;transition:transform .2s;line-height:1}
+.opti-nav-btn.open .opti-chevron{transform:rotate(180deg)}
+.opti-panel{position:absolute;top:calc(100% + 10px);right:0;width:240px;background:#fff;border-radius:16px;border:1.5px solid #e2e8f0;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:500;overflow:hidden;transform-origin:top right;transition:opacity .22s,transform .22s}
+.opti-panel.hidden{opacity:0;transform:scale(0.95) translateY(-6px);pointer-events:none}
+.opti-panel-img{background:linear-gradient(160deg,#0d1b2e 0%,#1e3a5f 100%);padding:0;display:flex;justify-content:center;align-items:flex-start;overflow:hidden;border-radius:16px 16px 0 0}
+.opti-panel-img img{width:86%;height:auto;display:block;margin-top:-4px}
+.opti-panel-body{padding:16px 18px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.opti-call-btn{width:100%;padding:11px 14px;background:#2563eb;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .18s}
+.opti-call-btn:hover{background:#1d4ed8}
+
 /* ── Tabs ── */
 .tabs{background:#fff;border-bottom:2px solid #e8edf2;display:flex;padding:0 20px;gap:2px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
 .tab{padding:11px 15px;font-size:12.5px;font-weight:600;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.18s;letter-spacing:.1px;white-space:nowrap}
@@ -180,6 +198,29 @@ textarea{resize:vertical;min-height:70px}
   <span class="nav-module-icon">✉</span>
   <span class="nav-brand">Cartas Previsionales</span>
   <div class="nav-right">
+    <div class="opti-nav-wrap">
+      <button class="opti-nav-btn" id="opti-toggle" onclick="toggleOptiPanel()" aria-expanded="false">
+        <div class="opti-avatar">🤖</div>
+        <div class="opti-label">
+          <span class="opti-label-name">Opti</span>
+          <span class="opti-label-role">Asistente</span>
+        </div>
+        <span class="opti-chevron">▾</span>
+      </button>
+      <div class="opti-panel hidden" id="opti-panel">
+        <div class="opti-panel-img">
+          <img src="/static/opti_panel.png" alt="Opti">
+        </div>
+        <div class="opti-panel-body">
+          <div>
+            <div style="font-weight:700;font-size:15px;color:#0f172a;">Hola, soy Opti</div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;line-height:1.5;">Tu asistente de cartas<br>previsionales</div>
+          </div>
+          <button class="opti-call-btn" onclick="llamarOptiBot()">💬 Llamar a Opti</button>
+        </div>
+      </div>
+    </div>
+    <span class="nav-sep">|</span>
     <div class="nav-user-info">
       <span class="nav-user">{{ user.nombre }}</span>
       <span class="nav-role">{{ user.rol }}</span>
@@ -1670,6 +1711,31 @@ async function marcarEnGestion() {
 // Guardar form al cambiar inputs
 document.addEventListener('change', e => {
   if (['f-causa','f-salud','f-fecha-cese','f-motivo'].includes(e.target.id)) guardarForm();
+});
+
+// ── Opti panel ──
+function toggleOptiPanel(){
+  const btn=document.getElementById('opti-toggle');
+  const panel=document.getElementById('opti-panel');
+  const open=btn.classList.toggle('open');
+  panel.classList.toggle('hidden',!open);
+  btn.setAttribute('aria-expanded',String(open));
+}
+function llamarOptiBot(){
+  document.getElementById('opti-panel').classList.add('hidden');
+  document.getElementById('opti-toggle').classList.remove('open');
+  switchTab('previred');
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.opti-nav-wrap')){
+    const panel=document.getElementById('opti-panel');
+    const btn=document.getElementById('opti-toggle');
+    if(panel&&!panel.classList.contains('hidden')){
+      panel.classList.add('hidden');
+      btn.classList.remove('open');
+      btn.setAttribute('aria-expanded','false');
+    }
+  }
 });
 </script>
 

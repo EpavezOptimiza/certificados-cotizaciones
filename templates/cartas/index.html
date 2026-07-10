@@ -205,10 +205,12 @@ textarea{resize:vertical;min-height:70px}
   <!-- Sidebar trabajadores -->
   <div class="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-title">Trabajadores</span>
-      <span class="badge" id="badge-total">0</span>
-      <span class="badge" id="badge-marcados" style="background:#16a34a;display:none">✓ 0</span>
-      <label style="margin-left:auto;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:500;color:#94a3b8">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="sidebar-title">Trabajadores</span>
+        <span class="badge" id="badge-total">0</span>
+        <span class="badge" id="badge-marcados" style="background:#16a34a;display:none">✓ 0</span>
+      </div>
+      <label style="margin-left:auto;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;font-weight:500;color:#94a3b8;flex-shrink:0">
         <input type="checkbox" id="check-all" onchange="toggleAll(this)"> Marcar filtrados
       </label>
     </div>

@@ -198,6 +198,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           o usar la carpeta destino en su lugar
         </button>
       </div>
+      <div id="upload-progress-wrap" style="display:none;margin-top:10px">
+        <div id="upload-progress-label" style="font-size:12px;color:#185FA5;margin-bottom:4px">Subiendo...</div>
+        <div style="background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden">
+          <div id="upload-progress-bar" style="height:100%;background:#185FA5;width:0%;transition:width .25s ease"></div>
+        </div>
+      </div>
       <div id="lista-pdfs-subidos" style="margin-top:10px;font-size:12px;color:#374151"></div>
     </div>
 
@@ -690,8 +696,16 @@ function renderListaPdfsSubidos(){
 async function convertirPdfsSubidos(){
   if(!_pdfsParaConvertir.length){ toast('Sube al menos un PDF'); return; }
 
-  setBotones(false);
+  const btn   = document.getElementById('btn-convertir-subidos');
+  const wrap  = document.getElementById('upload-progress-wrap');
+  const bar   = document.getElementById('upload-progress-bar');
+  const label = document.getElementById('upload-progress-label');
+
+  btn.disabled = true;
   limpiarLog();
+  wrap.style.display = '';
+  bar.style.width = '0%';
+  label.textContent = `Preparando ${_pdfsParaConvertir.length} archivo(s)...`;
 
   const fd = new FormData();
   _pdfsParaConvertir.forEach(f => fd.append('pdfs', f));
@@ -701,9 +715,35 @@ async function convertirPdfsSubidos(){
     fd.append('razon_social', empSel.razon || '');
   }
 
-  const res  = await fetch('/api/previred/convertir_subidos', { method:'POST', body: fd });
-  const data = await res.json();
-  if(data.error){ toast(data.error); setBotones(true); return; }
+  let data;
+  try {
+    data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/previred/convertir_subidos');
+      xhr.upload.onprogress = e => {
+        if(e.lengthComputable){
+          const pct = Math.round(e.loaded / e.total * 100);
+          bar.style.width = pct + '%';
+          label.textContent = `Subiendo ${_pdfsParaConvertir.length} archivo(s)... ${pct}%`;
+        }
+      };
+      xhr.onload = () => {
+        wrap.style.display = 'none';
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch(e) { reject(new Error('Respuesta inválida del servidor')); }
+      };
+      xhr.onerror = () => { wrap.style.display = 'none'; reject(new Error('Error de red al subir')); };
+      xhr.ontimeout = () => { wrap.style.display = 'none'; reject(new Error('Tiempo de espera agotado')); };
+      xhr.send(fd);
+    });
+  } catch(e) {
+    wrap.style.display = 'none';
+    toast(e.message);
+    btn.disabled = false;
+    return;
+  }
+
+  if(data.error){ toast(data.error); btn.disabled = false; return; }
 
   _taskId   = data.task_id;
   _logSince = 0;

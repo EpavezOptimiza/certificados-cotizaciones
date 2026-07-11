@@ -633,13 +633,23 @@ let visorDatos = [];
 let visorCols = [];
 let currentNavIndex = -1;  // Índice en la lista de marcados
 
-const MOTIVOS = [
-  'Trabajador finiquitado con fecha ',
-  'Periodo pagado en otra institucion: ',
-  'Trabajador con licencia medica desde ',
-  'Periodo pagado de forma correcta.',
-  'Cotizacion voluntaria no descontada.',
-  'Trabajador con ausentismo mes completo, sin remuneracion imponible.',
+const MOTIVOS_AFP = [
+  { full: 'Trabajador finiquitado con fecha ', short: 'Finiquitado' },
+  { full: 'Periodo pagado en otra institucion: ', short: 'Pagado otra institución' },
+  { full: 'Trabajador con licencia medica desde ', short: 'Licencia médica' },
+  { full: 'Periodo pagado de forma correcta.', short: 'Pagado correctamente' },
+  { full: 'Cotizacion voluntaria no descontada.', short: 'Cot. voluntaria' },
+  { full: 'Trabajador con ausentismo mes completo, sin remuneracion imponible.', short: 'Ausentismo mes completo' },
+  { full: 'Finiquito con pago posterior al finiquito.', short: 'Pago posterior finiquito' },
+];
+const MOTIVOS_ISAPRE = [
+  { full: 'Trabajador finiquitado con fecha ', short: 'Finiquitado' },
+  { full: 'Periodo pagado en otra institucion: ', short: 'Pagado otra institución' },
+  { full: 'Trabajador con licencia medica desde ', short: 'Licencia médica' },
+  { full: 'Periodo pagado de forma correcta.', short: 'Pagado correctamente' },
+  { full: 'Cotizacion voluntaria no descontada.', short: 'Cot. voluntaria' },
+  { full: 'Trabajador con ausentismo mes completo, sin remuneracion imponible.', short: 'Ausentismo mes completo' },
+  { full: 'Finiquito con pago posterior al finiquito.', short: 'Pago posterior finiquito' },
 ];
 
 const MESES_MAP = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
@@ -974,6 +984,7 @@ function renderCartaForm() {
   const INST_LIST = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital',
     'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC'];
   instEl.innerHTML = INST_LIST.map(i => `<option>${i}</option>`).join('');
+  instEl.onchange = renderMotivos;
   if (w.institucion) {
     const instLow = w.institucion.toLowerCase().trim();
     const match = INST_LIST.find(i => i.toLowerCase() === instLow)
@@ -1035,11 +1046,13 @@ function agregarPeriodosExtra() {
 }
 
 function renderMotivos() {
+  const inst = document.getElementById('f-inst')?.value || '';
+  const isIsapre = /colmena|consalud|cruz|vida|esencial|fonasa/i.test(inst);
+  const lista = isIsapre ? MOTIVOS_ISAPRE : MOTIVOS_AFP;
   const cont = document.getElementById('motivos-btns');
-  cont.innerHTML = MOTIVOS.map(m => {
-    const short = m.length > 35 ? m.slice(0,35)+'...' : m;
-    return `<button class="btn btn-outline btn-sm" onclick="setMotivo('${m}')">${short}</button>`;
-  }).join('');
+  cont.innerHTML = lista.map(({full, short}) =>
+    `<button class="btn btn-outline btn-sm" onclick="setMotivo(${JSON.stringify(full)})">${short}</button>`
+  ).join('');
 }
 
 function setMotivo(m) {

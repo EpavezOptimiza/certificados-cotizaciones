@@ -998,121 +998,119 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         # Último período: caer al bloque de comprobante (no finalizar)
 
                 # Comprobante — corre siempre después de registrar todos los períodos
-                    page.wait_for_timeout(800)
-                    log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
-                    job['resultados'][w['rut_trabajador']] = 'completado'
+                page.wait_for_timeout(800)
+                log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
+                job['resultados'][w['rut_trabajador']] = 'completado'
 
-                    # Hacer click en "Comprobante por Trabajador" del menú lateral (igual que el usuario)
-                    log("📄 Buscando menú Comprobante por Trabajador...")
+                # Hacer click en "Comprobante por Trabajador" del menú lateral (igual que el usuario)
+                log("📄 Buscando menú Comprobante por Trabajador...")
+                try:
+                    comp_menu = page.locator("text='Comprobante por Trabajador'").first
+                    comp_menu.wait_for(state='visible', timeout=8000)
+                    comp_menu.click()
+                    page.wait_for_timeout(2000)
+                    log("✓ Click Comprobante por Trabajador")
+                except Exception as e:
+                    log(f"⚠ Menú no encontrado: {e}")
+                    menu_items = page.evaluate("""() => Array.from(document.querySelectorAll('a, li, span, div')).filter(e => {
+                        const t = e.textContent.trim();
+                        return t.length > 3 && t.length < 60 && e.offsetHeight > 0;
+                    }).map(e => e.tagName + ': ' + e.textContent.trim()).slice(0, 30)""")
+                    log(f"Elementos visibles: {menu_items}")
+
+                import datetime as _dt2
+                hoy = _dt2.date.today().strftime('%d/%m/%Y')
+
+                selects_info = page.evaluate("""() => Array.from(document.querySelectorAll('select')).map(s => s.id + '|' + s.name + '|' + Array.from(s.options).map(o => o.value+':'+o.text).join(','))""")
+                log(f"Selects: {selects_info}")
+
+                # 1. RUT trabajador
+                try:
+                    rut_inp = page.locator("#web_rut2").first
+                    rut_inp.fill(rut_t, timeout=5000)
+                    log(f"✓ RUT: {rut_t}")
+                except Exception as e:
+                    log(f"⚠ RUT: {e}")
+
+                # 2. Institución Previsional
+                try:
+                    inst_limpia = inst.upper().replace('AFP ', '').replace('AFP', '').strip()
+                    page.evaluate("""(afp) => {
+                        var sel = document.getElementById('web_combo_codigo_afp');
+                        if (!sel) return;
+                        for (var i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].text.toUpperCase().indexOf(afp) !== -1) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                break;
+                            }
+                        }
+                    }""", inst_limpia)
+                    log(f"✓ Institución: {inst_limpia}")
+                except Exception as e:
+                    log(f"⚠ Institución: {e}")
+                page.wait_for_timeout(500)
+
+                # 3 y 4. Fecha Desde y Hasta → hoy
+                page.evaluate("""(fecha) => {
+                    ['web_desde', 'web_hasta'].forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) {
+                            el.removeAttribute('disabled');
+                            el.removeAttribute('readonly');
+                            el.value = fecha;
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                        }
+                    });
+                }""", hoy)
+                log(f"✓ Fecha Desde y Hasta: {hoy}")
+
+                page.wait_for_timeout(800)
+
+                # Interceptar el PDF real que sirve CtrlPdf antes de hacer click
+                pdf_capturado = []
+
+                def capturar_pdf(route):
                     try:
-                        comp_menu = page.locator("text='Comprobante por Trabajador'").first
-                        comp_menu.wait_for(state='visible', timeout=8000)
-                        comp_menu.click()
-                        page.wait_for_timeout(2000)
-                        log("✓ Click Comprobante por Trabajador")
-                    except Exception as e:
-                        log(f"⚠ Menú no encontrado: {e}")
-                        # Diagnóstico: listar todos los textos clickeables del menú
-                        menu_items = page.evaluate("""() => Array.from(document.querySelectorAll('a, li, span, div')).filter(e => {
-                            const t = e.textContent.trim();
-                            return t.length > 3 && t.length < 60 && e.offsetHeight > 0;
-                        }).map(e => e.tagName + ': ' + e.textContent.trim()).slice(0, 30)""")
-                        log(f"Elementos visibles: {menu_items}")
+                        response = route.fetch()
+                        body = response.body()
+                        if body and len(body) > 1000:
+                            pdf_capturado.append(body)
+                            log(f"📥 PDF capturado: {len(body)} bytes")
+                        route.fulfill(response=response)
+                    except Exception:
+                        route.continue_()
 
-                    import datetime as _dt2
-                    hoy = _dt2.date.today().strftime('%d/%m/%Y')
+                ctx.route('**/CtrlPdf**', capturar_pdf)
 
-                    # Diagnóstico: ver selects e inputs visibles
-                    selects_info = page.evaluate("""() => Array.from(document.querySelectorAll('select')).map(s => s.id + '|' + s.name + '|' + Array.from(s.options).map(o => o.value+':'+o.text).join(','))""")
-                    log(f"Selects: {selects_info}")
-
-                    # 1. RUT trabajador
-                    try:
-                        rut_inp = page.locator("#web_rut2").first
-                        rut_inp.fill(rut_t, timeout=5000)
-                        log(f"✓ RUT: {rut_t}")
-                    except Exception as e:
-                        log(f"⚠ RUT: {e}")
-
-                    # 2. Institución Previsional → la AFP del trabajador (select #web_combo_codigo_afp)
-                    try:
-                        inst_limpia = inst.upper().replace('AFP ', '').replace('AFP', '').strip()
-                        page.evaluate("""(afp) => {
-                            var sel = document.getElementById('web_combo_codigo_afp');
-                            if (!sel) return;
-                            for (var i = 0; i < sel.options.length; i++) {
-                                if (sel.options[i].text.toUpperCase().indexOf(afp) !== -1) {
-                                    sel.selectedIndex = i;
-                                    sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                    break;
+                try:
+                    with ctx.expect_page(timeout=25000) as new_page_info:
+                        page.evaluate("""() => {
+                            var all = Array.from(document.querySelectorAll('button, input[type=submit], a, span'));
+                            for (var el of all) {
+                                var txt = (el.textContent || el.value || '').trim();
+                                if (txt.indexOf('Generar') !== -1) {
+                                    (el.tagName === 'SPAN' ? el.parentElement : el).click();
+                                    return;
                                 }
                             }
-                        }""", inst_limpia)
-                        log(f"✓ Institución: {inst_limpia}")
-                    except Exception as e:
-                        log(f"⚠ Institución: {e}")
-                    page.wait_for_timeout(500)
+                        }""")
+                    popup = new_page_info.value
+                    popup.wait_for_load_state('networkidle', timeout=20000)
+                    popup.wait_for_timeout(1000)
+                    popup.close()
+                except Exception as e:
+                    log(f"⚠ Error popup: {e}")
 
-                    # 3 y 4. Fecha Desde y Hasta → hoy, vía JS porque el campo es readonly
-                    page.evaluate("""(fecha) => {
-                        ['web_desde', 'web_hasta'].forEach(function(id) {
-                            var el = document.getElementById(id);
-                            if (el) {
-                                el.removeAttribute('disabled');
-                                el.removeAttribute('readonly');
-                                el.value = fecha;
-                                el.dispatchEvent(new Event('change', {bubbles: true}));
-                                el.dispatchEvent(new Event('blur', {bubbles: true}));
-                            }
-                        });
-                    }""", hoy)
-                    log(f"✓ Fecha Desde y Hasta: {hoy}")
+                ctx.unroute('**/CtrlPdf**')
 
-                    page.wait_for_timeout(800)
-
-                    # Interceptar el PDF real que sirve CtrlPdf antes de hacer click
-                    pdf_capturado = []
-
-                    def capturar_pdf(route):
-                        try:
-                            response = route.fetch()
-                            body = response.body()
-                            if body and len(body) > 1000:
-                                pdf_capturado.append(body)
-                                log(f"📥 PDF capturado: {len(body)} bytes")
-                            route.fulfill(response=response)
-                        except Exception:
-                            route.continue_()
-
-                    ctx.route('**/CtrlPdf**', capturar_pdf)
-
-                    try:
-                        with ctx.expect_page(timeout=25000) as new_page_info:
-                            page.evaluate("""() => {
-                                var all = Array.from(document.querySelectorAll('button, input[type=submit], a, span'));
-                                for (var el of all) {
-                                    var txt = (el.textContent || el.value || '').trim();
-                                    if (txt.indexOf('Generar') !== -1) {
-                                        (el.tagName === 'SPAN' ? el.parentElement : el).click();
-                                        return;
-                                    }
-                                }
-                            }""")
-                        popup = new_page_info.value
-                        popup.wait_for_load_state('networkidle', timeout=20000)
-                        popup.wait_for_timeout(1000)
-                        popup.close()
-                    except Exception as e:
-                        log(f"⚠ Error popup: {e}")
-
-                    ctx.unroute('**/CtrlPdf**')
-
-                    if pdf_capturado:
-                        job['comprobante_bytes'] = pdf_capturado[0]
-                        job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                        log(f"✅ Comprobante real: MOV_PER_{rut_t}.pdf ({len(pdf_capturado[0])} bytes)")
-                    else:
-                        log("⚠ No se capturó el PDF de CtrlPdf")
+                if pdf_capturado:
+                    job['comprobante_bytes'] = pdf_capturado[0]
+                    job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
+                    log(f"✅ Comprobante real: MOV_PER_{rut_t}.pdf ({len(pdf_capturado[0])} bytes)")
+                else:
+                    log("⚠ No se capturó el PDF de CtrlPdf")
 
             ctx.close()
             browser.close()

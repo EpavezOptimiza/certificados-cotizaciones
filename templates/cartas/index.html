@@ -198,6 +198,11 @@ textarea{resize:vertical;min-height:70px}
   <span class="nav-sep">|</span>
   <span class="nav-module-icon">✉</span>
   <span class="nav-brand">Cartas Previsionales</span>
+  <span class="nav-sep">|</span>
+  <div class="nav-user-info" style="align-items:flex-start">
+    <span class="nav-user">{{ user.nombre }}</span>
+    <span class="nav-role">{{ user.rol }}</span>
+  </div>
   <div class="nav-right">
     <div class="opti-nav-wrap">
       <button class="opti-nav-btn" id="opti-toggle" onclick="toggleOptiPanel()" aria-expanded="false">
@@ -222,11 +227,6 @@ textarea{resize:vertical;min-height:70px}
           </div>
         </div>
       </div>
-    </div>
-    <span class="nav-sep">|</span>
-    <div class="nav-user-info">
-      <span class="nav-user">{{ user.nombre }}</span>
-      <span class="nav-role">{{ user.rol }}</span>
     </div>
     <a href="/" class="nav-back">← Inicio</a>
     <button class="cred-nav-btn" id="cred-nav-btn" onclick="abrirCredenciales()">Credenciales PreviRed</button>

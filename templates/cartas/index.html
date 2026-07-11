@@ -1084,15 +1084,6 @@ function setMotivo(m) {
     const primer = (sel.periodos_sel && sel.periodos_sel.length > 0) ? sel.periodos_sel[0] : '';
     if (primer) m = m + primer;
   }
-  // Motivos que deben respetar el/los período(s) que se está(n) cobrando
-  const requierePeriodo = ['periodo pagado de forma correcta', 'periodo pagado en otra institucion'];
-  if (sel && requierePeriodo.some(p => m.toLowerCase().includes(p))) {
-    const periodos = (sel.periodos_sel && sel.periodos_sel.length > 0) ? sel.periodos_sel.join(', ') : '';
-    if (periodos) {
-      m = m.replace(/\.?\s*$/, '');
-      m = m.endsWith(':') ? `${m} ${periodos}` : `${m}: ${periodos}`;
-    }
-  }
   document.getElementById('f-motivo').value = m;
   guardarForm();
 }

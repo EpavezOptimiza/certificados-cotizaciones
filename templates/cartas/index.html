@@ -32,8 +32,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;m
 .nav-role{font-size:10px;color:#4f83c4;text-transform:uppercase;letter-spacing:.5px}
 .nav-back{color:#64748b;text-decoration:none;font-size:12px;padding:5px 11px;border-radius:7px;border:1px solid rgba(255,255,255,.1);transition:.15s;font-weight:500}
 .nav-back:hover{background:rgba(255,255,255,.08);color:#e2e8f0;border-color:rgba(255,255,255,.2)}
-.cred-nav-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;color:#cbd5e1;font-family:inherit;transition:.18s;display:flex;align-items:center;gap:6px;white-space:nowrap}
-.cred-nav-btn:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.28);color:#fff}
+.cred-nav-btn{background:transparent;border:1px solid rgba(255,255,255,.22);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:12px;font-weight:600;color:#94a3b8;font-family:inherit;transition:.18s;white-space:nowrap;letter-spacing:.1px}
+.cred-nav-btn:hover{background:rgba(255,255,255,.08);color:#e2e8f0;border-color:rgba(255,255,255,.35)}
 .cred-nav-btn.saved{border-color:#22c55e;color:#86efac}
 
 /* ── Opti Nav Button ── */
@@ -198,6 +198,7 @@ textarea{resize:vertical;min-height:70px}
   <span class="nav-sep">|</span>
   <span class="nav-module-icon">✉</span>
   <span class="nav-brand">Cartas Previsionales</span>
+  <button class="cred-nav-btn" id="cred-nav-btn" onclick="abrirCredenciales()">🔐 Credenciales PreviRed</button>
   <div class="nav-right">
     <div class="opti-nav-wrap">
       <button class="opti-nav-btn" id="opti-toggle" onclick="toggleOptiPanel()" aria-expanded="false">
@@ -229,9 +230,6 @@ textarea{resize:vertical;min-height:70px}
       <span class="nav-role">{{ user.rol }}</span>
     </div>
     <a href="/" class="nav-back">← Inicio</a>
-    <button class="cred-nav-btn" id="cred-nav-btn" onclick="abrirCredenciales()">
-      🔐 Credenciales PreviRed
-    </button>
   </div>
 </nav>
 

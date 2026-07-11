@@ -34,8 +34,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;m
 .nav-back:hover{background:rgba(255,255,255,.08);color:#e2e8f0;border-color:rgba(255,255,255,.2)}
 .cred-nav-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;color:#cbd5e1;font-family:inherit;transition:.18s;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .cred-nav-btn:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.28);color:#fff}
-.cred-nav-btn .cred-dot{width:7px;height:7px;border-radius:50%;background:#94a3b8;display:inline-block;transition:background .3s}
-.cred-nav-btn.saved .cred-dot{background:#22c55e}
+.cred-nav-btn.saved{border-color:#22c55e;color:#86efac}
 
 /* ── Opti Nav Button ── */
 .opti-nav-wrap{position:relative}
@@ -229,10 +228,10 @@ textarea{resize:vertical;min-height:70px}
       <span class="nav-user">{{ user.nombre }}</span>
       <span class="nav-role">{{ user.rol }}</span>
     </div>
-    <button class="cred-nav-btn" id="cred-nav-btn" onclick="abrirCredenciales()">
-      <span class="cred-dot"></span>🔐 Credenciales PreviRed
-    </button>
     <a href="/" class="nav-back">← Inicio</a>
+    <button class="cred-nav-btn" id="cred-nav-btn" onclick="abrirCredenciales()">
+      🔐 Credenciales PreviRed
+    </button>
   </div>
 </nav>
 

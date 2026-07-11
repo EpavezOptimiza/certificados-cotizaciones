@@ -1051,7 +1051,7 @@ function renderMotivos() {
   const lista = isIsapre ? MOTIVOS_ISAPRE : MOTIVOS_AFP;
   const cont = document.getElementById('motivos-btns');
   cont.innerHTML = lista.map(({full, short}) =>
-    `<button class="btn btn-outline btn-sm" onclick="setMotivo(${JSON.stringify(full)})">${short}</button>`
+    `<button class="btn btn-outline btn-sm" onclick='setMotivo(${JSON.stringify(full)})'>${short}</button>`
   ).join('');
 }
 

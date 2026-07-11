@@ -1068,49 +1068,57 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Interceptar el PDF real que sirve CtrlPdf antes de hacer click
+                # Diagnóstico: ver qué elementos "Generar" existen en la página
+                btn_info = page.evaluate("""() => {
+                    return Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a, span'))
+                        .filter(e => (e.textContent||e.value||'').trim().toLowerCase().includes('generar'))
+                        .slice(0,5)
+                        .map(e => e.tagName+'#'+(e.id||'no-id')+': '+(e.textContent||e.value||'').trim().slice(0,40));
+                }""")
+                log(f"Elementos Generar: {btn_info}")
+
+                # Interceptar TODAS las requests para detectar qué URL sirve el PDF
                 pdf_capturado = []
 
                 def capturar_pdf(route):
                     try:
                         response = route.fetch()
                         body = response.body()
-                        if body and len(body) > 1000:
+                        ct = response.headers.get('content-type', '')
+                        url = route.request.url
+                        if 'pdf' in ct.lower() or (body and len(body) > 500 and body[:4] == b'%PDF'):
                             pdf_capturado.append(body)
-                            log(f"📥 PDF capturado: {len(body)} bytes")
+                            log(f"📥 PDF capturado: {url[:70]} ({len(body)} bytes)")
+                        elif body and len(body) > 5000:
+                            log(f"🌐 Request grande: {url[:70]} ct={ct[:30]}")
                         route.fulfill(response=response)
                     except Exception:
                         route.continue_()
 
-                ctx.route('**/CtrlPdf**', capturar_pdf)
+                ctx.route('**/*', capturar_pdf)
 
-                try:
-                    with ctx.expect_page(timeout=25000) as new_page_info:
-                        page.evaluate("""() => {
-                            var all = Array.from(document.querySelectorAll('button, input[type=submit], a, span'));
-                            for (var el of all) {
-                                var txt = (el.textContent || el.value || '').trim();
-                                if (txt.indexOf('Generar') !== -1) {
-                                    (el.tagName === 'SPAN' ? el.parentElement : el).click();
-                                    return;
-                                }
-                            }
-                        }""")
-                    popup = new_page_info.value
-                    popup.wait_for_load_state('networkidle', timeout=20000)
-                    popup.wait_for_timeout(1000)
-                    popup.close()
-                except Exception as e:
-                    log(f"⚠ Error popup: {e}")
+                # Click Generar y esperar — sin depender de popup
+                page.evaluate("""() => {
+                    var all = Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a, span'));
+                    for (var el of all) {
+                        var txt = (el.textContent || el.value || '').trim();
+                        if (txt.indexOf('Generar') !== -1) {
+                            (el.tagName === 'SPAN' ? el.parentElement : el).click();
+                            return txt;
+                        }
+                    }
+                }""")
+                log("✓ Click Generar enviado, esperando respuesta (15s)...")
+                page.wait_for_timeout(15000)
 
-                ctx.unroute('**/CtrlPdf**')
+                ctx.unroute('**/*')
 
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]
                     job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                    log(f"✅ Comprobante real: MOV_PER_{rut_t}.pdf ({len(pdf_capturado[0])} bytes)")
+                    log(f"✅ Comprobante PDF: MOV_PER_{rut_t}.pdf ({len(pdf_capturado[0])} bytes)")
                 else:
-                    log("⚠ No se capturó el PDF de CtrlPdf")
+                    log("⚠ No se capturó PDF — revisar logs de URLs interceptadas arriba")
 
             ctx.close()
             browser.close()

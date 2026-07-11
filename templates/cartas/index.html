@@ -1057,7 +1057,26 @@ function renderMotivos() {
 
 function setMotivo(m) {
   const sel = currentRut ? seleccionados[currentRut] : null;
+  const w = trabajadores.find(t => t.rut_trabajador === currentRut);
   const fecha = sel ? (sel.fecha_cese || '') : '';
+
+  // Pago posterior al finiquito: construye texto completo con fecha_cese + período del analisis
+  if (m.toLowerCase().includes('pago posterior al finiquito')) {
+    const pa = (w && w.periodo_analisis) || {};
+    let analisisTxt = '';
+    for (const p of (sel?.periodos_sel || [])) {
+      if (pa[p] && /[A-Za-z]{3}-\d{2,4}/i.test(pa[p])) { analisisTxt = pa[p]; break; }
+    }
+    if (!analisisTxt) analisisTxt = (w && w.analisis) || '';
+    const periodoMatch = analisisTxt.match(/\b([A-Za-z]{3}-\d{2,4})\b/i);
+    const periodo = periodoMatch ? periodoMatch[1] : '';
+    m = 'Trabajador finiquitado con fecha' + (fecha ? ' ' + fecha : '') +
+        ' con pago posterior al finiquito' + (periodo ? ' en ' + periodo : '');
+    document.getElementById('f-motivo').value = m;
+    guardarForm();
+    return;
+  }
+
   if (m.toLowerCase().includes('con fecha') && fecha) {
     m = m + ' ' + fecha;
   }
@@ -1066,12 +1085,11 @@ function setMotivo(m) {
     if (primer) m = m + primer;
   }
   // Motivos que deben respetar el/los período(s) que se está(n) cobrando
-  // (el marcado en "Períodos de deuda"), en vez de dejarlo genérico
   const requierePeriodo = ['periodo pagado de forma correcta', 'periodo pagado en otra institucion'];
   if (sel && requierePeriodo.some(p => m.toLowerCase().includes(p))) {
     const periodos = (sel.periodos_sel && sel.periodos_sel.length > 0) ? sel.periodos_sel.join(', ') : '';
     if (periodos) {
-      m = m.replace(/\.?\s*$/, '');  // quitar punto/espacio final
+      m = m.replace(/\.?\s*$/, '');
       m = m.endsWith(':') ? `${m} ${periodos}` : `${m}: ${periodos}`;
     }
   }

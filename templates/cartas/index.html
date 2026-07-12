@@ -963,6 +963,10 @@ function toggleWorker(rut, cb) {
   }
   renderSidebar();
   refreshDependientes();
+  if (document.getElementById('tab-correo')?.classList.contains('active')) {
+    renderEstado();
+    renderDestinatarios();
+  }
 }
 
 // Actualiza el badge verde con el número de trabajadores marcados
@@ -1938,14 +1942,36 @@ function renderDestinatarios() {
   const tbody  = document.getElementById('correo-tbody');
   const tabla  = document.getElementById('correo-tabla');
   const empty  = document.getElementById('correo-empty');
-  if (!destinatarios.length) {
+
+  const marcados    = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
+  const normInst    = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const instsMarcados = new Set(marcados.map(w => normInst(w.institucion)).filter(Boolean));
+
+  const lista = instsMarcados.size > 0
+    ? destinatarios.filter(d => instsMarcados.has(normInst(d.institucion)))
+    : destinatarios;
+
+  if (!lista.length) {
     tabla.style.display = 'none';
     empty.style.display = '';
+    if (instsMarcados.size > 0 && destinatarios.length > 0) {
+      const instsNombres = [...new Set(marcados.map(w => w.institucion).filter(Boolean))].join(', ');
+      empty.innerHTML = `<div style="font-size:28px;margin-bottom:6px">📭</div>
+        <div style="font-size:13px;font-weight:600">Sin destinatarios para las instituciones seleccionadas</div>
+        <div style="font-size:12px;margin-top:4px">No hay destinatarios para: <strong>${instsNombres}</strong></div>`;
+    } else {
+      empty.innerHTML = `<div style="font-size:28px;margin-bottom:6px">📭</div>
+        <div style="font-size:13px;font-weight:600">Sin destinatarios registrados</div>
+        <div style="font-size:12px;margin-top:4px">Agrega un destinatario para habilitar el envío automático por institución.</div>`;
+    }
     return;
   }
+  empty.innerHTML = `<div style="font-size:28px;margin-bottom:6px">📭</div>
+    <div style="font-size:13px;font-weight:600">Sin destinatarios registrados</div>
+    <div style="font-size:12px;margin-top:4px">Agrega un destinatario para habilitar el envío automático por institución.</div>`;
   tabla.style.display = '';
   empty.style.display = 'none';
-  tbody.innerHTML = destinatarios.map(d => {
+  tbody.innerHTML = lista.map(d => {
     const alcance = d.exclusivo
       ? `<span style="background:#dbeafe;color:#1d4ed8;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">Exclusivo — ${d.empresa_nombre}</span>`
       : `<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">General</span>`;

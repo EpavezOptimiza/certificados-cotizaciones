@@ -1092,16 +1092,35 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 def _on_popup(popup):
                     log(f"🪟 Popup detectado")
+
+                    def _on_download(download):
+                        fname = download.suggested_filename
+                        log(f"📥 Download en popup: {fname}")
+                        try:
+                            import tempfile, os as _os
+                            tmp = tempfile.mktemp(suffix='.pdf')
+                            download.save_as(tmp)
+                            with open(tmp, 'rb') as fh:
+                                body = fh.read()
+                            _os.unlink(tmp)
+                            if body and len(body) > 500:
+                                pdf_capturado.append(body)
+                                log(f"✅ PDF via download popup: {len(body)} bytes")
+                        except Exception as e_dl:
+                            log(f"⚠ Error leyendo download: {e_dl}")
+
                     def _on_resp(response):
                         if 'CtrlPdf' in response.url:
                             try:
                                 body = response.body()
                                 ct = response.headers.get('content-type', '')
-                                log(f"📥 CtrlPdf: {len(body)} bytes, tipo={ct}")
+                                log(f"📥 CtrlPdf response: {len(body)} bytes, tipo={ct}")
                                 if body and len(body) > 500:
                                     pdf_capturado.append(body)
                             except Exception as e_body:
                                 log(f"⚠ Error body CtrlPdf: {e_body}")
+
+                    popup.on('download', _on_download)
                     popup.on('response', _on_resp)
 
                 ctx.on('page', _on_popup)

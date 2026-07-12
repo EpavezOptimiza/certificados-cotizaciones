@@ -1019,7 +1019,11 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     log(f"Elementos visibles: {menu_items}")
 
                 import datetime as _dt2
-                hoy = _dt2.date.today().strftime('%d/%m/%Y')
+                try:
+                    from zoneinfo import ZoneInfo
+                    hoy = _dt2.datetime.now(ZoneInfo('America/Santiago')).strftime('%d/%m/%Y')
+                except ImportError:
+                    hoy = (_dt2.datetime.utcnow() - _dt2.timedelta(hours=4)).strftime('%d/%m/%Y')
 
                 selects_info = page.evaluate("""() => Array.from(document.querySelectorAll('select')).map(s => s.id + '|' + s.name + '|' + Array.from(s.options).map(o => o.value+':'+o.text).join(','))""")
                 log(f"Selects: {selects_info}")

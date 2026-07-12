@@ -240,7 +240,7 @@ textarea{resize:vertical;min-height:70px}
   <div class="tab" onclick="switchTab('masiva')">📋 Carta masiva por período</div>
   <div class="tab" onclick="switchTab('destacar')">🖍️ Destacar PDF</div>
   <div class="tab" onclick="switchTab('previred')">⚡ Movimiento PreviRed</div>
-  <div class="tab" onclick="switchTab('estado')">✅ Estado</div>
+  <div class="tab" onclick="switchTab('correo')">📧 Correo</div>
 </div>
 
 <!-- Layout -->
@@ -575,9 +575,37 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
 
-    <!-- Tab: Estado -->
-    <div class="tab-content" id="tab-estado">
+    <!-- Tab: Correo -->
+    <div class="tab-content" id="tab-correo">
+
+      <!-- Destinatarios -->
       <div class="card">
+        <div class="card-title">
+          <span class="card-title-icon">📧</span> Destinatarios de Correo
+          <div style="margin-left:auto">
+            <button class="btn btn-primary btn-sm" onclick="abrirNuevoDestinatario()">+ Nuevo Destinatario</button>
+          </div>
+        </div>
+        <div id="correo-empty" style="text-align:center;padding:28px 16px;color:#94a3b8">
+          <div style="font-size:28px;margin-bottom:6px">📭</div>
+          <div style="font-size:13px;font-weight:600">Sin destinatarios registrados</div>
+          <div style="font-size:12px;margin-top:4px">Agrega un destinatario para habilitar el envío automático por institución.</div>
+        </div>
+        <table class="tabla-estado" id="correo-tabla" style="display:none">
+          <thead>
+            <tr>
+              <th>Institución</th>
+              <th>Email</th>
+              <th>Alcance</th>
+              <th style="width:60px"></th>
+            </tr>
+          </thead>
+          <tbody id="correo-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Estado trabajadores (dentro de Correo) -->
+      <div class="card" style="margin-top:16px">
         <div class="card-title"><span class="card-title-icon">✅</span> Estado de Trabajadores
           <div style="margin-left:auto;display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="marcarTodosEstado()">☑ Marcar todos</button>
@@ -594,6 +622,7 @@ textarea{resize:vertical;min-height:70px}
           <tbody id="estado-tbody"></tbody>
         </table>
       </div>
+
     </div>
 
   </div>
@@ -619,6 +648,57 @@ textarea{resize:vertical;min-height:70px}
       <button class="btn btn-outline" onclick="cerrarModal()">Cerrar</button>
       <button class="btn btn-outline" onclick="guardarCredenciales()">💾 Guardar</button>
       <button class="btn btn-primary" onclick="guardarYIniciar()">▶ Iniciar Bot</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nuevo Destinatario -->
+<div class="modal-overlay" id="modal-nuevo-dest">
+  <div class="modal">
+    <div class="modal-header">📧 Nuevo Destinatario</div>
+    <div class="modal-body">
+      <div id="dest-error" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 12px;color:#b91c1c;font-size:12px;margin-bottom:10px"></div>
+      <div class="form-group">
+        <label>Institución</label>
+        <select id="dest-institucion" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+          <option value="">Seleccione institución...</option>
+          <optgroup label="AFP">
+            <option>Cuprum</option><option>Habitat</option><option>PlanVital</option>
+            <option>Provida</option><option>Capital</option><option>Modelo</option>
+            <option>UNO</option><option>AFC</option>
+          </optgroup>
+          <optgroup label="Salud">
+            <option>FONASA</option><option>Banmédica</option><option>Vida Tres</option>
+            <option>Cruz Blanca</option><option>Colmena</option><option>Consalud</option>
+            <option>Esencial</option><option>MasVida</option><option>Nueva Más Vida</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Email del destinatario</label>
+        <input type="email" id="dest-email" placeholder="ejecutivo@institucion.cl"
+               style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500">
+          <input type="checkbox" id="dest-exclusivo" onchange="toggleDestExclusivo()">
+          Solo para esta empresa
+        </label>
+        <div style="font-size:11px;color:#64748b;margin-top:3px;padding-left:20px">
+          Activa esto cuando el ejecutivo varía según la empresa (el email aplica solo a esta empresa)
+        </div>
+      </div>
+      <div id="dest-empresa-section" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:4px">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Empresa</label>
+        <input type="text" id="dest-empresa-nombre" placeholder="Carga el Excel primero para autocompletar"
+               style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
+        <input type="hidden" id="dest-empresa-rut">
+        <div id="dest-empresa-hint" style="font-size:11px;color:#64748b;margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarNuevoDestinatario()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarDestinatario()">💾 Guardar</button>
     </div>
   </div>
 </div>
@@ -669,8 +749,8 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  document.querySelectorAll('.tab')[['visor','carta','masiva','destacar','previred','estado'].indexOf(tab)].classList.add('active');
-  if (tab === 'estado') renderEstado();
+  document.querySelectorAll('.tab')[['visor','carta','masiva','destacar','previred','correo'].indexOf(tab)].classList.add('active');
+  if (tab === 'correo') { renderEstado(); cargarDestinatarios(); }
   if (tab === 'previred') renderPreviRedWorkers();
   if (tab === 'masiva') renderMasiva();
   if (tab === 'destacar') renderDestacar();
@@ -1815,6 +1895,103 @@ function llamarOptiBot(){
   document.getElementById('opti-toggle').classList.remove('open');
   switchTab('previred');
 }
+// ── Correo / Destinatarios ────────────────────────────────────────────────────
+let destinatarios = [];
+
+function cargarDestinatarios() {
+  fetch('/cartas/api/destinatarios')
+    .then(r => r.json())
+    .then(data => { destinatarios = data; renderDestinatarios(); })
+    .catch(() => {});
+}
+
+function renderDestinatarios() {
+  const tbody  = document.getElementById('correo-tbody');
+  const tabla  = document.getElementById('correo-tabla');
+  const empty  = document.getElementById('correo-empty');
+  if (!destinatarios.length) {
+    tabla.style.display = 'none';
+    empty.style.display = '';
+    return;
+  }
+  tabla.style.display = '';
+  empty.style.display = 'none';
+  tbody.innerHTML = destinatarios.map(d => {
+    const alcance = d.exclusivo
+      ? `<span style="background:#dbeafe;color:#1d4ed8;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">Exclusivo — ${d.empresa_nombre}</span>`
+      : `<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">General</span>`;
+    return `<tr>
+      <td><strong>${d.institucion}</strong></td>
+      <td style="color:#475569">${d.email}</td>
+      <td>${alcance}</td>
+      <td><button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fca5a5;padding:3px 8px"
+          onclick="eliminarDestinatario(${d.id},'${d.institucion}')">🗑</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function abrirNuevoDestinatario() {
+  document.getElementById('dest-institucion').value = '';
+  document.getElementById('dest-email').value = '';
+  document.getElementById('dest-exclusivo').checked = false;
+  document.getElementById('dest-empresa-section').style.display = 'none';
+  document.getElementById('dest-empresa-nombre').value = '';
+  document.getElementById('dest-empresa-rut').value = '';
+  document.getElementById('dest-error').style.display = 'none';
+  document.getElementById('modal-nuevo-dest').classList.add('show');
+}
+
+function cerrarNuevoDestinatario() {
+  document.getElementById('modal-nuevo-dest').classList.remove('show');
+}
+
+function toggleDestExclusivo() {
+  const checked = document.getElementById('dest-exclusivo').checked;
+  document.getElementById('dest-empresa-section').style.display = checked ? '' : 'none';
+  if (checked) {
+    const emp = trabajadores.length ? trabajadores[0] : null;
+    const nombre = emp ? (emp.razon_social || emp.empresa_nombre || '') : '';
+    const rut    = emp ? (emp.rut_empresa  || emp.empresa_rut   || '') : '';
+    document.getElementById('dest-empresa-nombre').value = nombre;
+    document.getElementById('dest-empresa-rut').value   = rut;
+    document.getElementById('dest-empresa-hint').textContent =
+      nombre ? `Empresa tomada del Excel: ${nombre}` : '⚠ Carga el Excel primero para autocompletar';
+  }
+}
+
+function guardarDestinatario() {
+  const institucion    = document.getElementById('dest-institucion').value.trim();
+  const email          = document.getElementById('dest-email').value.trim();
+  const exclusivo      = document.getElementById('dest-exclusivo').checked;
+  const empresa_nombre = document.getElementById('dest-empresa-nombre').value.trim();
+  const empresa_rut    = document.getElementById('dest-empresa-rut').value.trim();
+  const errEl = document.getElementById('dest-error');
+  errEl.style.display = 'none';
+  if (!institucion || !email) {
+    errEl.textContent = 'Institución y email son obligatorios.';
+    errEl.style.display = ''; return;
+  }
+  if (exclusivo && !empresa_nombre) {
+    errEl.textContent = 'Indica la empresa para el correo exclusivo (carga el Excel primero).';
+    errEl.style.display = ''; return;
+  }
+  fetch('/cartas/api/destinatarios', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({institucion, email, exclusivo, empresa_nombre, empresa_rut})
+  }).then(r => r.json()).then(d => {
+    if (d.error) { errEl.textContent = d.error; errEl.style.display = ''; return; }
+    cerrarNuevoDestinatario();
+    cargarDestinatarios();
+  }).catch(e => { errEl.textContent = 'Error: ' + e; errEl.style.display = ''; });
+}
+
+function eliminarDestinatario(id, nombre) {
+  if (!confirm(`¿Eliminar destinatario de ${nombre}?`)) return;
+  fetch(`/cartas/api/destinatarios/${id}`, {method:'DELETE'})
+    .then(() => cargarDestinatarios());
+}
+
 // Inicializar dot de credenciales al cargar
 _actualizarDotCredenciales();
 

@@ -1395,6 +1395,48 @@ def estado_bot(job_id):
         "comprobante_name": job.get('comprobante_name'),
     })
 
+@cartas_bp.route("/api/destinatarios", methods=["GET"])
+@cartas_login_required
+def listar_destinatarios():
+    from database import get_conn
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM destinatarios_correo ORDER BY institucion, exclusivo, empresa_nombre"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@cartas_bp.route("/api/destinatarios", methods=["POST"])
+@cartas_login_required
+def crear_destinatario():
+    data = request.json or {}
+    institucion    = data.get('institucion', '').strip()
+    email          = data.get('email', '').strip()
+    exclusivo      = 1 if data.get('exclusivo') else 0
+    empresa_rut    = data.get('empresa_rut', '').strip()
+    empresa_nombre = data.get('empresa_nombre', '').strip()
+    if not institucion or not email:
+        return jsonify({"error": "Institución y email son requeridos"}), 400
+    user = _get_user()
+    from database import get_conn
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo('America/Santiago')).strftime('%Y-%m-%d %H:%M')
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO destinatarios_correo
+               (institucion, email, exclusivo, empresa_rut, empresa_nombre, creado_por, creado_en)
+               VALUES (?,?,?,?,?,?,?)""",
+            (institucion, email, exclusivo, empresa_rut, empresa_nombre,
+             user['id'] if user else None, now))
+    return jsonify({"ok": True})
+
+@cartas_bp.route("/api/destinatarios/<int:dest_id>", methods=["DELETE"])
+@cartas_login_required
+def eliminar_destinatario(dest_id):
+    from database import get_conn
+    with get_conn() as conn:
+        conn.execute("DELETE FROM destinatarios_correo WHERE id=?", (dest_id,))
+    return jsonify({"ok": True})
+
 @cartas_bp.route("/api/marcar_gestion", methods=["POST"])
 @cartas_login_required
 def marcar_gestion():

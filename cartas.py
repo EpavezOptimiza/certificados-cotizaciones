@@ -1084,43 +1084,58 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Capturar PDF del popup que abre "Generar Comprobante"
+                # Capturar PDF — adjuntar listener al contexto ANTES del click
                 pdf_capturado = []
 
-                def on_popup_resp(response):
-                    url = response.url
-                    ct = response.headers.get('content-type', '')
-                    try:
-                        if 'pdf' in ct.lower() or 'pdf' in url.lower() or 'CtrlPdf' in url:
+                def on_ctx_page(new_page):
+                    def on_new_resp(response):
+                        ct = response.headers.get('content-type', '')
+                        url = response.url
+                        try:
                             body = response.body()
-                            if body and len(body) > 500:
+                            if body and (body[:4] == b'%PDF' or 'pdf' in ct.lower()):
                                 pdf_capturado.append(body)
-                                log(f"📥 PDF popup: {url[:70]} ({len(body)} bytes)")
-                    except Exception:
-                        pass
+                                log(f"📥 PDF capturado: {url[:70]} ({len(body)} bytes)")
+                        except Exception:
+                            pass
+                    new_page.on('response', on_new_resp)
+
+                ctx.on('page', on_ctx_page)
 
                 try:
                     with page.expect_popup(timeout=20000) as popup_info:
                         page.click('#busca_certificados', timeout=5000)
                     popup = popup_info.value
-                    log(f"🪟 Popup abierto: {popup.url[:70]}")
-                    popup.on('response', on_popup_resp)
-                    popup.wait_for_load_state('networkidle', timeout=30000)
-                    popup.wait_for_timeout(2000)
-                    # Si URL del popup es el PDF directo
+                    log(f"🪟 Popup: {popup.url[:70]}")
+                    popup.wait_for_load_state('load', timeout=30000)
+                    popup.wait_for_timeout(4000)
+                    log(f"URL popup final: {popup.url[:80]}")
+
+                    # Si aún no capturamos, buscar PDF embebido o fetch directo
                     if not pdf_capturado:
-                        try:
-                            popup_url = popup.url
-                            log(f"URL popup final: {popup_url[:80]}")
-                            if 'pdf' in popup_url.lower() or 'CtrlPdf' in popup_url:
-                                content = popup.content()
-                                log(f"Contenido popup: {len(content)} chars")
-                        except Exception as ex:
-                            log(f"ℹ popup URL: {ex}")
+                        pdf_url = popup.evaluate("""() => {
+                            for (var el of document.querySelectorAll('iframe,embed,object')) {
+                                var s = el.src || el.data || '';
+                                if (s) return s;
+                            }
+                            var u = window.location.href;
+                            return (u && u !== ':') ? u : '';
+                        }""")
+                        log(f"PDF URL en popup: {pdf_url[:80] if pdf_url else 'ninguna'}")
+                        if pdf_url and pdf_url not in (':', 'about:blank', ''):
+                            try:
+                                resp = ctx.request.get(pdf_url)
+                                body = resp.body()
+                                if body and len(body) > 500:
+                                    pdf_capturado.append(body)
+                                    log(f"📥 PDF via fetch: {len(body)} bytes")
+                            except Exception as ex:
+                                log(f"⚠ Fetch PDF: {ex}")
                     popup.close()
-                    log("✓ Popup cerrado")
                 except Exception as e:
                     log(f"⚠ Error popup Generar: {e}")
+
+                ctx.remove_listener('page', on_ctx_page)
 
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]

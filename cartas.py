@@ -1428,6 +1428,62 @@ def unificar_pdfs():
     return Response(buf.getvalue(), mimetype='application/pdf',
                     headers={'Content-Disposition': f'attachment; filename="Caso_{rut_clean}.pdf"'})
 
+@cartas_bp.route("/api/enviar_correo", methods=["POST"])
+@cartas_login_required
+def enviar_correo():
+    """Envía el PDF unificado por correo Outlook/Microsoft 365 via SMTP."""
+    import smtplib, re as _re, io as _io
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    email_from  = request.form.get('email_from', '').strip()
+    password    = request.form.get('password', '').strip()
+    email_to    = request.form.get('email_to', '').strip()
+    nombre      = request.form.get('nombre', '').strip()
+    rut         = request.form.get('rut', '').strip()
+    institucion = request.form.get('institucion', '').strip()
+    pdf_file    = request.files.get('pdf')
+
+    if not all([email_from, password, email_to, pdf_file]):
+        return jsonify({'error': 'Faltan datos requeridos (correo, contraseña, destinatario o PDF)'}), 400
+
+    rut_clean = _re.sub(r'[\.\-\s]', '', rut)
+    pdf_bytes = pdf_file.read()
+
+    msg = MIMEMultipart()
+    msg['From']    = email_from
+    msg['To']      = email_to
+    msg['Subject'] = f"Documentos Previsionales – {nombre} ({rut})"
+
+    cuerpo = (
+        f"Estimados,\n\n"
+        f"Adjunto encontrarán la documentación previsional correspondiente al trabajador "
+        f"{nombre} (RUT: {rut}), institución {institucion}.\n\n"
+        f"Saludos,\nEquipo Optimiza"
+    )
+    msg.attach(MIMEText(cuerpo, 'plain', 'utf-8'))
+
+    adjunto = MIMEBase('application', 'octet-stream')
+    adjunto.set_payload(pdf_bytes)
+    encoders.encode_base64(adjunto)
+    adjunto.add_header('Content-Disposition', f'attachment; filename="Caso_{rut_clean}.pdf"')
+    msg.attach(adjunto)
+
+    try:
+        with smtplib.SMTP('smtp.office365.com', 587, timeout=30) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(email_from, password)
+            server.sendmail(email_from, email_to, msg.as_string())
+        return jsonify({'ok': True})
+    except smtplib.SMTPAuthenticationError:
+        return jsonify({'error': 'Credenciales incorrectas. Verifica tu correo y contraseña de aplicación.'}), 401
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @cartas_bp.route("/api/destinatarios", methods=["GET"])
 @cartas_login_required
 def listar_destinatarios():

@@ -592,6 +592,36 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
 
+      <!-- Credenciales Outlook -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="cursor:pointer" onclick="toggleOutlookCreds()">
+          <span class="card-title-icon">🔐</span> Credenciales Outlook
+          <span id="outlook-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-left:6px"></span>
+          <span id="outlook-toggle-arrow" style="margin-left:auto;font-size:11px;color:#94a3b8">▼</span>
+        </div>
+        <div id="outlook-creds-section" style="display:none;margin-top:8px">
+          <div style="font-size:11px;color:#64748b;margin-bottom:10px;background:#f8fafc;border-radius:6px;padding:8px 10px">
+            Las credenciales se guardan solo en este navegador y se usan para enviar desde tu cuenta de Outlook / Microsoft 365.
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Correo (remitente)</label>
+              <input type="email" id="outlook-email" placeholder="tucorreo@empresa.cl"
+                     style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Contraseña / Contraseña de app</label>
+              <input type="password" id="outlook-pass" placeholder="••••••••"
+                     style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
+            </div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+            <button class="btn btn-primary btn-sm" onclick="guardarCredsOutlook()">💾 Guardar credenciales</button>
+            <span id="outlook-creds-msg" style="font-size:12px;color:#059669;display:none">✅ Guardadas</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Destinatarios -->
       <div class="card">
         <div class="card-title">
@@ -631,7 +661,8 @@ textarea{resize:vertical;min-height:70px}
             <tr>
               <th style="width:36px"><input type="checkbox" id="estado-check-all" onchange="toggleAllEstado(this)"></th>
               <th>Trabajador</th><th>RUT</th><th>Institución</th><th>Períodos</th><th>Estado</th>
-              <th style="width:120px">Unificar</th>
+              <th style="width:100px">Unificar</th>
+              <th style="width:100px">Enviar</th>
             </tr>
           </thead>
           <tbody id="estado-tbody"></tbody>
@@ -765,7 +796,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.querySelectorAll('.tab')[['visor','carta','masiva','destacar','previred','correo'].indexOf(tab)].classList.add('active');
-  if (tab === 'correo') { renderEstado(); cargarDestinatarios(); cargarCarpeta(); }
+  if (tab === 'correo') { renderEstado(); cargarDestinatarios(); cargarCarpeta(); _cargarDotOutlook(); }
   if (tab === 'previred') renderPreviRedWorkers();
   if (tab === 'masiva') renderMasiva();
   if (tab === 'destacar') renderDestacar();
@@ -1875,13 +1906,14 @@ function renderEstado() {
   const tbody = document.getElementById('estado-tbody');
   const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
   if (!marcados.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">
       Selecciona trabajadores en la lista lateral para verlos aquí.</td></tr>`;
     return;
   }
   tbody.innerHTML = marcados.map(w => {
     const sel = seleccionados[w.rut_trabajador] || {};
     const btnUnif = `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="unificarPDF('${w.rut_trabajador}')">📎 Unificar</button>`;
+    const btnEnviar = `<button class="btn btn-success btn-sm" style="font-size:11px" id="btn-enviar-${w.rut_trabajador.replace(/[.\-]/g,'')}" onclick="enviarCorreo('${w.rut_trabajador}','${w.nombre.replace(/'/g,"\\'")}','${w.institucion}')">📧 Enviar</button>`;
     return `<tr>
       <td><input type="checkbox" class="estado-check" data-rut="${w.rut_trabajador}" ${sel.estadoCheck?'checked':''}></td>
       <td>${w.nombre}</td><td>${w.rut_trabajador}</td>
@@ -1889,6 +1921,7 @@ function renderEstado() {
       <td>${(w.periodos||[]).slice(0,3).join(', ')}${w.periodos?.length>3?'...':''}</td>
       <td><span class="worker-status status-${sel.status||'pendiente'}">${sel.status||'Pendiente'}</span></td>
       <td>${btnUnif}</td>
+      <td>${btnEnviar}</td>
     </tr>`;
   }).join('');
 }
@@ -2118,6 +2151,119 @@ async function unificarPDF(rut) {
   } catch(e) {
     alert('Error al unificar: ' + e.message);
     btn.disabled = false; btn.textContent = '📎 Unificar';
+  }
+}
+
+// ── Outlook credentials ───────────────────────────────────────────────────────
+function toggleOutlookCreds() {
+  const sec = document.getElementById('outlook-creds-section');
+  const arrow = document.getElementById('outlook-toggle-arrow');
+  const visible = sec.style.display !== 'none';
+  sec.style.display = visible ? 'none' : '';
+  arrow.textContent = visible ? '▼' : '▲';
+  if (!visible) {
+    const saved = _getOutlookCreds();
+    if (saved.email) document.getElementById('outlook-email').value = saved.email;
+    if (saved.pass)  document.getElementById('outlook-pass').value  = saved.pass;
+  }
+}
+
+function _getOutlookCreds() {
+  return {
+    email: localStorage.getItem('outlook_email') || '',
+    pass:  localStorage.getItem('outlook_pass')  || ''
+  };
+}
+
+function guardarCredsOutlook() {
+  const email = document.getElementById('outlook-email').value.trim();
+  const pass  = document.getElementById('outlook-pass').value;
+  if (!email || !pass) { alert('Ingresa el correo y la contraseña.'); return; }
+  localStorage.setItem('outlook_email', email);
+  localStorage.setItem('outlook_pass',  pass);
+  const dot = document.getElementById('outlook-dot');
+  const msg = document.getElementById('outlook-creds-msg');
+  dot.style.display = '';
+  msg.style.display = '';
+  setTimeout(() => { msg.style.display = 'none'; }, 2000);
+}
+
+function _cargarDotOutlook() {
+  if (localStorage.getItem('outlook_email')) {
+    const dot = document.getElementById('outlook-dot');
+    if (dot) dot.style.display = '';
+  }
+}
+
+// ── Enviar correo ─────────────────────────────────────────────────────────────
+async function enviarCorreo(rut, nombre, institucion) {
+  const creds = _getOutlookCreds();
+  if (!creds.email || !creds.pass) {
+    alert('Configura las credenciales de Outlook primero (sección de arriba).');
+    return;
+  }
+  if (!_dirHandle) {
+    alert('Selecciona la carpeta de archivos PDF primero.');
+    return;
+  }
+
+  // Buscar destinatario por institución
+  const normInst = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const dest = destinatarios.find(d => normInst(d.institucion) === normInst(institucion));
+  if (!dest) {
+    alert(`No hay destinatario registrado para ${institucion}. Agrégalo en la sección de Destinatarios.`);
+    return;
+  }
+
+  const rutClean = rut.replace(/[.\-\s]/g, '');
+  const btnId = 'btn-enviar-' + rutClean;
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+
+  try {
+    // Buscar Caso_<rut>.pdf en la carpeta
+    let pdfHandle = null;
+    const casoName = `Caso_${rutClean}.pdf`;
+    for await (const [name, handle] of _dirHandle.entries()) {
+      if (handle.kind === 'file' && name.toLowerCase() === casoName.toLowerCase()) {
+        pdfHandle = handle; break;
+      }
+    }
+    if (!pdfHandle) {
+      alert(`No se encontró ${casoName} en la carpeta. Unifica primero los documentos.`);
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+      return;
+    }
+
+    const pdfFile = await pdfHandle.getFile();
+    const formData = new FormData();
+    formData.append('email_from', creds.email);
+    formData.append('password',   creds.pass);
+    formData.append('email_to',   dest.email);
+    formData.append('nombre',     nombre);
+    formData.append('rut',        rut);
+    formData.append('institucion', institucion);
+    formData.append('pdf',        pdfFile, casoName);
+
+    const res = await fetch('/cartas/api/enviar_correo', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      alert('Error al enviar: ' + (data.error || res.status));
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+      return;
+    }
+
+    if (btn) {
+      btn.textContent = '✅ Enviado';
+      btn.style.cssText += ';background:#059669;border-color:#059669';
+      setTimeout(() => {
+        btn.disabled = false; btn.textContent = '📧 Enviar';
+        btn.style.background = ''; btn.style.borderColor = '';
+      }, 4000);
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
   }
 }
 

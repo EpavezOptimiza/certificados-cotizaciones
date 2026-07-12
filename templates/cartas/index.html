@@ -2245,7 +2245,15 @@ async function enviarCorreo(rut, nombre, institucion) {
     formData.append('institucion', institucion);
     formData.append('pdf',        pdfFile, casoName);
 
-    const res = await fetch('/cartas/api/enviar_correo', { method: 'POST', body: formData });
+    if (btn) btn.textContent = '📤 Enviando...';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 50000);
+    let res;
+    try {
+      res = await fetch('/cartas/api/enviar_correo', { method: 'POST', body: formData, signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     const data = await res.json();
     if (!res.ok || data.error) {
       alert('Error al enviar: ' + (data.error || res.status));
@@ -2262,7 +2270,11 @@ async function enviarCorreo(rut, nombre, institucion) {
       }, 4000);
     }
   } catch(e) {
-    alert('Error: ' + e.message);
+    if (e.name === 'AbortError') {
+      alert('Tiempo de espera agotado (50s). Verifica tu conexión y que el servidor de correo sea accesible.');
+    } else {
+      alert('Error: ' + e.message);
+    }
     if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
   }
 }

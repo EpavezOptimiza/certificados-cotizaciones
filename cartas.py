@@ -1472,17 +1472,21 @@ def enviar_correo():
     msg.attach(adjunto)
 
     try:
-        with smtplib.SMTP('smtp.office365.com', 587, timeout=30) as server:
+        with smtplib.SMTP('smtp.office365.com', 587, timeout=15) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
             server.login(email_from, password)
-            server.sendmail(email_from, email_to, msg.as_string())
+            server.sendmail(email_from, [email_to], msg.as_string())
         return jsonify({'ok': True})
     except smtplib.SMTPAuthenticationError:
-        return jsonify({'error': 'Credenciales incorrectas. Verifica tu correo y contraseña de aplicación.'}), 401
+        return jsonify({'error': 'Credenciales incorrectas. Si usas MFA, necesitas una contraseña de aplicación de Microsoft.'}), 401
+    except smtplib.SMTPException as e:
+        return jsonify({'error': f'Error SMTP: {e}'}), 502
+    except OSError as e:
+        return jsonify({'error': f'No se pudo conectar al servidor de correo: {e}'}), 502
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
 
 @cartas_bp.route("/api/destinatarios", methods=["GET"])
 @cartas_login_required

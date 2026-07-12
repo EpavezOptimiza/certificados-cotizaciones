@@ -1032,21 +1032,25 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 except Exception as e:
                     log(f"⚠ RUT: {e}")
 
-                # 2. Institución Previsional
+                # 2. Institución Previsional — solo cambiar si existe en el dropdown
                 try:
                     inst_limpia = inst.upper().replace('AFP ', '').replace('AFP', '').strip()
-                    page.evaluate("""(afp) => {
+                    encontrado = page.evaluate("""(afp) => {
                         var sel = document.getElementById('web_combo_codigo_afp');
-                        if (!sel) return;
+                        if (!sel) return false;
                         for (var i = 0; i < sel.options.length; i++) {
                             if (sel.options[i].text.toUpperCase().indexOf(afp) !== -1) {
                                 sel.selectedIndex = i;
                                 sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                break;
+                                return true;
                             }
                         }
+                        return false;
                     }""", inst_limpia)
-                    log(f"✓ Institución: {inst_limpia}")
+                    if encontrado:
+                        log(f"✓ Institución: {inst_limpia}")
+                    else:
+                        log(f"ℹ Institución '{inst_limpia}' no está en dropdown — se deja valor por defecto")
                 except Exception as e:
                     log(f"⚠ Institución: {e}")
                 page.wait_for_timeout(500)

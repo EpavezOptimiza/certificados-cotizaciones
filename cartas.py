@@ -1140,6 +1140,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]
                     job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
+                    job.setdefault('comprobantes', {})[rut_t] = pdf_capturado[0]
                     log(f"✅ Comprobante PDF: {len(pdf_capturado[0])} bytes")
                 else:
                     log("⚠ No se capturó PDF")
@@ -1393,7 +1394,54 @@ def estado_bot(job_id):
         "video_name": job.get('video'),
         "has_comprobante": bool(job.get('comprobante_bytes')),
         "comprobante_name": job.get('comprobante_name'),
+        "comprobantes_ruts": list(job.get('comprobantes', {}).keys()),
     })
+
+@cartas_bp.route("/api/unificar", methods=["POST"])
+@cartas_login_required
+def unificar_pdfs():
+    """Fusiona carta PDF + comprobante PreviRed en un solo PDF."""
+    data = request.json or {}
+    job_id     = data.get('job_id')
+    rut        = data.get('rut', '').strip()
+    carta_data = data.get('carta_data', {})
+    firma_data = data.get('firma_data', {})
+
+    job = _jobs.get(job_id) if job_id else None
+    comp_bytes = (job or {}).get('comprobantes', {}).get(rut) if job else None
+    if not comp_bytes:
+        # Fallback: comprobante global del job (compatible con versiones anteriores)
+        comp_bytes = (job or {}).get('comprobante_bytes') if job else None
+
+    import io
+    from pypdf import PdfWriter, PdfReader
+    from flask import Response
+
+    writer = PdfWriter()
+
+    # Carta PDF
+    try:
+        carta_bytes = generar_carta_pdf(carta_data, firma_data)
+        reader_carta = PdfReader(io.BytesIO(carta_bytes))
+        for page in reader_carta.pages:
+            writer.add_page(page)
+    except Exception as e:
+        return jsonify({"error": f"Error generando carta: {e}"}), 500
+
+    # Comprobante PDF
+    if comp_bytes:
+        try:
+            reader_comp = PdfReader(io.BytesIO(comp_bytes))
+            for page in reader_comp.pages:
+                writer.add_page(page)
+        except Exception as e:
+            return jsonify({"error": f"Error leyendo comprobante: {e}"}), 500
+
+    output = io.BytesIO()
+    writer.write(output)
+    rut_clean = rut.replace('.', '').replace(' ', '')
+    return Response(output.getvalue(), mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="UNIFICADO_{rut_clean}.pdf"'})
 
 @cartas_bp.route("/api/destinatarios", methods=["GET"])
 @cartas_login_required

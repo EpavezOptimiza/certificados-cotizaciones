@@ -617,6 +617,7 @@ textarea{resize:vertical;min-height:70px}
             <tr>
               <th style="width:36px"><input type="checkbox" id="estado-check-all" onchange="toggleAllEstado(this)"></th>
               <th>Trabajador</th><th>RUT</th><th>Institución</th><th>Períodos</th><th>Estado</th>
+              <th style="width:120px">Unificar</th>
             </tr>
           </thead>
           <tbody id="estado-tbody"></tbody>
@@ -1517,6 +1518,12 @@ async function pollBot() {
     document.getElementById('bot-spinner').style.display = 'none';
     document.getElementById('bot-prog-fill').style.width = '100%';
     mostrarPDFs(data.resultados);
+    // Registrar qué RUTs tienen comprobante disponible en este job
+    if (data.comprobantes_ruts && data.comprobantes_ruts.length) {
+      data.comprobantes_ruts.forEach(rut => {
+        if (seleccionados[rut]) seleccionados[rut].job_id_comp = jobId;
+      });
+    }
     // Descargar comprobante automáticamente via Blob (evita bloqueo del navegador)
     if (data.has_comprobante) {
       fetch(`/cartas/api/comprobante/${jobId}`)
@@ -1856,12 +1863,17 @@ function renderEstado() {
   }
   tbody.innerHTML = marcados.map(w => {
     const sel = seleccionados[w.rut_trabajador] || {};
+    const tieneComp = !!sel.job_id_comp;
+    const btnUnif = tieneComp
+      ? `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="unificarPDF('${w.rut_trabajador}')">📎 Unificar</button>`
+      : `<button class="btn btn-outline btn-sm" style="font-size:11px;color:#94a3b8" title="Ejecuta primero el bot PreviRed para este trabajador" disabled>📎 Sin comp.</button>`;
     return `<tr>
       <td><input type="checkbox" class="estado-check" data-rut="${w.rut_trabajador}" ${sel.estadoCheck?'checked':''}></td>
       <td>${w.nombre}</td><td>${w.rut_trabajador}</td>
       <td>${w.institucion}</td>
       <td>${(w.periodos||[]).slice(0,3).join(', ')}${w.periodos?.length>3?'...':''}</td>
       <td><span class="worker-status status-${sel.status||'pendiente'}">${sel.status||'Pendiente'}</span></td>
+      <td>${btnUnif}</td>
     </tr>`;
   }).join('');
 }
@@ -1990,6 +2002,51 @@ function guardarDestinatario() {
     cerrarNuevoDestinatario();
     cargarDestinatarios();
   }).catch(e => { errEl.textContent = 'Error: ' + e; errEl.style.display = ''; });
+}
+
+async function unificarPDF(rut) {
+  const w = trabajadores.find(t => t.rut_trabajador === rut);
+  const sel = seleccionados[rut] || {};
+  if (!w) return;
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳...';
+  try {
+    const carta_data = {
+      rut_trabajador: w.rut_trabajador,
+      nombre:         w.nombre,
+      rut_empresa:    w.rut_empresa   || '',
+      razon_social:   w.razon_social  || '',
+      afp:            w.afp           || w.institucion || '',
+      salud:          w.salud         || '',
+      causa:          sel.causa       || '',
+      periodos:       sel.periodos_sel|| w.periodos || [],
+      monto:          w.monto         || '',
+      direccion:      w.direccion     || '',
+    };
+    const firma_data = {
+      nombre: document.getElementById('firma-nombre')?.value || '',
+      rut:    document.getElementById('firma-rut')?.value    || '',
+      cargo:  document.getElementById('firma-cargo')?.value  || '',
+      correo: document.getElementById('firma-correo')?.value || '',
+      tel:    document.getElementById('firma-tel')?.value    || '',
+    };
+    const res = await fetch('/cartas/api/unificar', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({rut, job_id: sel.job_id_comp, carta_data, firma_data})
+    });
+    if (!res.ok) { const e = await res.json(); alert('Error: ' + (e.error||res.status)); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `UNIFICADO_${rut}.pdf`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    btn.textContent = '✅ Listo';
+  } catch(e) {
+    alert('Error al unificar: ' + e.message);
+    btn.disabled = false; btn.textContent = '📎 Unificar';
+  }
 }
 
 function eliminarDestinatario(id, nombre) {

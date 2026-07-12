@@ -1084,21 +1084,20 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Capturar PDF — adjuntar listener al contexto ANTES del click
+                # Capturar PDF — igual que planillas: expect_download en el popup
                 pdf_capturado = []
 
                 def on_ctx_page(new_page):
-                    def on_new_resp(response):
-                        ct = response.headers.get('content-type', '')
-                        url = response.url
+                    def on_download(dl):
                         try:
-                            body = response.body()
-                            if body and (body[:4] == b'%PDF' or 'pdf' in ct.lower()):
+                            import pathlib
+                            body = pathlib.Path(dl.path()).read_bytes()
+                            if body:
                                 pdf_capturado.append(body)
-                                log(f"📥 PDF capturado: {url[:70]} ({len(body)} bytes)")
-                        except Exception:
-                            pass
-                    new_page.on('response', on_new_resp)
+                                log(f"📥 PDF descargado: {dl.suggested_filename} ({len(body)} bytes)")
+                        except Exception as ex:
+                            log(f"⚠ Leer download: {ex}")
+                    new_page.on('download', on_download)
 
                 ctx.on('page', on_ctx_page)
 
@@ -1107,20 +1106,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         page.click('#busca_certificados', timeout=5000)
                     popup = popup_info.value
                     log(f"🪟 Popup abierto")
-                    # Esperar que el popup navegue al PDF (no usar wait_for_load_state — PDFs no disparan 'load')
-                    page.wait_for_timeout(8000)
-                    final_url = popup.url
-                    log(f"URL popup final: {final_url[:80]}")
-                    # Fetch directo con cookies de sesión
-                    if not pdf_capturado and final_url and final_url not in (':', 'about:blank', ''):
-                        try:
-                            resp = ctx.request.get(final_url)
-                            body = resp.body()
-                            if body and len(body) > 500:
-                                pdf_capturado.append(body)
-                                log(f"📥 PDF fetch directo: {len(body)} bytes")
-                        except Exception as ex:
-                            log(f"⚠ Fetch PDF: {ex}")
+                    page.wait_for_timeout(15000)
                     try:
                         popup.close()
                     except Exception:

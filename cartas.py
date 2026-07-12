@@ -1049,12 +1049,20 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                                 return true;
                             }
                         }
+                        // No encontrado → seleccionar "Todas" (value=0)
+                        for (var j = 0; j < sel.options.length; j++) {
+                            if (sel.options[j].value === '0') {
+                                sel.selectedIndex = j;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                break;
+                            }
+                        }
                         return false;
                     }""", inst_limpia)
                     if encontrado:
                         log(f"✓ Institución: {inst_limpia}")
                     else:
-                        log(f"ℹ Institución '{inst_limpia}' no está en dropdown — se deja valor por defecto")
+                        log(f"ℹ Institución '{inst_limpia}' no encontrada — seleccionado Todas")
                 except Exception as e:
                     log(f"⚠ Institución: {e}")
                 page.wait_for_timeout(500)

@@ -1084,39 +1084,38 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Capturar comprobante PDF via POST directo (sin popup)
-                log("Preparando POST directo para comprobante PDF...")
-                form_info = page.evaluate("""() => {
-                    var btn = document.getElementById('busca_certificados');
-                    if (!btn) return {error: 'btn busca_certificados no encontrado'};
-                    var form = btn.closest('form');
-                    if (!form) return {error: 'form no encontrado'};
-                    var data = {};
-                    Array.from(form.elements).forEach(function(el) {
-                        if (!el.name) return;
-                        if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
-                        data[el.name] = el.value;
-                    });
-                    return {action: form.action, data: data};
-                }""")
+                # Capturar comprobante PDF: click real + listener en popup
+                # CtrlFce (form action) devuelve HTML que JS redirige a CtrlPdf (PDF real).
+                # ctx.on('page') detecta el popup antes que cargue, para escuchar sus responses.
+                log("Click Generar Comprobante, esperando popup...")
+                pdf_capturado = []
 
-                if form_info and not form_info.get('error') and form_info.get('action'):
-                    try:
-                        log(f"POST a: {form_info['action']}")
-                        resp = ctx.request.post(form_info['action'], form=form_info['data'])
-                        body = resp.body()
-                        ct = resp.headers.get('content-type', '')
-                        log(f"Respuesta: HTTP {resp.status}, Content-Type: {ct}, {len(body)} bytes")
-                        if body and len(body) > 500 and (body[:4] == b'%PDF' or 'pdf' in ct.lower()):
-                            job['comprobante_bytes'] = body
-                            job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                            log(f"✅ Comprobante PDF capturado: {len(body)} bytes")
-                        else:
-                            log(f"⚠ No es PDF — tipo={ct}, preview={body[:120]}")
-                    except Exception as e_post:
-                        log(f"❌ Error POST comprobante: {type(e_post).__name__}: {e_post}")
+                def _on_popup(popup):
+                    log(f"🪟 Popup detectado")
+                    def _on_resp(response):
+                        if 'CtrlPdf' in response.url:
+                            try:
+                                body = response.body()
+                                ct = response.headers.get('content-type', '')
+                                log(f"📥 CtrlPdf: {len(body)} bytes, tipo={ct}")
+                                if body and len(body) > 500:
+                                    pdf_capturado.append(body)
+                            except Exception as e_body:
+                                log(f"⚠ Error body CtrlPdf: {e_body}")
+                    popup.on('response', _on_resp)
+
+                ctx.on('page', _on_popup)
+                page.click('#busca_certificados')
+                log("Esperando PDF (20s)...")
+                page.wait_for_timeout(20000)
+                ctx.remove_listener('page', _on_popup)
+
+                if pdf_capturado:
+                    job['comprobante_bytes'] = pdf_capturado[0]
+                    job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
+                    log(f"✅ Comprobante PDF: {len(pdf_capturado[0])} bytes")
                 else:
-                    log(f"⚠ No se pudo leer form: {form_info}")
+                    log("⚠ No se capturó PDF del popup")
 
             ctx.close()
             browser.close()

@@ -1437,14 +1437,21 @@ async function pollBot() {
     document.getElementById('bot-spinner').style.display = 'none';
     document.getElementById('bot-prog-fill').style.width = '100%';
     mostrarPDFs(data.resultados);
-    // Descargar comprobante automáticamente
+    // Descargar comprobante automáticamente via Blob (evita bloqueo del navegador)
     if (data.has_comprobante) {
-      const a = document.createElement('a');
-      a.href = `/cartas/api/comprobante/${jobId}`;
-      a.download = data.comprobante_name || 'Comprobante.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      fetch(`/cartas/api/comprobante/${jobId}`)
+        .then(r => r.blob())
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = data.comprobante_name || 'Comprobante.pdf';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        })
+        .catch(() => {});
     }
     // Actualizar estado
     Object.keys(data.resultados).forEach(rut => {

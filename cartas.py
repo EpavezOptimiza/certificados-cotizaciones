@@ -1400,64 +1400,33 @@ def estado_bot(job_id):
 @cartas_bp.route("/api/unificar", methods=["POST"])
 @cartas_login_required
 def unificar_pdfs():
-    """Busca carta + movimiento por RUT en una carpeta, los fusiona y guarda como Caso_<rut>.pdf."""
-    import re as _re, io
+    """Recibe carta PDF y/o movimiento PDF como archivos multipart y los fusiona."""
+    import io as _io, re as _re
     from pypdf import PdfWriter, PdfReader
     from flask import Response
 
-    data    = request.json or {}
-    rut     = data.get('rut', '').strip()
-    carpeta = data.get('carpeta', '').strip()
+    rut      = request.form.get('rut', '').strip()
+    carta_f  = request.files.get('carta')
+    mov_f    = request.files.get('movimiento')
 
-    if not rut or not carpeta:
-        return jsonify({'error': 'RUT y carpeta son requeridos'}), 400
-    if not os.path.isdir(carpeta):
-        return jsonify({'error': f'Carpeta no encontrada: {carpeta}'}), 400
+    if not carta_f and not mov_f:
+        return jsonify({'error': 'Se requiere al menos un archivo'}), 400
 
-    rut_norm = _re.sub(r'[\.\-\s]', '', rut).lower()
-
-    carta_file = None
-    mov_file   = None
-    for fname in sorted(os.listdir(carpeta)):
-        if not fname.lower().endswith('.pdf'):
-            continue
-        fname_norm = _re.sub(r'[\.\-\s]', '', fname).lower()
-        if rut_norm not in fname_norm:
-            continue
-        if 'carta' in fname.lower():
-            carta_file = os.path.join(carpeta, fname)
-        elif any(k in fname.lower() for k in ['mov_per', 'movimiento', 'comprobante', 'mov per', 'movper']):
-            mov_file = os.path.join(carpeta, fname)
-
-    if not carta_file and not mov_file:
-        return jsonify({'error': f'No se encontraron archivos para RUT {rut} en la carpeta indicada'}), 404
-
-    encontrados = []
     writer = PdfWriter()
-    for label, fpath in [('carta', carta_file), ('movimiento', mov_file)]:
-        if not fpath:
+    for label, fobj in [('carta', carta_f), ('movimiento', mov_f)]:
+        if not fobj:
             continue
         try:
-            with open(fpath, 'rb') as f:
-                for page in PdfReader(f).pages:
-                    writer.add_page(page)
-            encontrados.append(label)
+            for page in PdfReader(_io.BytesIO(fobj.read())).pages:
+                writer.add_page(page)
         except Exception as e:
             return jsonify({'error': f'Error leyendo {label}: {e}'}), 500
 
-    rut_clean   = _re.sub(r'[\.\-\s]', '', rut)
-    output_name = f"Caso_{rut_clean}.pdf"
-    output_path = os.path.join(carpeta, output_name)
-
-    buf = io.BytesIO()
+    buf = _io.BytesIO()
     writer.write(buf)
-    merged = buf.getvalue()
-
-    with open(output_path, 'wb') as f:
-        f.write(merged)
-
-    return Response(merged, mimetype='application/pdf',
-                    headers={'Content-Disposition': f'attachment; filename="{output_name}"'})
+    rut_clean = _re.sub(r'[\.\-\s]', '', rut)
+    return Response(buf.getvalue(), mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="Caso_{rut_clean}.pdf"'})
 
 @cartas_bp.route("/api/destinatarios", methods=["GET"])
 @cartas_login_required

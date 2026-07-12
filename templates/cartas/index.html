@@ -581,16 +581,14 @@ textarea{resize:vertical;min-height:70px}
       <!-- Carpeta de PDFs -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-title"><span class="card-title-icon">📁</span> Carpeta de archivos PDF</div>
-        <div style="display:flex;gap:10px;align-items:flex-end">
-          <div style="flex:1">
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Ruta de la carpeta donde están las cartas y movimientos de personal</label>
-            <input type="text" id="carpeta-path" placeholder="Ej: C:\Users\Esteban\Downloads\PDFs"
-                   style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace">
-          </div>
-          <button class="btn btn-primary" onclick="guardarCarpeta()" style="white-space:nowrap">💾 Guardar ruta</button>
+        <div style="display:flex;gap:12px;align-items:center">
+          <button class="btn btn-primary" onclick="seleccionarCarpeta()" style="white-space:nowrap">
+            📁 Seleccionar carpeta
+          </button>
+          <span id="carpeta-nombre" style="font-size:13px;color:#64748b;font-weight:500">Sin carpeta seleccionada</span>
         </div>
-        <div id="carpeta-hint" style="font-size:11px;color:#64748b;margin-top:6px">
-          El sistema buscará archivos que contengan "carta" + RUT y "MOV_PER" + RUT en esa carpeta.
+        <div id="carpeta-hint" style="font-size:11px;color:#64748b;margin-top:8px">
+          Selecciona la carpeta donde están las cartas y movimientos de personal. Los archivos <strong>Caso_RUT.pdf</strong> se guardarán ahí mismo.
         </div>
       </div>
 
@@ -2017,49 +2015,80 @@ function guardarDestinatario() {
   }).catch(e => { errEl.textContent = 'Error: ' + e; errEl.style.display = ''; });
 }
 
-function guardarCarpeta() {
-  const val = document.getElementById('carpeta-path').value.trim();
-  if (!val) { alert('Ingresa una ruta de carpeta.'); return; }
-  localStorage.setItem('pdf_carpeta', val);
-  document.getElementById('carpeta-hint').innerHTML =
-    `<span style="color:#059669">✅ Ruta guardada: <code>${val}</code></span>`;
-}
+let _dirHandle = null;
 
-function cargarCarpeta() {
-  const val = localStorage.getItem('pdf_carpeta') || '';
-  document.getElementById('carpeta-path').value = val;
-  if (val) document.getElementById('carpeta-hint').innerHTML =
-    `<span style="color:#059669">✅ Ruta guardada: <code>${val}</code></span>`;
-}
-
-async function unificarPDF(rut) {
-  const carpeta = localStorage.getItem('pdf_carpeta') || '';
-  if (!carpeta) {
-    alert('Primero indica la carpeta de archivos PDF en la sección de arriba.');
+async function seleccionarCarpeta() {
+  if (!window.showDirectoryPicker) {
+    alert('Tu navegador no soporta el selector de carpetas. Usa Chrome o Edge.');
     return;
   }
-  const btn = event.target;
+  try {
+    _dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    const nombreEl = document.getElementById('carpeta-nombre');
+    nombreEl.textContent = '📁 ' + _dirHandle.name;
+    nombreEl.style.color = '#059669';
+    document.getElementById('carpeta-hint').innerHTML =
+      `<span style="color:#059669">✅ Carpeta seleccionada: <strong>${_dirHandle.name}</strong> — los archivos Caso_RUT.pdf se guardarán aquí.</span>`;
+  } catch(e) {
+    if (e.name !== 'AbortError') alert('Error al seleccionar carpeta: ' + e.message);
+  }
+}
+
+function cargarCarpeta() { /* handle vive en memoria; el usuario re-selecciona al recargar */ }
+
+async function unificarPDF(rut) {
+  if (!_dirHandle) {
+    alert('Primero selecciona la carpeta de archivos PDF.');
+    return;
+  }
+  const btn = event.currentTarget;
   btn.disabled = true; btn.textContent = '⏳...';
   try {
-    const res = await fetch('/cartas/api/unificar', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({rut, carpeta})
-    });
+    const rutNorm = rut.replace(/[.\-\s]/g, '').toLowerCase();
+    let cartaHandle = null, movHandle = null;
+
+    for await (const [name, handle] of _dirHandle.entries()) {
+      if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
+      const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
+      if (!nameNorm.includes(rutNorm)) continue;
+      if (/carta/i.test(name)) cartaHandle = handle;
+      else if (/mov_?per|movimiento|comprobante/i.test(name)) movHandle = handle;
+    }
+
+    if (!cartaHandle && !movHandle) {
+      alert(`No se encontraron archivos para RUT ${rut} en la carpeta seleccionada.`);
+      btn.disabled = false; btn.textContent = '📎 Unificar';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('rut', rut);
+    if (cartaHandle) formData.append('carta',       await cartaHandle.getFile(), cartaHandle.name);
+    if (movHandle)   formData.append('movimiento',  await movHandle.getFile(),   movHandle.name);
+
+    const res = await fetch('/cartas/api/unificar', { method: 'POST', body: formData });
     if (!res.ok) {
       const e = await res.json();
       alert('Error: ' + (e.error || res.status));
       btn.disabled = false; btn.textContent = '📎 Unificar';
       return;
     }
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `Caso_${rut}.pdf`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    const arrBuf   = await res.arrayBuffer();
+    const rutClean = rut.replace(/[.\-\s]/g, '');
+    const outName  = `Caso_${rutClean}.pdf`;
+
+    const outHandle = await _dirHandle.getFileHandle(outName, { create: true });
+    const writable  = await outHandle.createWritable();
+    await writable.write(arrBuf);
+    await writable.close();
+
     btn.textContent = '✅ Guardado';
-    btn.style.background = '#059669';
+    btn.style.cssText += ';background:#059669;border-color:#059669';
+    setTimeout(() => {
+      btn.disabled = false; btn.textContent = '📎 Unificar';
+      btn.style.background = ''; btn.style.borderColor = '';
+    }, 3000);
   } catch(e) {
     alert('Error al unificar: ' + e.message);
     btn.disabled = false; btn.textContent = '📎 Unificar';

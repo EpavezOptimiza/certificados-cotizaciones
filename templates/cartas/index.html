@@ -1848,7 +1848,13 @@ async function destacarPDF(file) {
 // ── Estado ────────────────────────────────────────────────────────────────────
 function renderEstado() {
   const tbody = document.getElementById('estado-tbody');
-  tbody.innerHTML = trabajadores.map(w => {
+  const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
+  if (!marcados.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">
+      Selecciona trabajadores en la lista lateral para verlos aquí.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = marcados.map(w => {
     const sel = seleccionados[w.rut_trabajador] || {};
     return `<tr>
       <td><input type="checkbox" class="estado-check" data-rut="${w.rut_trabajador}" ${sel.estadoCheck?'checked':''}></td>

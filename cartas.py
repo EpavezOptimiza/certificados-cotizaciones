@@ -1084,37 +1084,35 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Capturar PDF — igual que planillas: expect_download en el popup
+                # Capturar PDF: leer form y hacer POST directo con cookies de sesión
                 pdf_capturado = []
-
-                def on_ctx_page(new_page):
-                    def on_download(dl):
-                        try:
-                            import pathlib
-                            body = pathlib.Path(dl.path()).read_bytes()
-                            if body:
-                                pdf_capturado.append(body)
-                                log(f"📥 PDF descargado: {dl.suggested_filename} ({len(body)} bytes)")
-                        except Exception as ex:
-                            log(f"⚠ Leer download: {ex}")
-                    new_page.on('download', on_download)
-
-                ctx.on('page', on_ctx_page)
-
                 try:
-                    with page.expect_popup(timeout=20000) as popup_info:
-                        page.click('#busca_certificados', timeout=5000)
-                    popup = popup_info.value
-                    log(f"🪟 Popup abierto")
-                    page.wait_for_timeout(15000)
-                    try:
-                        popup.close()
-                    except Exception:
-                        pass
+                    form_data = page.evaluate("""() => {
+                        var btn = document.getElementById('busca_certificados');
+                        if (!btn) return null;
+                        var form = btn.closest('form');
+                        if (!form) return null;
+                        var params = {};
+                        Array.from(form.elements).forEach(function(el) {
+                            if (el.name && el.type !== 'submit') params[el.name] = el.value || '';
+                        });
+                        return {action: form.action, method: form.method || 'POST', params: params};
+                    }""")
+                    log(f"Form: action={form_data['action'][:80] if form_data else 'N/A'}")
+                    if form_data and form_data.get('action'):
+                        resp = ctx.request.post(form_data['action'], form=form_data['params'])
+                        body = resp.body()
+                        ct = resp.headers.get('content-type', '')
+                        log(f"POST resp: {resp.status} ct={ct[:40]} size={len(body)}")
+                        if body and (body[:4] == b'%PDF' or 'pdf' in ct.lower()):
+                            pdf_capturado.append(body)
+                            log(f"📥 PDF POST directo: {len(body)} bytes")
+                        else:
+                            log(f"⚠ Respuesta no es PDF: {body[:200]}")
+                    else:
+                        log("⚠ No se encontró form del botón Generar")
                 except Exception as e:
-                    log(f"⚠ Error popup Generar: {e}")
-
-                ctx.remove_listener('page', on_ctx_page)
+                    log(f"⚠ Error POST directo: {e}")
 
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]

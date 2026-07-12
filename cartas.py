@@ -1400,48 +1400,64 @@ def estado_bot(job_id):
 @cartas_bp.route("/api/unificar", methods=["POST"])
 @cartas_login_required
 def unificar_pdfs():
-    """Fusiona carta PDF + comprobante PreviRed en un solo PDF."""
-    data = request.json or {}
-    job_id     = data.get('job_id')
-    rut        = data.get('rut', '').strip()
-    carta_data = data.get('carta_data', {})
-    firma_data = data.get('firma_data', {})
-
-    job = _jobs.get(job_id) if job_id else None
-    comp_bytes = (job or {}).get('comprobantes', {}).get(rut) if job else None
-    if not comp_bytes:
-        # Fallback: comprobante global del job (compatible con versiones anteriores)
-        comp_bytes = (job or {}).get('comprobante_bytes') if job else None
-
-    import io
+    """Busca carta + movimiento por RUT en una carpeta, los fusiona y guarda como Caso_<rut>.pdf."""
+    import re as _re, io
     from pypdf import PdfWriter, PdfReader
     from flask import Response
 
+    data    = request.json or {}
+    rut     = data.get('rut', '').strip()
+    carpeta = data.get('carpeta', '').strip()
+
+    if not rut or not carpeta:
+        return jsonify({'error': 'RUT y carpeta son requeridos'}), 400
+    if not os.path.isdir(carpeta):
+        return jsonify({'error': f'Carpeta no encontrada: {carpeta}'}), 400
+
+    rut_norm = _re.sub(r'[\.\-\s]', '', rut).lower()
+
+    carta_file = None
+    mov_file   = None
+    for fname in sorted(os.listdir(carpeta)):
+        if not fname.lower().endswith('.pdf'):
+            continue
+        fname_norm = _re.sub(r'[\.\-\s]', '', fname).lower()
+        if rut_norm not in fname_norm:
+            continue
+        if 'carta' in fname.lower():
+            carta_file = os.path.join(carpeta, fname)
+        elif any(k in fname.lower() for k in ['mov_per', 'movimiento', 'comprobante', 'mov per', 'movper']):
+            mov_file = os.path.join(carpeta, fname)
+
+    if not carta_file and not mov_file:
+        return jsonify({'error': f'No se encontraron archivos para RUT {rut} en la carpeta indicada'}), 404
+
+    encontrados = []
     writer = PdfWriter()
-
-    # Carta PDF
-    try:
-        carta_bytes = generar_carta_pdf(carta_data, firma_data)
-        reader_carta = PdfReader(io.BytesIO(carta_bytes))
-        for page in reader_carta.pages:
-            writer.add_page(page)
-    except Exception as e:
-        return jsonify({"error": f"Error generando carta: {e}"}), 500
-
-    # Comprobante PDF
-    if comp_bytes:
+    for label, fpath in [('carta', carta_file), ('movimiento', mov_file)]:
+        if not fpath:
+            continue
         try:
-            reader_comp = PdfReader(io.BytesIO(comp_bytes))
-            for page in reader_comp.pages:
-                writer.add_page(page)
+            with open(fpath, 'rb') as f:
+                for page in PdfReader(f).pages:
+                    writer.add_page(page)
+            encontrados.append(label)
         except Exception as e:
-            return jsonify({"error": f"Error leyendo comprobante: {e}"}), 500
+            return jsonify({'error': f'Error leyendo {label}: {e}'}), 500
 
-    output = io.BytesIO()
-    writer.write(output)
-    rut_clean = rut.replace('.', '').replace(' ', '')
-    return Response(output.getvalue(), mimetype='application/pdf',
-                    headers={'Content-Disposition': f'attachment; filename="UNIFICADO_{rut_clean}.pdf"'})
+    rut_clean   = _re.sub(r'[\.\-\s]', '', rut)
+    output_name = f"Caso_{rut_clean}.pdf"
+    output_path = os.path.join(carpeta, output_name)
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    merged = buf.getvalue()
+
+    with open(output_path, 'wb') as f:
+        f.write(merged)
+
+    return Response(merged, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="{output_name}"'})
 
 @cartas_bp.route("/api/destinatarios", methods=["GET"])
 @cartas_login_required

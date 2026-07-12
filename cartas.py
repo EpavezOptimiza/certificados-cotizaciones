@@ -1084,35 +1084,36 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Capturar PDF: leer form y hacer POST directo con cookies de sesión
+                # Capturar PDF via route CtrlPdf + submit manual del form al popup
                 pdf_capturado = []
-                try:
-                    form_data = page.evaluate("""() => {
-                        var btn = document.getElementById('busca_certificados');
-                        if (!btn) return null;
-                        var form = btn.closest('form');
-                        if (!form) return null;
-                        var params = {};
-                        Array.from(form.elements).forEach(function(el) {
-                            if (el.name && el.type !== 'submit') params[el.name] = el.value || '';
-                        });
-                        return {action: form.action, method: form.method || 'POST', params: params};
-                    }""")
-                    log(f"Form: action={form_data['action'][:80] if form_data else 'N/A'}")
-                    if form_data and form_data.get('action'):
-                        resp = ctx.request.post(form_data['action'], form=form_data['params'])
-                        body = resp.body()
-                        ct = resp.headers.get('content-type', '')
-                        log(f"POST resp: {resp.status} ct={ct[:40]} size={len(body)}")
-                        if body and (body[:4] == b'%PDF' or 'pdf' in ct.lower()):
+
+                def capturar_ctrlpdf(route):
+                    try:
+                        response = route.fetch()
+                        body = response.body()
+                        if body and len(body) > 500:
                             pdf_capturado.append(body)
-                            log(f"📥 PDF POST directo: {len(body)} bytes")
-                        else:
-                            log(f"⚠ Respuesta no es PDF: {body[:200]}")
-                    else:
-                        log("⚠ No se encontró form del botón Generar")
-                except Exception as e:
-                    log(f"⚠ Error POST directo: {e}")
+                            log(f"📥 PDF CtrlPdf: {len(body)} bytes")
+                        route.fulfill(response=response)
+                    except Exception:
+                        route.continue_()
+
+                ctx.route('**/CtrlPdf**', capturar_ctrlpdf)
+
+                # Abrir popup y submitear form igual que el JS del botón
+                page.evaluate("""() => {
+                    var btn = document.getElementById('busca_certificados');
+                    if (!btn) return;
+                    var form = btn.closest('form');
+                    if (!form) return;
+                    var popup = window.open('', '_comprobante', 'width=1000,height=700');
+                    form.target = '_comprobante';
+                    form.submit();
+                }""")
+                log("✓ Form submiteado al popup _comprobante, esperando CtrlPdf...")
+                page.wait_for_timeout(15000)
+
+                ctx.unroute('**/CtrlPdf**')
 
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]

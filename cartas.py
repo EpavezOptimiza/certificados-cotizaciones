@@ -1084,56 +1084,43 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Diagnóstico: ver qué elementos "Generar" existen en la página
-                btn_info = page.evaluate("""() => {
-                    return Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a, span'))
-                        .filter(e => (e.textContent||e.value||'').trim().toLowerCase().includes('generar'))
-                        .slice(0,5)
-                        .map(e => e.tagName+'#'+(e.id||'no-id')+': '+(e.textContent||e.value||'').trim().slice(0,40));
-                }""")
-                log(f"Elementos Generar: {btn_info}")
-
-                # Escuchar respuestas sin interceptar (no interfiere con navegación ni popups)
+                # Capturar PDF del popup que abre "Generar Comprobante"
                 pdf_capturado = []
-                urls_vistas = []
 
-                def on_resp(response):
+                def on_popup_resp(response):
                     url = response.url
                     ct = response.headers.get('content-type', '')
-                    urls_vistas.append(f"{response.status} {url[:80]}")
                     try:
                         if 'pdf' in ct.lower() or 'pdf' in url.lower() or 'CtrlPdf' in url:
                             body = response.body()
                             if body and len(body) > 500:
                                 pdf_capturado.append(body)
-                                log(f"📥 PDF: {url[:70]} ({len(body)} bytes)")
+                                log(f"📥 PDF popup: {url[:70]} ({len(body)} bytes)")
                     except Exception:
                         pass
 
-                def on_new_page_resp(p):
-                    p.on('response', on_resp)
-                    log(f"🪟 Nueva página: {p.url[:70]}")
-
-                page.on('response', on_resp)
-                ctx.on('page', on_new_page_resp)
-
-                # Click Generar
-                page.evaluate("""() => {
-                    var all = Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a, span'));
-                    for (var el of all) {
-                        var txt = (el.textContent || el.value || '').trim();
-                        if (txt.indexOf('Generar') !== -1) {
-                            (el.tagName === 'SPAN' ? el.parentElement : el).click();
-                            return txt;
-                        }
-                    }
-                }""")
-                log("✓ Click Generar enviado, esperando respuesta (15s)...")
-                page.wait_for_timeout(15000)
-
-                page.remove_listener('response', on_resp)
-                if urls_vistas:
-                    log(f"URLs tras click: {urls_vistas[:10]}")
+                try:
+                    with page.expect_popup(timeout=20000) as popup_info:
+                        page.click('#busca_certificados', timeout=5000)
+                    popup = popup_info.value
+                    log(f"🪟 Popup abierto: {popup.url[:70]}")
+                    popup.on('response', on_popup_resp)
+                    popup.wait_for_load_state('networkidle', timeout=30000)
+                    popup.wait_for_timeout(2000)
+                    # Si URL del popup es el PDF directo
+                    if not pdf_capturado:
+                        try:
+                            popup_url = popup.url
+                            log(f"URL popup final: {popup_url[:80]}")
+                            if 'pdf' in popup_url.lower() or 'CtrlPdf' in popup_url:
+                                content = popup.content()
+                                log(f"Contenido popup: {len(content)} chars")
+                        except Exception as ex:
+                            log(f"ℹ popup URL: {ex}")
+                    popup.close()
+                    log("✓ Popup cerrado")
+                except Exception as e:
+                    log(f"⚠ Error popup Generar: {e}")
 
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]

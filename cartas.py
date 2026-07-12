@@ -1084,57 +1084,65 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 page.wait_for_timeout(800)
 
-                # Capturar comprobante PDF: click real + listener en popup
-                # CtrlFce (form action) devuelve HTML que JS redirige a CtrlPdf (PDF real).
-                # ctx.on('page') detecta el popup antes que cargue, para escuchar sus responses.
-                log("Click Generar Comprobante, esperando popup...")
+                # Capturar comprobante PDF:
+                # 1) ctx.route('**/CtrlPdf**') — sin race condition, activo antes del click
+                # 2) page.expect_popup() — sincrónico, bloquea hasta que el popup existe
+                # 3) popup.on('download') — por si CtrlPdf dispara descarga en el popup
+                log("Click Generar Comprobante...")
                 pdf_capturado = []
 
-                def _on_popup(popup):
-                    log(f"🪟 Popup detectado")
+                def _ctrlpdf_route(route):
+                    log(f"🎯 CtrlPdf interceptado: {route.request.method} {route.request.url[-60:]}")
+                    try:
+                        resp = route.fetch()
+                        body = resp.body()
+                        ct = resp.headers.get('content-type', '')
+                        log(f"📥 CtrlPdf fetch: {len(body)} bytes, {ct}, HTTP {resp.status}")
+                        if body and len(body) > 500:
+                            pdf_capturado.append(body)
+                        route.fulfill(response=resp)
+                    except Exception as e_fetch:
+                        log(f"⚠ CtrlPdf fetch error: {type(e_fetch).__name__}: {str(e_fetch)[:200]}")
+                        route.continue_()
 
-                    def _on_download(download):
-                        fname = download.suggested_filename
-                        log(f"📥 Download en popup: {fname}")
+                ctx.route('**/CtrlPdf**', _ctrlpdf_route)
+
+                try:
+                    with page.expect_popup(timeout=8000) as popup_info:
+                        page.click('#busca_certificados')
+                    popup = popup_info.value
+                    log(f"🪟 Popup: {popup.url or 'blank'}")
+
+                    def _on_download(dl):
+                        log(f"📥 Download popup: {dl.suggested_filename}")
                         try:
-                            import tempfile, os as _os
-                            tmp = tempfile.mktemp(suffix='.pdf')
-                            download.save_as(tmp)
+                            import tempfile as _tf
+                            tmp = _tf.mktemp(suffix='.pdf')
+                            dl.save_as(tmp)
                             with open(tmp, 'rb') as fh:
-                                body = fh.read()
-                            _os.unlink(tmp)
-                            if body and len(body) > 500:
-                                pdf_capturado.append(body)
-                                log(f"✅ PDF via download popup: {len(body)} bytes")
+                                b = fh.read()
+                            os.remove(tmp)
+                            if b and len(b) > 500:
+                                pdf_capturado.append(b)
+                                log(f"✅ PDF download popup: {len(b)} bytes")
                         except Exception as e_dl:
-                            log(f"⚠ Error leyendo download: {e_dl}")
-
-                    def _on_resp(response):
-                        if 'CtrlPdf' in response.url:
-                            try:
-                                body = response.body()
-                                ct = response.headers.get('content-type', '')
-                                log(f"📥 CtrlPdf response: {len(body)} bytes, tipo={ct}")
-                                if body and len(body) > 500:
-                                    pdf_capturado.append(body)
-                            except Exception as e_body:
-                                log(f"⚠ Error body CtrlPdf: {e_body}")
+                            log(f"⚠ download error: {e_dl}")
 
                     popup.on('download', _on_download)
-                    popup.on('response', _on_resp)
 
-                ctx.on('page', _on_popup)
-                page.click('#busca_certificados')
-                log("Esperando PDF (20s)...")
-                page.wait_for_timeout(20000)
-                ctx.remove_listener('page', _on_popup)
+                except Exception as e_popup:
+                    log(f"⚠ expect_popup: {type(e_popup).__name__}: {e_popup}")
+
+                log("Esperando PDF (15s)...")
+                page.wait_for_timeout(15000)
+                ctx.unroute('**/CtrlPdf**')
 
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]
                     job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
                     log(f"✅ Comprobante PDF: {len(pdf_capturado[0])} bytes")
                 else:
-                    log("⚠ No se capturó PDF del popup")
+                    log("⚠ No se capturó PDF")
 
             ctx.close()
             browser.close()

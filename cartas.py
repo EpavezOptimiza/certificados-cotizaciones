@@ -1077,27 +1077,31 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 }""")
                 log(f"Elementos Generar: {btn_info}")
 
-                # Interceptar TODAS las requests para detectar qué URL sirve el PDF
+                # Escuchar respuestas sin interceptar (no interfiere con navegación ni popups)
                 pdf_capturado = []
+                urls_vistas = []
 
-                def capturar_pdf(route):
+                def on_resp(response):
+                    url = response.url
+                    ct = response.headers.get('content-type', '')
+                    urls_vistas.append(f"{response.status} {url[:80]}")
                     try:
-                        response = route.fetch()
-                        body = response.body()
-                        ct = response.headers.get('content-type', '')
-                        url = route.request.url
-                        if 'pdf' in ct.lower() or (body and len(body) > 500 and body[:4] == b'%PDF'):
-                            pdf_capturado.append(body)
-                            log(f"📥 PDF capturado: {url[:70]} ({len(body)} bytes)")
-                        elif body and len(body) > 5000:
-                            log(f"🌐 Request grande: {url[:70]} ct={ct[:30]}")
-                        route.fulfill(response=response)
+                        if 'pdf' in ct.lower() or 'pdf' in url.lower() or 'CtrlPdf' in url:
+                            body = response.body()
+                            if body and len(body) > 500:
+                                pdf_capturado.append(body)
+                                log(f"📥 PDF: {url[:70]} ({len(body)} bytes)")
                     except Exception:
-                        route.continue_()
+                        pass
 
-                ctx.route('**/*', capturar_pdf)
+                def on_new_page_resp(p):
+                    p.on('response', on_resp)
+                    log(f"🪟 Nueva página: {p.url[:70]}")
 
-                # Click Generar y esperar — sin depender de popup
+                page.on('response', on_resp)
+                ctx.on('page', on_new_page_resp)
+
+                # Click Generar
                 page.evaluate("""() => {
                     var all = Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a, span'));
                     for (var el of all) {
@@ -1111,14 +1115,16 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 log("✓ Click Generar enviado, esperando respuesta (15s)...")
                 page.wait_for_timeout(15000)
 
-                ctx.unroute('**/*')
+                page.remove_listener('response', on_resp)
+                if urls_vistas:
+                    log(f"URLs tras click: {urls_vistas[:10]}")
 
                 if pdf_capturado:
                     job['comprobante_bytes'] = pdf_capturado[0]
                     job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
                     log(f"✅ Comprobante PDF: MOV_PER_{rut_t}.pdf ({len(pdf_capturado[0])} bytes)")
                 else:
-                    log("⚠ No se capturó PDF — revisar logs de URLs interceptadas arriba")
+                    log("⚠ No se capturó PDF")
 
             ctx.close()
             browser.close()

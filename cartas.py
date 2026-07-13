@@ -81,65 +81,25 @@ def cartas_login_required(f):
 
 # ── Parseo de Excel ───────────────────────────────────────────────────────────
 def parsear_excel(file_bytes):
-    """Lee el Excel de deudas y retorna lista de dicts con todos los campos."""
+    """Lee el Excel de deudas (Base AFP + Base Isapre) y retorna lista de dicts."""
     import openpyxl, io
-    from datetime import datetime as dt
-
-    MESES_MAP = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
-                 'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12}
 
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
 
-    # Buscar hoja correcta
-    ws = None
-    for nombre in wb.sheetnames:
-        n = nombre.lower()
-        if 'base' in n and 'afp' in n:
-            ws = wb[nombre]; break
-    if ws is None:
-        for nombre in wb.sheetnames:
-            if 'base' in nombre.lower():
-                ws = wb[nombre]; break
-    if ws is None:
-        ws = wb.active
-
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return []
-
-    headers = [str(h).lower().strip() if h else '' for h in rows[0]]
-
-    def col(nombres, default=-1):
+    def _col(headers, nombres, default=-1):
         for n in nombres:
             for i, h in enumerate(headers):
                 if n in h:
                     return i
         return default
 
-    iRutEmp  = col(['01_rut emp','rut empresa','rut_empresa'], 0)
-    iRazon   = col(['02_razon','razon social','razon_social'], 1)
-    iRutTrab = col(['03_rut afil','rut afiliado','rut_afiliado','rut trabajador'], 2)
-    iNombre  = col(['04_nombre','nombre afiliado','nombre trabajador','nombre_afiliado'], 3)
-    iTipo    = col(['05_tipo','tipo producto','tipo_producto'], 4)
-    iInst    = col(['06_inst','institucion'], 5)
-    iPeriodo = col(['07_periodo','período','periodo'], 6)
-    iMontoN  = col(['11_monto nom','monto nominal'], 7)
-    iMontoI  = col(['12_monto int','monto interes'], 8)
-    iFee     = col(['fee%','fee'], 9)
-    iFecha   = col(['08_fecha cese','fecha cese','fecha_cese'], 10)
-    iAnalisis= col(['13_','analisis'], 11)
-    iMotivo  = col(['09_','motivos de deuda','motivo de deuda'], 12)
-    iTipoDoc = col(['14_','tipo documento'], 13)
-    iEstatus = col(['15_','estatus','estado'], 14)
-    iObs     = col(['observaciones'], 15)
-
-    def g(row, idx):
+    def _g(row, idx):
         if idx < 0 or idx >= len(row): return ''
         v = row[idx]
         if v is None: return ''
         return str(v).strip()
 
-    def gfecha(row, idx):
+    def _gfecha(row, idx):
         if idx < 0 or idx >= len(row): return ''
         v = row[idx]
         if v is None: return ''
@@ -153,46 +113,99 @@ def parsear_excel(file_bytes):
                 return f"{partes[2]}/{partes[1]}/{partes[0]}"
         return s
 
-    def fmt_periodo(v):
+    MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
+             7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'}
+
+    def _fmt_periodo(v):
         if v is None: return ''
         if hasattr(v, 'month'):
-            MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
-                     7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'}
             return f"{MESES[v.month]}-{str(v.year)[2:]}"
         s = str(v).strip().split(' ')[0]
         parts = s.split('-')
         if len(parts) == 3:
             try:
-                MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
-                         7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'}
                 return f"{MESES[int(parts[1])]}-{parts[0][2:]}"
             except: pass
         return s
 
+    def _parsear_hoja(ws):
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return []
+        headers = [str(h).lower().strip() if h else '' for h in rows[0]]
+        c = lambda nombres, default=-1: _col(headers, nombres, default)
+
+        iRutEmp  = c(['01_rut emp','rut empresa','rut_empresa'], 0)
+        iRazon   = c(['02_razon','razon social','razon_social'], 1)
+        iRutTrab = c(['03_rut afil','rut afiliado','rut_afiliado','rut trabajador'], 2)
+        iNombre  = c(['04_nombre','nombre afiliado','nombre trabajador','nombre_afiliado'], 3)
+        iTipo    = c(['05_tipo','tipo producto','tipo_producto'], 4)
+        iInst    = c(['06_inst','institucion'], 5)
+        iPeriodo = c(['07_periodo','período','periodo'], 6)
+        iMontoN  = c(['monto nominal','11_monto nom','pagado\xa0','pagado '], 7)
+        iMontoI  = c(['monto interes','12_monto int','monto interés'], 8)
+        iFee     = c(['fee%','fee'], 9)
+        iFecha   = c(['fecha cese','08_fecha cese','fecha_cese'], 10)
+        iAnalisis= c(['13_','analisis'], 11)
+        iMotivo  = c(['09_','motivos de deuda','motivo de deuda','motivo'], 12)
+        iTipoDoc = c(['14_','tipo documento'], 13)
+        iEstatus = c(['15_','estatus','estado'], 14)
+        iObs     = c(['observaciones','obs'], 15)
+
+        filas = []
+        for row in rows[1:]:
+            if not any(row): continue
+            rut_trab = _g(row, iRutTrab)
+            if not rut_trab or rut_trab.upper() in ('ND','N/D','','NONE'): continue
+            periodo = _fmt_periodo(row[iPeriodo] if iPeriodo < len(row) else None)
+            filas.append({
+                'rut_empresa':    _g(row, iRutEmp),
+                'razon_social':   _g(row, iRazon),
+                'rut_trabajador': rut_trab,
+                'nombre':         _g(row, iNombre),
+                'tipo':           _g(row, iTipo),
+                'institucion':    _g(row, iInst),
+                'periodo':        periodo,
+                'monto_nominal':  _g(row, iMontoN),
+                'monto_interes':  _g(row, iMontoI),
+                'fee':            _g(row, iFee),
+                'fecha_cese':     _gfecha(row, iFecha),
+                'analisis':       _g(row, iAnalisis),
+                'motivo':         _g(row, iMotivo),
+                'tipo_documento': _g(row, iTipoDoc),
+                'estatus':        _g(row, iEstatus),
+                'observaciones':  _g(row, iObs),
+            })
+        return filas
+
     datos = []
-    for row in rows[1:]:
-        if not any(row): continue
-        rut_trab = g(row, iRutTrab)
-        if not rut_trab or rut_trab.upper() in ('ND','N/D','','NONE'): continue
-        periodo = fmt_periodo(row[iPeriodo] if iPeriodo < len(row) else None)
-        datos.append({
-            'rut_empresa':  g(row, iRutEmp),
-            'razon_social': g(row, iRazon),
-            'rut_trabajador': rut_trab,
-            'nombre':       g(row, iNombre),
-            'tipo':         g(row, iTipo),
-            'institucion':  g(row, iInst),
-            'periodo':      periodo,
-            'monto_nominal': g(row, iMontoN),
-            'monto_interes': g(row, iMontoI),
-            'fee':          g(row, iFee),
-            'fecha_cese':   gfecha(row, iFecha),
-            'analisis':     g(row, iAnalisis),
-            'motivo':       g(row, iMotivo),
-            'tipo_documento': g(row, iTipoDoc),
-            'estatus':      g(row, iEstatus),
-            'observaciones': g(row, iObs),
-        })
+
+    # Leer Base AFP
+    ws_afp = None
+    for nombre in wb.sheetnames:
+        n = nombre.lower()
+        if 'base' in n and 'afp' in n:
+            ws_afp = wb[nombre]; break
+    if ws_afp is None:
+        for nombre in wb.sheetnames:
+            if 'base' in nombre.lower() and 'isapre' not in nombre.lower():
+                ws_afp = wb[nombre]; break
+    if ws_afp is not None:
+        datos.extend(_parsear_hoja(ws_afp))
+
+    # Leer Base Isapre
+    ws_isapre = None
+    for nombre in wb.sheetnames:
+        n = nombre.lower()
+        if 'base' in n and 'isapre' in n:
+            ws_isapre = wb[nombre]; break
+    if ws_isapre is not None:
+        datos.extend(_parsear_hoja(ws_isapre))
+
+    # Fallback: si no se encontró ninguna hoja Base, usar la activa
+    if not datos and not ws_afp and not ws_isapre:
+        datos.extend(_parsear_hoja(wb.active))
+
     return datos
 
 def agrupar_por_trabajador(datos):

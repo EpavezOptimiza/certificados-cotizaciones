@@ -128,7 +128,7 @@ def parsear_excel(file_bytes):
             except: pass
         return s
 
-    def _parsear_hoja(ws):
+    def _parsear_hoja(ws, tipo_hoja='afp'):
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
             return []
@@ -175,6 +175,7 @@ def parsear_excel(file_bytes):
                 'tipo_documento': _g(row, iTipoDoc),
                 'estatus':        _g(row, iEstatus),
                 'observaciones':  _g(row, iObs),
+                '_tipo':          tipo_hoja,
             })
         return filas
 
@@ -191,7 +192,7 @@ def parsear_excel(file_bytes):
             if 'base' in nombre.lower() and 'isapre' not in nombre.lower():
                 ws_afp = wb[nombre]; break
     if ws_afp is not None:
-        datos.extend(_parsear_hoja(ws_afp))
+        datos.extend(_parsear_hoja(ws_afp, 'afp'))
 
     # Leer Base Isapre
     ws_isapre = None
@@ -200,11 +201,11 @@ def parsear_excel(file_bytes):
         if 'base' in n and 'isapre' in n:
             ws_isapre = wb[nombre]; break
     if ws_isapre is not None:
-        datos.extend(_parsear_hoja(ws_isapre))
+        datos.extend(_parsear_hoja(ws_isapre, 'isapre'))
 
     # Fallback: si no se encontró ninguna hoja Base, usar la activa
     if not datos and not ws_afp and not ws_isapre:
-        datos.extend(_parsear_hoja(wb.active))
+        datos.extend(_parsear_hoja(wb.active, 'afp'))
 
     return datos
 

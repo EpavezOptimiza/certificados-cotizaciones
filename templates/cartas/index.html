@@ -291,6 +291,17 @@ textarea{resize:vertical;min-height:70px}
         <input type="checkbox" id="check-all" onchange="toggleAll(this)"> Marcar filtrados
       </label>
     </div>
+    <!-- Pestañas AFP / Isapre -->
+    <div id="tipo-tabs" style="display:none;flex-direction:row;border-bottom:1px solid rgba(255,255,255,.07)">
+      <button id="tab-afp-btn" onclick="setTipoTab('afp')"
+        style="flex:1;padding:7px 4px;background:rgba(37,99,235,.25);border:none;color:#93c5fd;font-size:11px;font-weight:700;cursor:pointer;border-bottom:2px solid #2563eb;letter-spacing:.3px">
+        AFP <span id="badge-afp" style="background:#1d4ed8;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px">0</span>
+      </button>
+      <button id="tab-isapre-btn" onclick="setTipoTab('isapre')"
+        style="flex:1;padding:7px 4px;background:transparent;border:none;color:#64748b;font-size:11px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;letter-spacing:.3px">
+        Isapre <span id="badge-isapre" style="background:#334155;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px">0</span>
+      </button>
+    </div>
     <div class="search-wrap">
       <input type="text" id="search-worker" placeholder="Buscar trabajador o RUT..." oninput="filtrarWorkers()">
     </div>
@@ -805,6 +816,28 @@ textarea{resize:vertical;min-height:70px}
 let trabajadores = [];  // [{rut_trabajador, nombre, periodos, ...}]
 let seleccionados = {}; // rut -> {periodos_sel, causa, salud, ...}
 let currentRut = null;
+let tipoTab = 'afp';   // 'afp' | 'isapre'
+
+function setTipoTab(tipo) {
+  tipoTab = tipo;
+  const afpBtn    = document.getElementById('tab-afp-btn');
+  const isapreBtn = document.getElementById('tab-isapre-btn');
+  if (tipo === 'afp') {
+    afpBtn.style.cssText    = 'flex:1;padding:7px 4px;background:rgba(37,99,235,.25);border:none;color:#93c5fd;font-size:11px;font-weight:700;cursor:pointer;border-bottom:2px solid #2563eb;letter-spacing:.3px';
+    isapreBtn.style.cssText = 'flex:1;padding:7px 4px;background:transparent;border:none;color:#64748b;font-size:11px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;letter-spacing:.3px';
+  } else {
+    isapreBtn.style.cssText = 'flex:1;padding:7px 4px;background:rgba(5,150,105,.25);border:none;color:#6ee7b7;font-size:11px;font-weight:700;cursor:pointer;border-bottom:2px solid #059669;letter-spacing:.3px';
+    afpBtn.style.cssText    = 'flex:1;padding:7px 4px;background:transparent;border:none;color:#64748b;font-size:11px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;letter-spacing:.3px';
+  }
+  // Limpiar filtros y re-poblar para el nuevo tab
+  document.getElementById('search-worker').value = '';
+  document.getElementById('filtro-inst').value   = '';
+  document.getElementById('filtro-periodo').value = '';
+  document.getElementById('filtro-estatus').value = '';
+  document.getElementById('filtro-motivo').value  = '';
+  poblarFiltros();
+  renderSidebar();
+}
 let jobId = null;
 let jobPoll = null;
 let visorDatos = [];
@@ -888,6 +921,11 @@ async function subirExcel(file) {
       return;
     }
     statusEl.innerHTML = `<div class="alert alert-success">✅ ${data.total} trabajadores cargados</div>`;
+    // Auto-seleccionar el tab con más trabajadores
+    const hayAfp    = trabajadores.some(w => (w._tipo||'afp') === 'afp');
+    const hayIsapre = trabajadores.some(w => (w._tipo||'afp') === 'isapre');
+    if (!hayAfp && hayIsapre) tipoTab = 'isapre';
+    else tipoTab = 'afp';
     poblarFiltros();
     renderSidebar();
   } catch(e) {
@@ -897,23 +935,21 @@ async function subirExcel(file) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function poblarFiltros() {
-  // Instituciones únicas
-  const insts = [...new Set(trabajadores.map(w => (w.institucion||'').trim()).filter(Boolean))].sort();
+  // Solo los trabajadores del tab activo para los filtros
+  const activos = trabajadores.filter(w => (w._tipo||'afp') === tipoTab);
+  const insts = [...new Set(activos.map(w => (w.institucion||'').trim()).filter(Boolean))].sort();
   const selInst = document.getElementById('filtro-inst');
   selInst.innerHTML = '<option value="">Todas las instituciones</option>' +
     insts.map(i => `<option value="${i}">${i}</option>`).join('');
-  // Períodos únicos
-  const pers = [...new Set(trabajadores.flatMap(w => w.periodos||[]))].sort((a,b)=>perKey(a)-perKey(b));
+  const pers = [...new Set(activos.flatMap(w => w.periodos||[]))].sort((a,b)=>perKey(a)-perKey(b));
   const selPer = document.getElementById('filtro-periodo');
   selPer.innerHTML = '<option value="">Todos los períodos</option>' +
     pers.map(p => `<option value="${p}">${p}</option>`).join('');
-  // Estatus únicos (cada período puede tener su propio estatus)
-  const estatus = [...new Set(trabajadores.flatMap(w => valoresPorPeriodo(w, 'periodo_estatus', 'estatus')))].sort();
+  const estatus = [...new Set(activos.flatMap(w => valoresPorPeriodo(w, 'periodo_estatus', 'estatus')))].sort();
   const selEst = document.getElementById('filtro-estatus');
   selEst.innerHTML = '<option value="">Todos los estatus</option>' +
     estatus.map(e => `<option value="${e}">${e}</option>`).join('');
-  // Motivos únicos (cada período puede tener su propio motivo)
-  const motivos = [...new Set(trabajadores.flatMap(w => valoresPorPeriodo(w, 'periodo_motivos', 'motivo')))].sort();
+  const motivos = [...new Set(activos.flatMap(w => valoresPorPeriodo(w, 'periodo_motivos', 'motivo')))].sort();
   const selMot = document.getElementById('filtro-motivo');
   selMot.innerHTML = '<option value="">Todos los motivos</option>' +
     motivos.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -952,6 +988,7 @@ function getWorkersFiltrados() {
   const fEstatus = document.getElementById('filtro-estatus')?.value || '';
   const fMotivo = document.getElementById('filtro-motivo')?.value || '';
   return trabajadores.filter(w =>
+    (w._tipo || 'afp') === tipoTab &&
     (w.nombre.toLowerCase().includes(q) || w.rut_trabajador.toLowerCase().includes(q)) &&
     (!fInst || (w.institucion||'').trim() === fInst) &&
     (!fPer || (w.periodos||[]).includes(fPer)) &&
@@ -962,7 +999,13 @@ function getWorkersFiltrados() {
 function renderSidebar() {
   const lista = document.getElementById('worker-list');
   const filtrados = getWorkersFiltrados();
+  const nAfp    = trabajadores.filter(w => (w._tipo||'afp') === 'afp').length;
+  const nIsapre = trabajadores.filter(w => (w._tipo||'afp') === 'isapre').length;
   document.getElementById('badge-total').textContent = trabajadores.length;
+  document.getElementById('badge-afp').textContent    = nAfp;
+  document.getElementById('badge-isapre').textContent = nIsapre;
+  const tipoTabsEl = document.getElementById('tipo-tabs');
+  if (tipoTabsEl) tipoTabsEl.style.display = trabajadores.length ? 'flex' : 'none';
   actualizarBadgeMarcados();
   const countEl = document.getElementById('filtro-count');
   if (countEl) countEl.textContent = filtrados.length !== trabajadores.length ? `${filtrados.length} de ${trabajadores.length}` : '';

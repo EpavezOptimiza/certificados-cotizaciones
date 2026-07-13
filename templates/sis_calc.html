@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calculadora SIS y SC — Optimiza</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#2563eb;--accent-dark:#1d4ed8;--nav-bg:linear-gradient(135deg,#0d1b2e 0%,#0f2645 60%,#0d1f3c 100%)}
+body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;min-height:100vh;font-size:13px}
+
+/* Nav */
+.nav{background:var(--nav-bg);color:#fff;display:flex;align-items:center;padding:0 20px;height:56px;gap:14px;box-shadow:0 2px 16px rgba(0,0,0,.35)}
+.nav-logo{height:24px;opacity:.9}
+.nav-sep{color:rgba(255,255,255,.18);font-size:20px;font-weight:200}
+.nav-brand{font-weight:700;font-size:15px;color:#fff}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.nav-user{font-size:12px;color:#cbd5e1;font-weight:600}
+.nav-role{font-size:10px;color:#4f83c4;text-transform:uppercase;letter-spacing:.5px;display:block}
+.nav-back{color:#94a3b8;text-decoration:none;font-size:12px;padding:5px 11px;border-radius:7px;border:1px solid rgba(255,255,255,.1);transition:.15s;font-weight:500}
+.nav-back:hover{background:rgba(255,255,255,.08);color:#e2e8f0}
+
+/* Layout */
+.page{max-width:1100px;margin:30px auto;padding:0 20px;display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start}
+
+/* Card base */
+.card{background:#fff;border-radius:16px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.05),0 4px 14px rgba(0,0,0,.06);padding:24px}
+.card-title{font-size:15px;font-weight:800;color:#0f172a;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.card-title span{background:#eff6ff;color:#2563eb;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700}
+
+/* Form */
+.field{margin-bottom:14px}
+.field label{font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px}
+.field input,.field select{width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:inherit;color:#0f172a;outline:none;transition:border-color .18s,box-shadow .18s;background:#f8fafc}
+.field input:focus,.field select:focus{border-color:#2563eb;background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.field .hint{font-size:10px;color:#94a3b8;margin-top:4px;line-height:1.4}
+
+.radio-group{display:flex;gap:8px}
+.radio-opt{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:9px;cursor:pointer;transition:.18s;font-size:12px;font-weight:600;color:#64748b;background:#f8fafc;user-select:none}
+.radio-opt:has(input:checked){border-color:#2563eb;background:#eff6ff;color:#2563eb}
+.radio-opt input{display:none}
+
+.btn-calc{width:100%;padding:13px;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:.18s;margin-top:6px;letter-spacing:.2px}
+.btn-calc:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 4px 16px rgba(37,99,235,.35)}
+.btn-calc:active{transform:none}
+
+/* Resultado */
+.results{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.res-col{border-radius:14px;overflow:hidden;border:1.5px solid #e2e8f0}
+.res-header{padding:14px 16px;font-weight:800;font-size:13px;display:flex;align-items:center;gap:8px}
+.res-header.sis{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff}
+.res-header.sc{background:linear-gradient(135deg,#0369a1,#0284c7);color:#fff}
+.res-body{padding:14px 16px;background:#fff;display:flex;flex-direction:column;gap:10px}
+
+.step{display:flex;flex-direction:column;gap:3px}
+.step-label{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px}
+.step-formula{font-size:11px;color:#64748b;font-style:italic}
+.step-value{font-size:15px;font-weight:800;color:#0f172a}
+.step-value.zero{color:#94a3b8}
+.step-value.nota{font-size:10px;font-weight:500;color:#f59e0b;background:#fffbeb;padding:3px 8px;border-radius:6px;border:1px solid #fde68a}
+.step-divider{height:1px;background:#f1f5f9;margin:2px 0}
+
+.total-row{background:#f8fafc;border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;border:1.5px solid #e2e8f0}
+.total-row.sis{border-color:#7c3aed;background:#faf5ff}
+.total-row.sc{border-color:#0369a1;background:#f0f9ff}
+.total-label{font-size:12px;font-weight:700;color:#64748b}
+.total-value{font-size:18px;font-weight:800}
+.total-value.sis{color:#7c3aed}
+.total-value.sc{color:#0369a1}
+
+.extra-row{background:#f0fdf4;border-radius:8px;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;border:1px solid #bbf7d0;margin-top:4px}
+.extra-label{font-size:11px;font-weight:600;color:#166534}
+.extra-value{font-size:13px;font-weight:800;color:#166534}
+
+/* Empty state */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:40px;color:#94a3b8;text-align:center}
+.empty-state .icon{font-size:48px;opacity:.5}
+.empty-state p{font-size:13px;line-height:1.5}
+
+/* Alert nota */
+.nota-licencia{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;font-size:11px;color:#92400e;margin-bottom:14px;display:none;line-height:1.5}
+.nota-licencia.show{display:block}
+
+/* Resumen superior */
+.resumen-top{grid-column:1/-1;background:linear-gradient(135deg,#0f172a,#1e3a8a);border-radius:14px;padding:18px 24px;display:flex;align-items:center;gap:24px}
+.resumen-top .ico{font-size:32px}
+.resumen-top h1{color:#fff;font-size:18px;font-weight:800;margin-bottom:2px}
+.resumen-top p{color:#94a3b8;font-size:12px}
+.resumen-top .badge-mod{background:rgba(255,255,255,.1);color:#93c5fd;border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;margin-left:auto;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <img src="/static/logo_optimiza.png" class="nav-logo" alt="Optimiza">
+  <span class="nav-sep">|</span>
+  <span style="font-size:16px">🧮</span>
+  <span class="nav-brand">Calculadora SIS y SC</span>
+  <div class="nav-right">
+    <div>
+      <span class="nav-user">{{ user.nombre }}</span>
+      <span class="nav-role">{{ user.rol }}</span>
+    </div>
+    <a href="/" class="nav-back">← Inicio</a>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="resumen-top">
+    <span class="ico">🏥</span>
+    <div>
+      <h1>Cálculo SIS y Seguro de Cesantía en Licencia Médica</h1>
+      <p>Calcula el SIS y SC que se debe pagar cuando un trabajador tiene días de licencia médica</p>
+    </div>
+    <span class="badge-mod">Según normativa Previred</span>
+  </div>
+
+  <!-- Panel izquierdo: inputs -->
+  <div class="card">
+    <div class="card-title">📋 Datos del trabajador <span>Ingresar</span></div>
+
+    <div class="field">
+      <label>Tipo de licencia médica</label>
+      <div class="radio-group">
+        <label class="radio-opt">
+          <input type="radio" name="tipo-lm" value="parcial" checked onchange="onTipoLicenciaChange()">
+          📅 Parcial
+        </label>
+        <label class="radio-opt">
+          <input type="radio" name="tipo-lm" value="completa" onchange="onTipoLicenciaChange()">
+          🏥 Completa
+        </label>
+      </div>
+    </div>
+
+    <div id="nota-completa" class="nota-licencia">
+      ⚠️ Licencia completa: la renta imponible del mes es <strong>$0</strong>. Los pasos 01 (SIS1 y SC1) no se calculan.
+    </div>
+
+    <div class="field">
+      <label>Días de licencia médica</label>
+      <input type="number" id="dias-lm" placeholder="Ej: 15" min="1" max="30" oninput="limpiarResultados()">
+    </div>
+
+    <div class="field" id="campo-renta-mes">
+      <label>Renta imponible del mes</label>
+      <input type="text" id="renta-mes" placeholder="Ej: 800.000" oninput="formatMiles(this);limpiarResultados()">
+      <div class="hint">Renta del mes en que ocurre la licencia médica</div>
+    </div>
+
+    <div class="field">
+      <label>Renta imponible SC* (AFC)</label>
+      <input type="text" id="renta-sc" placeholder="Ej: 800.000" oninput="formatMiles(this);limpiarResultados()">
+      <div class="hint">Renta del último mes con 30 días trabajados (puede ser distinta al mes en curso)</div>
+    </div>
+
+    <div class="field">
+      <label>% SIS <span style="font-size:10px;color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0">(puede variar)</span></label>
+      <input type="number" id="pct-sis" value="1.49" step="0.01" min="0" max="5" oninput="limpiarResultados()">
+      <div class="hint">Porcentaje vigente de SIS según AFP (por defecto 1,49%)</div>
+    </div>
+
+    <div class="field">
+      <label>Tipo de contrato</label>
+      <select id="tipo-contrato" onchange="limpiarResultados()">
+        <option value="indefinido">Indefinido (SC empleador: 1,8% + trabajador: 0,6% = 2,4%)</option>
+        <option value="plazo_fijo">Plazo fijo (SC empleador paga el 3% completo)</option>
+      </select>
+    </div>
+
+    <button class="btn-calc" onclick="calcular()">🧮 Calcular SIS y SC</button>
+  </div>
+
+  <!-- Panel derecho: resultados -->
+  <div id="panel-resultados">
+    <div class="empty-state">
+      <span class="icon">📊</span>
+      <p>Ingresa los datos del trabajador<br>y presiona <strong>Calcular</strong> para ver el resultado detallado.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function formatMiles(input) {
+  let raw = input.value.replace(/\./g, '').replace(/[^\d]/g, '');
+  if (raw) input.value = parseInt(raw, 10).toLocaleString('es-CL');
+  else input.value = '';
+}
+
+function parseMiles(str) {
+  return parseFloat((str || '0').replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function fmt(n) {
+  return '$' + Math.round(n).toLocaleString('es-CL');
+}
+
+function onTipoLicenciaChange() {
+  const completa = document.querySelector('input[name="tipo-lm"]:checked').value === 'completa';
+  document.getElementById('nota-completa').classList.toggle('show', completa);
+  document.getElementById('campo-renta-mes').style.opacity = completa ? '.4' : '1';
+  if (completa) {
+    document.getElementById('renta-mes').value = '0';
+  }
+  limpiarResultados();
+}
+
+function limpiarResultados() {
+  document.getElementById('panel-resultados').innerHTML = `
+    <div class="empty-state">
+      <span class="icon">📊</span>
+      <p>Ingresa los datos del trabajador<br>y presiona <strong>Calcular</strong> para ver el resultado detallado.</p>
+    </div>`;
+}
+
+function calcular() {
+  const tipoLM     = document.querySelector('input[name="tipo-lm"]:checked').value;
+  const diasLM     = parseFloat(document.getElementById('dias-lm').value) || 0;
+  const rentaMes   = tipoLM === 'completa' ? 0 : parseMiles(document.getElementById('renta-mes').value);
+  const rentaSC    = parseMiles(document.getElementById('renta-sc').value);
+  const pctSIS     = parseFloat(document.getElementById('pct-sis').value) / 100 || 0.0149;
+  const contrato   = document.getElementById('tipo-contrato').value;
+
+  if (!diasLM) { alert('Ingresa los días de licencia médica.'); return; }
+  if (!rentaSC) { alert('Ingresa la Renta Imponible SC (AFC).'); return; }
+  if (tipoLM === 'parcial' && !rentaMes) { alert('Ingresa la Renta Imponible del mes.'); return; }
+
+  // ── Cálculo SIS ─────────────────────────────────────────
+  const sis1         = tipoLM === 'completa' ? 0 : rentaMes * pctSIS;
+  const valorDiaSIS  = (rentaSC / 30) * diasLM;
+  const sis2         = valorDiaSIS * pctSIS;
+  const sisTotal     = sis1 + sis2;
+
+  // ── Cálculo SC ──────────────────────────────────────────
+  const pctSC        = contrato === 'plazo_fijo' ? 0.03 : 0.024;
+  const sc1          = tipoLM === 'completa' ? 0 : rentaMes * pctSC;
+  const valorDiaSC   = (rentaSC / 30) * diasLM;
+  const sc2          = valorDiaSC * pctSC;
+  const scTotal      = sc1 + sc2;
+  const scTrabajador = tipoLM === 'completa' ? 0 : rentaMes * 0.006;
+
+  const pctSISDisplay = (pctSIS * 100).toFixed(2) + '%';
+  const pctSCDisplay  = (pctSC * 100).toFixed(1) + '%';
+  const completa      = tipoLM === 'completa';
+
+  document.getElementById('panel-resultados').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="results">
+
+        <!-- SIS -->
+        <div class="res-col">
+          <div class="res-header sis">🛡️ Cálculo de SIS</div>
+          <div class="res-body">
+            <div class="step">
+              <span class="step-label">Paso 01 — SIS1</span>
+              ${completa
+                ? `<span class="step-value nota">No se calcula — Licencia completa (renta $0)</span>`
+                : `<span class="step-formula">${fmt(rentaMes)} × ${pctSISDisplay}</span>
+                   <span class="step-value">${fmt(sis1)}</span>`
+              }
+            </div>
+            <div class="step-divider"></div>
+            <div class="step">
+              <span class="step-label">Paso 02 — Valor por día</span>
+              <span class="step-formula">(${fmt(rentaSC)} ÷ 30) × ${diasLM} días</span>
+              <span class="step-value">${fmt(valorDiaSIS)}</span>
+            </div>
+            <div class="step">
+              <span class="step-label">Paso 02 — SIS2</span>
+              <span class="step-formula">${fmt(valorDiaSIS)} × ${pctSISDisplay}</span>
+              <span class="step-value">${fmt(sis2)}</span>
+            </div>
+            <div class="step-divider"></div>
+            <div class="total-row sis">
+              <span class="total-label">SIS1 + SIS2 =</span>
+              <span class="total-value sis">${fmt(sisTotal)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SC -->
+        <div class="res-col">
+          <div class="res-header sc">📋 Seguro de Cesantía (SC)</div>
+          <div class="res-body">
+            <div class="step">
+              <span class="step-label">Paso 01 — SC1</span>
+              ${completa
+                ? `<span class="step-value nota">No se calcula — Licencia completa (renta $0)</span>`
+                : `<span class="step-formula">${fmt(rentaMes)} × ${pctSCDisplay}</span>
+                   <span class="step-value">${fmt(sc1)}</span>`
+              }
+            </div>
+            <div class="step-divider"></div>
+            <div class="step">
+              <span class="step-label">Paso 02 — Valor por día</span>
+              <span class="step-formula">(${fmt(rentaSC)} ÷ 30) × ${diasLM} días</span>
+              <span class="step-value">${fmt(valorDiaSC)}</span>
+            </div>
+            <div class="step">
+              <span class="step-label">Paso 02 — SC2</span>
+              <span class="step-formula">${fmt(valorDiaSC)} × ${pctSCDisplay}</span>
+              <span class="step-value">${fmt(sc2)}</span>
+            </div>
+            <div class="step-divider"></div>
+            <div class="total-row sc">
+              <span class="total-label">SC1 + SC2 =</span>
+              <span class="total-value sc">${fmt(scTotal)}</span>
+            </div>
+            <div class="extra-row">
+              <span class="extra-label">SC Trabajador (0,6%)</span>
+              <span class="extra-value">${completa ? '$0 — Licencia completa' : fmt(scTrabajador)}</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Resumen final -->
+      <div style="background:#f8fafc;border-radius:12px;padding:16px 20px;border:1.5px solid #e2e8f0;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px">SIS TOTAL</span>
+          <span style="font-size:22px;font-weight:800;color:#7c3aed">${fmt(sisTotal)}</span>
+        </div>
+        <div style="font-size:20px;color:#cbd5e1">+</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px">SC TOTAL</span>
+          <span style="font-size:22px;font-weight:800;color:#0369a1">${fmt(scTotal)}</span>
+        </div>
+        <div style="font-size:20px;color:#cbd5e1">=</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px">TOTAL A PAGAR</span>
+          <span style="font-size:24px;font-weight:800;color:#0f172a">${fmt(sisTotal + scTotal)}</span>
+        </div>
+        <div style="margin-left:auto;font-size:11px;color:#64748b;line-height:1.6;max-width:260px">
+          📌 Contrato <strong>${contrato === 'plazo_fijo' ? 'plazo fijo' : 'indefinido'}</strong> ·
+          Licencia <strong>${tipoLM}</strong> ·
+          ${diasLM} día${diasLM !== 1 ? 's' : ''}<br>
+          %SIS: ${pctSISDisplay} · %SC empleador: ${pctSCDisplay}
+        </div>
+      </div>
+
+      <!-- Notas -->
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;font-size:11px;color:#78350f;line-height:1.8">
+        <strong>📝 Notas importantes:</strong><br>
+        • El SIS se paga <strong>siempre</strong>, para cualquier trabajador, licencia parcial o completa.<br>
+        • La renta tope para SIS corresponde a la de AFP.<br>
+        • Renta Imponible SC* = renta del último mes con <strong>30 días trabajados</strong>.
+        ${contrato === 'plazo_fijo' ? '<br>• Trabajador a plazo fijo: <strong>no aporta al SC</strong>, el empleador paga el 3% completo.' : ''}
+      </div>
+    </div>`;
+}
+</script>
+
+</body>
+</html>

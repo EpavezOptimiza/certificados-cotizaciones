@@ -2339,14 +2339,15 @@ async function enviarCorreo(rut, nombre, institucion) {
     const token = await _getToken();
 
     if (!token) {
-      // Fallback: abrir Outlook con mailto
-      const pdfFile = await pdfHandle.getFile();
-      const subject  = encodeURIComponent(`Documentos Previsionales – ${nombre} (${rut})`);
-      const body     = encodeURIComponent(
-        `Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nArchivo adjunto: ${casoName}\n\nSaludos,\nEquipo Optimiza`
+      // Fallback: abrir Outlook con mailto (via href para que lance el cliente de correo)
+      const subject = encodeURIComponent(`Documentos Previsionales – ${nombre} (${rut})`);
+      const body    = encodeURIComponent(
+        `Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nSaludos,\nEquipo Optimiza`
       );
-      window.open(`mailto:${dest.email}?subject=${subject}&body=${body}`, '_blank');
-      alert(`Se abrió Outlook con el correo pre-llenado.\n\nAdjunta manualmente el archivo:\n📎 ${casoName}\n\n(está en la carpeta seleccionada)\n\nPara envío automático conecta tu cuenta Microsoft en "Cuenta Microsoft (Outlook)".`);
+      const a = document.createElement('a');
+      a.href = `mailto:${dest.email}?subject=${subject}&body=${body}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      alert(`Se abrió Outlook con el correo pre-llenado para ${dest.email}.\n\nAdjunta manualmente:\n📎 ${casoName}\n(está en la carpeta seleccionada)\n\nPara envío automático con adjunto, conecta tu cuenta Microsoft arriba.`);
       if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
       return;
     }

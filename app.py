@@ -368,6 +368,54 @@ def certi_report():
     })
     return jsonify({"ok": True})
 
+@app.route("/api/reportar_error", methods=["POST"])
+@api_login_required
+def reportar_error():
+    user = get_current_user()
+    d = request.json or {}
+    msg = d.get("mensaje","").strip()
+    modulo = d.get("modulo","").strip()
+    if not msg:
+        return jsonify({"error": "Mensaje requerido"}), 400
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO reportes_error(usuario_id,usuario_nom,modulo,mensaje,estado,creado_en) VALUES(?,?,?,?,?,?)",
+            (user["id"], user["nombre"], modulo, msg, "pendiente", now))
+    return jsonify({"ok": True})
+
+@app.route("/api/reportes_error")
+@api_login_required
+def listar_reportes_error():
+    user = get_current_user()
+    if user["rol"] != "admin":
+        return jsonify({"error": "Sin permisos"}), 403
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM reportes_error ORDER BY creado_en DESC").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/reportes_error/<int:rid>", methods=["PATCH"])
+@api_login_required
+def resolver_reporte(rid):
+    user = get_current_user()
+    if user["rol"] != "admin":
+        return jsonify({"error": "Sin permisos"}), 403
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        conn.execute("UPDATE reportes_error SET estado='resuelto', resuelto_en=? WHERE id=?", (now, rid))
+    return jsonify({"ok": True})
+
+@app.route("/api/reportes_error/<int:rid>", methods=["DELETE"])
+@api_login_required
+def eliminar_reporte(rid):
+    user = get_current_user()
+    if user["rol"] != "admin":
+        return jsonify({"error": "Sin permisos"}), 403
+    with get_conn() as conn:
+        conn.execute("DELETE FROM reportes_error WHERE id=?", (rid,))
+    return jsonify({"ok": True})
+
 @app.route("/logout_beacon", methods=["POST"])
 def logout_beacon():
     """Cierra sesión via sendBeacon al cerrar el navegador"""

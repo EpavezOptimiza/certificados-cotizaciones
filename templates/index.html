@@ -328,6 +328,7 @@ body.dark .pref-label{color:#e2e8f0}
     <button class="sb-btn admin-only" onclick="openModal_empresa()" style="display:none">＋ Nueva empresa</button>
     <button class="sb-btn accent admin-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
     <button class="sb-btn admin-only" onclick="openModal('modalUsuarios')" style="display:none">👥 Gestionar usuarios</button>
+    <button class="sb-btn admin-only" onclick="abrirReportesError()" style="display:none;position:relative" id="btn-reportes-error">🚨 Errores reportados<span id="badge-errores" style="display:none;position:absolute;top:4px;right:8px;background:#ef4444;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:700;align-items:center;justify-content:center"></span></button>
     <button class="sb-btn accent terreno-only" onclick="openModal('modalImportar')" style="display:none">⚡ Importar certificados</button>
   </div>
   <div id="sidebar-label" style="padding-top:14px">Herramientas</div>
@@ -596,6 +597,14 @@ body.dark .pref-label{color:#e2e8f0}
 </div>
 
 <!-- Modal usuarios -->
+<div class="modal-bg" id="modalErrores">
+  <div class="modal" style="width:min(640px,94vw);max-height:85vh;display:flex;flex-direction:column">
+    <h3>🚨 Errores reportados por usuarios</h3>
+    <div id="errores-list" style="flex:1;overflow-y:auto;margin:12px 0;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="closeModal('modalErrores')">Cerrar</button></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="modalUsuarios">
   <div class="modal" style="width:min(600px,92vw)">
     <h3>👥 Gestionar usuarios</h3>
@@ -2330,13 +2339,17 @@ async function optiSend(){
     setTimeout(async()=>{
       optiHideTyping();
       try {
-        await fetch('/api/certi_report',{method:'POST',
+        const r = await fetch('/api/reportar_error',{method:'POST',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({mensaje:text, usuario:currentUser?.nombre})});
+          body:JSON.stringify({mensaje:text, modulo:'Certificados'})});
         setOptiImg('talk');
-        optiAddMsg('bot','✅ Reporte enviado al administrador. Te contactarán pronto.');
+        if(r.ok){
+          optiAddMsg('bot','✅ Error reportado. El administrador lo verá en su panel y te contactará pronto.');
+        } else {
+          optiAddMsg('bot','❌ No se pudo enviar. Intenta de nuevo.');
+        }
       } catch(e){
-        optiAddMsg('bot','❌ No se pudo enviar. Contacta directamente al administrador.');
+        optiAddMsg('bot','❌ No se pudo conectar. Intenta de nuevo.');
       }
       setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
     }, 1500);
@@ -2395,6 +2408,75 @@ async function optiSend(){
 
 // Input listener — cambiar a escuchando mientras escribe
 // Cargar badges de notas y tareas
+// ── Reportes de Error ────────────────────────────────────────────────────────
+async function abrirReportesError(){
+  openModal('modalErrores');
+  const list = document.getElementById('errores-list');
+  list.innerHTML = '<div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px">Cargando...</div>';
+  try{
+    const r = await fetch('/api/reportes_error');
+    const data = await r.json();
+    if(!data.length){
+      list.innerHTML = '<div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px">✅ Sin errores pendientes</div>';
+      return;
+    }
+    list.innerHTML = data.map(e=>{
+      const isPend = e.estado === 'pendiente';
+      return `<div style="background:${isPend?'#fef2f2':'#f0fdf4'};border:1px solid ${isPend?'#fecaca':'#bbf7d0'};border-radius:10px;padding:12px 14px">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-weight:700;font-size:13px;color:#0f172a">${e.usuario_nom||'Desconocido'}</span>
+              ${e.modulo?`<span style="background:#e0e7ff;color:#3730a3;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:600">${e.modulo}</span>`:''}
+              <span style="background:${isPend?'#fecaca':'#bbf7d0'};color:${isPend?'#991b1b':'#166534'};border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">${isPend?'Pendiente':'Resuelto'}</span>
+            </div>
+            <div style="font-size:13px;color:#374151;line-height:1.5;white-space:pre-wrap">${e.mensaje}</div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:6px">${e.creado_en}${e.resuelto_en?' · Resuelto: '+e.resuelto_en:''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            ${isPend?`<button onclick="resolverError(${e.id},this)" style="background:#22c55e;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;font-weight:600">✓ Resolver</button>`:''}
+            <button onclick="eliminarError(${e.id},this)" style="background:none;border:1px solid #e2e8f0;border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;color:#64748b">🗑</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    // Actualizar badge
+    const pend = data.filter(e=>e.estado==='pendiente').length;
+    _actualizarBadgeErrores(pend);
+  }catch(e){
+    list.innerHTML = '<div style="color:#ef4444;font-size:13px;text-align:center;padding:20px">Error al cargar reportes</div>';
+  }
+}
+
+async function resolverError(id, btn){
+  btn.disabled = true;
+  await fetch(`/api/reportes_error/${id}`,{method:'PATCH'});
+  abrirReportesError();
+}
+
+async function eliminarError(id, btn){
+  btn.disabled = true;
+  await fetch(`/api/reportes_error/${id}`,{method:'DELETE'});
+  abrirReportesError();
+}
+
+function _actualizarBadgeErrores(n){
+  const b = document.getElementById('badge-errores');
+  if(!b) return;
+  if(n > 0){ b.textContent = n; b.style.display = 'flex'; }
+  else { b.style.display = 'none'; }
+}
+
+async function _cargarBadgeErrores(){
+  if(!currentUser || currentUser.rol !== 'admin') return;
+  try{
+    const r = await fetch('/api/reportes_error');
+    if(!r.ok) return;
+    const data = await r.json();
+    _actualizarBadgeErrores(data.filter(e=>e.estado==='pendiente').length);
+  }catch(e){}
+}
+
 async function cargarBadges(){
   try{
     const r = await fetch('/api/recordatorios/pendientes');
@@ -2408,6 +2490,8 @@ async function cargarBadges(){
 }
 cargarBadges();
 setInterval(cargarBadges, 60000);
+_cargarBadgeErrores();
+setInterval(_cargarBadgeErrores, 120000);
 
 document.addEventListener('DOMContentLoaded', ()=>{
   const inp = document.getElementById('opti-input');

@@ -50,10 +50,44 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;m
 .opti-panel.hidden{opacity:0;transform:translateX(-50%) scale(0.95) translateY(-6px);pointer-events:none}
 .opti-panel-img{background:transparent;padding:0;display:flex;justify-content:center;align-items:flex-start;position:relative;z-index:2;margin-top:-16px;margin-bottom:-18px}
 .opti-panel-img img{width:88%;height:175px;object-fit:cover;object-position:top center;display:block;filter:drop-shadow(0 6px 18px rgba(0,0,0,.15))}
-.opti-panel-card{background:#fff;border-radius:16px;border:1.5px solid #e2e8f0;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden;position:relative;z-index:1}
-.opti-panel-body{padding:16px 18px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
-.opti-call-btn{width:100%;padding:11px 14px;background:#2563eb;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .18s}
-.opti-call-btn:hover{background:#1d4ed8}
+.opti-panel-card{background:#fff;border-radius:16px;border:1.5px solid #e2e8f0;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden;position:relative;z-index:1;padding-top:18px}
+.opti-bubble{background:#fff;border:2px solid #2563eb;border-radius:14px;padding:10px 14px;font-size:13px;font-weight:700;color:#0f172a;text-align:center;margin:8px 10px 14px;position:relative;line-height:1.4}
+.opti-bubble::after{content:'';position:absolute;top:-11px;left:50%;transform:translateX(-50%);border:10px solid transparent;border-bottom-color:#2563eb;border-top:0}
+.opti-bubble::before{content:'';position:absolute;top:-8px;left:50%;transform:translateX(-50%);border:8px solid transparent;border-bottom-color:#fff;border-top:0;z-index:1}
+
+/* ── Opti Full Panel (floating) ── */
+.opti-act-item{font-size:9px;color:#64748b;background:rgba(255,255,255,.04);border-radius:6px;padding:5px 7px;line-height:1.4}
+.opti-act-item strong{color:#93c5fd;display:block;font-weight:600}
+#opti-trigger{position:fixed;bottom:20px;right:20px;z-index:9999;cursor:pointer;width:120px;height:120px;background:none;border:none;padding:0;pointer-events:all;animation:opti-float 3s ease-in-out infinite}
+#opti-trigger img{width:120px;height:120px;object-fit:contain;filter:drop-shadow(0 4px 16px rgba(37,99,235,.5));pointer-events:none}
+#opti-trigger:hover{animation:none;transform:scale(1.08)}
+@keyframes opti-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+#opti-full-panel{position:fixed;bottom:150px;right:20px;width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 180px);min-height:300px;background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.2);z-index:9000;display:none;flex-direction:row;overflow:hidden}
+#opti-full-panel.open{display:flex}
+#opti-left{width:180px;min-width:150px;background:linear-gradient(180deg,#0f172a,#1e3a8a);display:flex;flex-direction:column;align-items:center;padding:16px 10px;gap:8px;overflow-y:auto}
+#opti-avatar{width:120px;height:120px;object-fit:contain;filter:drop-shadow(0 0 20px rgba(59,130,246,.8));transition:all .4s;display:block}
+#opti-name{color:#fff;font-size:13px;font-weight:700}
+#opti-state-label{color:#60a5fa;font-size:9px;text-transform:uppercase;letter-spacing:.5px}
+#opti-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#opti-chat-hdr{background:#f8fafc;padding:10px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+#opti-chat-hdr span{font-size:12px;font-weight:600;color:#0f172a}
+#opti-chat-hdr button{background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:0 4px;line-height:1}
+#opti-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f8fafc}
+.opti-msg{max-width:82%;padding:10px 13px;border-radius:12px;font-size:12px;line-height:1.5}
+.opti-msg.bot{background:#fff;border:1px solid #e2e8f0;color:#0f172a;align-self:flex-start;border-radius:4px 12px 12px 12px}
+.opti-msg.user{background:#2563eb;color:#fff;align-self:flex-end;border-radius:12px 4px 12px 12px}
+#opti-options{padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid #e2e8f0;background:#fff}
+.opti-opt{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.opti-opt:hover{background:#2563eb;color:#fff}
+#opti-input-wrap{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff}
+#opti-input{flex:1;border:1px solid #e2e8f0;border-radius:20px;padding:8px 14px;font-size:12px;outline:none;font-family:inherit}
+#opti-input:focus{border-color:#2563eb}
+#opti-send{background:#2563eb;color:#fff;border:none;border-radius:50%;width:36px;height:36px;min-width:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.opti-typing{display:flex;gap:4px;align-items:center;padding:12px 14px}
+.opti-typing span{width:7px;height:7px;background:#94a3b8;border-radius:50%;animation:opti-dot 1.2s ease-in-out infinite}
+.opti-typing span:nth-child(2){animation-delay:.2s}
+.opti-typing span:nth-child(3){animation-delay:.4s}
+@keyframes opti-dot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 
 /* ── Tabs ── */
 .tabs{background:#fff;border-bottom:2px solid #e8edf2;display:flex;padding:0 20px;gap:2px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
@@ -215,15 +249,14 @@ textarea{resize:vertical;min-height:70px}
       </button>
       <div class="opti-panel hidden" id="opti-panel">
         <div class="opti-panel-img">
-          <img src="/static/opti_panel.png" alt="Opti">
+          <button onclick="llamarOptiBot()" style="background:none;border:none;padding:0;cursor:pointer;display:block;width:100%" title="Llamar a Opti">
+            <img src="/static/opti_panel.png" alt="Opti">
+          </button>
         </div>
         <div class="opti-panel-card">
-          <div class="opti-panel-body">
-            <div>
-              <div style="font-weight:700;font-size:15px;color:#0f172a;">Hola, soy Opti</div>
-              <div style="font-size:12px;color:#64748b;margin-top:4px;line-height:1.5;">Tu asistente de cartas<br>previsionales</div>
-            </div>
-            <button class="opti-call-btn" onclick="llamarOptiBot()">💬 Llamar a Opti</button>
+          <div class="opti-bubble">
+            ¡Hola {{ user.nombre.split()[0] }}! 👋<br>
+            <span style="font-size:11px;font-weight:400;color:#64748b">¿En qué te puedo ayudar?</span>
           </div>
         </div>
       </div>
@@ -1974,11 +2007,324 @@ function toggleOptiPanel(){
   panel.classList.toggle('hidden',!open);
   btn.setAttribute('aria-expanded',String(open));
 }
+// ── Opti Full Chat ─────────────────────────────────────────────────────────
+const _currentUser = {nombre:'{{ user.nombre }}', rol:'{{ user.rol }}'};
+
+const OPTI_IMGS = {
+  wave:   '/static/opti_wave.png',
+  listen: '/static/opti_listen.png',
+  think:  '/static/opti_think.png',
+  talk:   '/static/opti_talk.png',
+};
+
+const OPTI_TIPS = [
+  "💡 Selecciona trabajadores en el sidebar y genera sus cartas en masa.",
+  "📁 Usa 'Seleccionar carpeta' para leer y guardar PDFs directamente.",
+  "📧 En la pestaña Correo, agrupa los envíos por institución automáticamente.",
+  "⚡ PreviRed automatiza la obtención del comprobante de movimientos.",
+  "🖍️ La pestaña 'Destacar PDF' permite resaltar texto en cualquier PDF.",
+  "📋 En 'Carta masiva' puedes generar todas las cartas de un período de una vez.",
+];
+let _tipIdx = 0, _optiStatsCache = null;
+
+function rotarTip(){
+  const el = document.getElementById('opti-tip');
+  if(!el) return;
+  el.style.opacity = '0';
+  setTimeout(()=>{
+    el.textContent = OPTI_TIPS[_tipIdx % OPTI_TIPS.length];
+    _tipIdx++;
+    el.style.transition = 'opacity .5s';
+    el.style.opacity = '1';
+  }, 400);
+}
+
+async function cargarOptiStats(){
+  try{
+    const r = await fetch('/api/opti_stats');
+    const d = await r.json();
+    _optiStatsCache = d;
+    const al = document.getElementById('opti-activity-list');
+    if(al){
+      if(d.actividad && d.actividad.length){
+        al.innerHTML = d.actividad.slice(0,4).map(a=>`
+          <div class="opti-act-item"><strong>${a.accion}</strong>${a.usuario?a.usuario+' · ':''}${a.fecha}</div>`).join('');
+      } else {
+        al.innerHTML = '<div class="opti-act-item" style="color:#475569">Sin actividad reciente</div>';
+      }
+    }
+    _tipIdx = 0; rotarTip();
+  }catch(e){}
+}
+
+function setOptiImg(state){
+  try{
+    const src = OPTI_IMGS[state] || OPTI_IMGS.wave;
+    const trig = document.getElementById('opti-trigger');
+    if(trig){ const img = trig.querySelector('img'); if(img) img.src = src; }
+    const av = document.getElementById('opti-avatar');
+    if(av) av.src = src;
+    const lbl = document.getElementById('opti-state-label');
+    const LABELS = {wave:'Esperando',listen:'Escuchando',think:'Pensando...',talk:'Respondiendo'};
+    if(lbl) lbl.textContent = LABELS[state] || 'Esperando';
+  }catch(e){}
+}
+
+function getOptiFAQ(){
+  return {
+    "📝 Nueva nota": "NOTA_CMD",
+    "✅ Nueva tarea": "TAREA_CMD",
+    "¿Cómo cargo el Excel?": "Ve a la pestaña '📂 Cargar Excel' y arrastra el archivo o haz clic para seleccionarlo. El sistema detectará automáticamente los trabajadores y sus deudas previsionales.",
+    "¿Cómo genero una carta?": "1. Carga el Excel con la nómina\n2. Selecciona trabajadores en el sidebar con el checkbox\n3. En la pestaña '📝 Datos de la carta' revisa y edita los datos\n4. Presiona 'Generar PDF' para crear la carta.",
+    "¿Cómo unifico PDFs?": "En la pestaña '📧 Correo', selecciona los trabajadores y haz clic en '📎 Unificar' para combinar la carta + comprobante PreviRed en un solo PDF por trabajador.",
+    "¿Cómo envío por correo?": "En la pestaña '📧 Correo':\n1. Conecta tu cuenta Microsoft\n2. Selecciona los trabajadores\n3. Haz clic en '📧 Enviar a [Institución]' para cada grupo.",
+    "Tengo un problema": "REPORT",
+  };
+}
+
+let optiOpen = false, optiFirst = true, optiHistorial = [];
+let _optiPendiente = {};
+
+function toggleOpti(){
+  optiOpen = !optiOpen;
+  document.getElementById('opti-full-panel').classList.toggle('open', optiOpen);
+  if(optiOpen){
+    cargarOptiStats();
+    rotarTip();
+    if(!window._tipInterval) window._tipInterval = setInterval(rotarTip, 7000);
+    if(optiFirst){
+      optiFirst = false;
+      setOptiImg('wave');
+      setTimeout(()=>{
+        const nombre = _currentUser.nombre ? _currentUser.nombre.split(' ')[0] : '';
+        const msg = document.createElement('div');
+        msg.className = 'opti-msg bot';
+        msg.innerHTML = `¡Hola ${nombre}! 👋 Soy <strong>Opti</strong>, tu asistente.<br>¿En qué te puedo ayudar? <br><span style="font-size:10px;color:#94a3b8">Tip: escríbeme "NOTA ..." para guardarla 📝<br>O "ERROR ..." para avisar al administrador 🚨</span>`;
+        document.getElementById('opti-msgs').appendChild(msg);
+        optiShowOptions();
+        setOptiImg('talk');
+        setTimeout(()=>setOptiImg('wave'), 2000);
+      }, 400);
+    }
+    setTimeout(()=>document.getElementById('opti-input').focus(), 200);
+  } else {
+    if(window._tipInterval){ clearInterval(window._tipInterval); window._tipInterval = null; }
+  }
+}
+
 function llamarOptiBot(){
   document.getElementById('opti-panel').classList.add('hidden');
   document.getElementById('opti-toggle').classList.remove('open');
-  switchTab('previred');
+  document.getElementById('opti-toggle').setAttribute('aria-expanded','false');
+  if(!optiOpen) toggleOpti();
 }
+
+function optiShowTyping(){
+  const div = document.createElement('div');
+  div.className = 'opti-msg bot opti-typing-wrap';
+  div.id = 'opti-typing';
+  div.innerHTML = '<div class="opti-typing"><span></span><span></span><span></span></div>';
+  document.getElementById('opti-msgs').appendChild(div);
+  document.getElementById('opti-msgs').scrollTop = 9999;
+}
+function optiHideTyping(){
+  const el = document.getElementById('opti-typing');
+  if(el) el.remove();
+}
+
+function optiAddMsg(type, text, onDone){
+  const div = document.createElement('div');
+  div.className = `opti-msg ${type}`;
+  document.getElementById('opti-msgs').appendChild(div);
+  document.getElementById('opti-msgs').scrollTop = 9999;
+  if(type === 'user'){
+    div.innerHTML = text.replace(/\n/g,'<br>');
+    if(onDone) onDone();
+    return;
+  }
+  const clean = text.replace(/\n/g,'<br>');
+  const words = clean.split(/(<br>|<[^>]+>|[^<]+)/g).filter(Boolean);
+  let i = 0, current = '';
+  const speed = 18;
+  function typeNext(){
+    if(i >= words.length){ if(onDone) onDone(); return; }
+    const chunk = words[i++];
+    if(chunk.startsWith('<')){
+      current += chunk;
+      div.innerHTML = current;
+      setTimeout(typeNext, speed);
+    } else {
+      let ci = 0;
+      function typeChar(){
+        if(ci >= chunk.length){ setTimeout(typeNext, speed); return; }
+        current += chunk[ci++];
+        div.innerHTML = current;
+        document.getElementById('opti-msgs').scrollTop = 9999;
+        setTimeout(typeChar, speed);
+      }
+      typeChar();
+    }
+  }
+  typeNext();
+}
+
+function optiShowOptions(){
+  const faq = getOptiFAQ();
+  document.getElementById('opti-options').innerHTML = Object.keys(faq).map(q=>
+    `<button class="opti-opt" onclick="optiAnswer('${q.replace(/'/g,"&#39;")}')">${q}</button>`
+  ).join('');
+}
+
+function optiAnswer(q){
+  const faq = getOptiFAQ();
+  optiAddMsg('user', q);
+  document.getElementById('opti-options').innerHTML = '';
+  setOptiImg('think');
+  if(faq[q] === 'NOTA_CMD'){
+    setTimeout(()=>{
+      setOptiImg('listen');
+      optiAddMsg('bot', '📝 ¿Qué quieres anotar?');
+      const inp = document.getElementById('opti-input');
+      inp.dataset.mode = 'nota_cmd';
+      inp.placeholder = 'Escribe el contenido de la nota…';
+      inp.focus();
+    }, 400);
+  } else if(faq[q] === 'TAREA_CMD'){
+    setTimeout(()=>{
+      setOptiImg('listen');
+      optiAddMsg('bot', '✅ ¿Cuál es la tarea?');
+      const inp = document.getElementById('opti-input');
+      inp.dataset.mode = 'tarea_titulo';
+      inp.placeholder = 'Describe la tarea…';
+      inp.focus();
+    }, 400);
+  } else if(faq[q] === 'REPORT'){
+    optiShowTyping();
+    setTimeout(()=>{
+      optiHideTyping();
+      setOptiImg('listen');
+      optiAddMsg('bot', 'Cuéntame qué problema tienes. Lo enviaré directamente al administrador.');
+      document.getElementById('opti-input').placeholder = 'Describe el problema...';
+      document.getElementById('opti-input').dataset.mode = 'report';
+    }, 1200);
+  } else {
+    optiShowTyping();
+    setTimeout(()=>{
+      optiHideTyping();
+      setOptiImg('talk');
+      optiAddMsg('bot', faq[q]);
+      setTimeout(()=>{
+        optiShowTyping();
+        setTimeout(()=>{
+          optiHideTyping();
+          optiAddMsg('bot', '¿Hay algo más en que pueda ayudarte?');
+          optiShowOptions();
+          setOptiImg('wave');
+        }, 1000);
+      }, 600);
+    }, 1400);
+  }
+}
+
+function _optiReset(input){ input.dataset.mode=''; input.placeholder='Escribe tu mensaje...'; _optiPendiente={}; }
+async function _optiGuardarNota(titulo){
+  const r = await fetch('/api/notas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({titulo,skip_tarea:true})});
+  return r.ok;
+}
+async function _optiGuardarTarea(titulo,prioridad,plazo){
+  const r = await fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({titulo,prioridad,descripcion:plazo?'📅 Plazo: '+plazo:''})});
+  return r.ok;
+}
+function _detectarPrioridad(txt){ const t=txt.toLowerCase(); if(/\balta\b/.test(t))return'alta'; if(/\bmedia\b|\bnormal\b/.test(t))return'media'; if(/\bbaja\b/.test(t))return'baja'; return null; }
+function _detectarPlazo(txt){
+  const t=' '+txt.toLowerCase()+' ';
+  const c=['pasado mañana','mañana','hoy','lunes','martes','miércoles','miercoles','jueves','viernes','sábado','sabado','domingo'];
+  for(const p of c){ if(t.indexOf(' '+p+' ')!==-1)return p; }
+  const dm=t.match(/\s(\d{1,2}(?:\s*de\s*)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*)\s/);
+  return dm?dm[1].trim():null;
+}
+
+async function optiSend(){
+  const input = document.getElementById('opti-input');
+  const text = input.value.trim();
+  if(!text) return;
+  setOptiImg('listen');
+  optiAddMsg('user', text);
+  input.value = '';
+  document.getElementById('opti-options').innerHTML = '';
+
+  if(input.dataset.mode === 'nota_cmd'){
+    _optiReset(input); optiShowTyping();
+    const ok = await _optiGuardarNota(text);
+    optiHideTyping(); setOptiImg('talk');
+    optiAddMsg('bot', ok ? `✅ Nota guardada: "${text}"` : '❌ No pude guardar la nota. Intenta de nuevo.');
+    setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 600);
+    return;
+  }
+  if(input.dataset.mode === 'tarea_titulo'){
+    _optiPendiente.titulo = text;
+    input.dataset.mode = 'tarea_prioridad';
+    input.placeholder = 'Alta / Media / Baja';
+    optiAddMsg('bot', `Tarea: "${text}" ✓\n¿Cuál es la prioridad? (Alta / Media / Baja)`);
+    return;
+  }
+  if(input.dataset.mode === 'tarea_prioridad'){
+    const pr = _detectarPrioridad(text);
+    if(!pr){ optiAddMsg('bot', 'No entendí. Dime: ¿Alta, Media o Baja?'); return; }
+    _optiPendiente.prioridad = pr;
+    input.dataset.mode = 'tarea_plazo'; input.placeholder = 'Ej: mañana, viernes, 15 jul…';
+    optiAddMsg('bot', `Prioridad ${pr} ✓ ¿Para cuándo es la tarea?`);
+    return;
+  }
+  if(input.dataset.mode === 'tarea_plazo'){
+    _optiPendiente.plazo = text;
+    _optiReset(input); optiShowTyping();
+    const ok = await _optiGuardarTarea(_optiPendiente.titulo||'Tarea', _optiPendiente.prioridad||'media', text);
+    optiHideTyping(); setOptiImg('talk');
+    optiAddMsg('bot', ok ? `✅ Tarea creada:\n📌 ${_optiPendiente.titulo||'Tarea'}\n⚡ Prioridad: ${_optiPendiente.prioridad||'media'}\n📅 Plazo: ${text}` : '❌ No pude guardar la tarea.');
+    setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 600);
+    return;
+  }
+  if(input.dataset.mode === 'report'){
+    input.dataset.mode=''; input.placeholder='Escribe tu mensaje...';
+    optiShowTyping(); setOptiImg('think');
+    setTimeout(async()=>{
+      optiHideTyping();
+      try{
+        const r = await fetch('/api/reportar_error',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({mensaje:text, modulo:'Cartas Previsionales'})});
+        setOptiImg('talk');
+        if(r.ok){
+          optiAddMsg('bot','✅ Error reportado. El administrador lo verá en su panel y te contactará pronto.');
+        } else {
+          optiAddMsg('bot','❌ No se pudo enviar. Intenta de nuevo.');
+        }
+      }catch(e){ optiAddMsg('bot','❌ No se pudo conectar. Intenta de nuevo.'); }
+      setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
+    }, 1500);
+    return;
+  }
+  // IA general
+  optiShowTyping(); setOptiImg('think');
+  try{
+    const r = await fetch('/api/opti_chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensaje:text,historial:optiHistorial})});
+    const d = await r.json();
+    optiHideTyping(); setOptiImg('talk');
+    optiAddMsg('bot', d.respuesta||'No entendí. ¿Puedes reformularlo?');
+    optiHistorial.push({role:'user',content:text});
+    optiHistorial.push({role:'assistant',content:d.respuesta||''});
+    if(optiHistorial.length > 12) optiHistorial = optiHistorial.slice(-12);
+    setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
+  }catch(e){
+    optiHideTyping(); setOptiImg('wave');
+    optiAddMsg('bot', '❌ No pude conectarme. Intenta de nuevo.');
+  }
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp = document.getElementById('opti-input');
+  if(inp) inp.addEventListener('input',()=>{ if(optiOpen&&inp.value.trim())setOptiImg('listen'); else if(optiOpen)setOptiImg('wave'); });
+});
 // ── Correo / Destinatarios ────────────────────────────────────────────────────
 let destinatarios = [];
 
@@ -2638,6 +2984,33 @@ document.addEventListener('click',function(e){
   }
 });
 </script>
+
+<!-- Opti Full Panel -->
+<div id="opti-full-panel">
+  <div id="opti-left">
+    <img id="opti-avatar" src="/static/opti_wave.png" alt="Opti">
+    <div id="opti-name">Opti</div>
+    <div style="color:#60a5fa;font-size:11px">● En línea</div>
+    <div id="opti-state-label">Esperando</div>
+    <div id="opti-activity-panel" style="width:100%;margin-top:12px">
+      <div style="font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:0 4px;margin-bottom:6px">Actividad</div>
+      <div id="opti-activity-list" style="display:flex;flex-direction:column;gap:4px"></div>
+    </div>
+    <div id="opti-tip" style="margin-top:12px;background:rgba(37,99,235,.15);border-radius:8px;padding:8px;font-size:10px;color:#93c5fd;line-height:1.4;text-align:left;min-height:44px"></div>
+  </div>
+  <div id="opti-right">
+    <div id="opti-chat-hdr">
+      <span>💬 Chat con Opti</span>
+      <button onclick="toggleOpti()">✕</button>
+    </div>
+    <div id="opti-msgs"></div>
+    <div id="opti-options"></div>
+    <div id="opti-input-wrap">
+      <input id="opti-input" type="text" placeholder="Escribe tu mensaje..." autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();optiSend()}">
+      <button id="opti-send" type="button" onclick="optiSend()">➤</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

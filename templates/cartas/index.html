@@ -2339,15 +2339,24 @@ async function enviarCorreo(rut, nombre, institucion) {
     const token = await _getToken();
 
     if (!token) {
-      // Fallback: abrir Outlook con mailto (via href para que lance el cliente de correo)
-      const subject = encodeURIComponent(`Documentos Previsionales – ${nombre} (${rut})`);
-      const body    = encodeURIComponent(
-        `Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nSaludos,\nEquipo Optimiza`
-      );
-      const a = document.createElement('a');
-      a.href = `mailto:${dest.email}?subject=${subject}&body=${body}`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      alert(`Se abrió Outlook con el correo pre-llenado para ${dest.email}.\n\nAdjunta manualmente:\n📎 ${casoName}\n(está en la carpeta seleccionada)\n\nPara envío automático con adjunto, conecta tu cuenta Microsoft arriba.`);
+      // Fallback: mostrar toast con link mailto directo (el usuario hace clic = gesto fresco)
+      const subject    = encodeURIComponent(`Documentos Previsionales – ${nombre} (${rut})`);
+      const mailtoBody = encodeURIComponent(`Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nSaludos,\nEquipo Optimiza`);
+      const mailtoUrl  = `mailto:${dest.email}?subject=${subject}&body=${mailtoBody}`;
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#1e293b;color:white;padding:18px 20px;border-radius:10px;z-index:9999;max-width:320px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,0.4);line-height:1.5';
+      toast.innerHTML = `
+        <button onclick="this.parentElement.remove()" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px">×</button>
+        <div style="font-weight:700;margin-bottom:6px;font-size:14px">📧 Correo listo para enviar</div>
+        <div style="color:#94a3b8;margin-bottom:10px;font-size:12px">Para: <strong style="color:#e2e8f0">${dest.email}</strong></div>
+        <a href="${mailtoUrl}" target="_blank" style="display:block;background:#2563eb;color:white;padding:9px 14px;border-radius:7px;text-decoration:none;text-align:center;font-weight:600;margin-bottom:10px">
+          📬 Abrir en Outlook
+        </a>
+        <div style="color:#94a3b8;font-size:11px">Adjunta el archivo: <strong style="color:#e2e8f0">📎 ${casoName}</strong> (en la carpeta seleccionada)</div>
+        <div style="color:#64748b;font-size:10px;margin-top:8px">Para adjunto automático → conecta tu cuenta Microsoft</div>
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => { if (toast.parentElement) toast.remove(); }, 15000);
       if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
       return;
     }

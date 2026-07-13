@@ -1,25 +1,47 @@
 # -*- coding: utf-8 -*-
-from flask import Blueprint, render_template, request, jsonify, session, current_app
+from flask import Blueprint, render_template, request, jsonify, current_app, redirect
 from functools import wraps
 import os
-import json
 
 reportes_bp = Blueprint('reportes', __name__, url_prefix='/reportes')
+
+
+def _get_user():
+    token = request.cookies.get("session_token")
+    if not token:
+        return None
+    try:
+        from app import get_current_user
+        return get_current_user()
+    except Exception:
+        pass
+    try:
+        from database import get_conn
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT u.* FROM sesiones s JOIN usuarios u ON u.id=s.usuario_id WHERE s.token=?",
+                (token,)).fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"[reportes] _get_user error: {e}")
+        return None
+
 
 def login_required_r(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get('user_id'):
+        if not _get_user():
             return jsonify({'error': 'No autorizado'}), 401
         return f(*args, **kwargs)
     return decorated
 
+
 @reportes_bp.route('/')
 def index():
-    if not session.get('user_id'):
-        from flask import redirect, url_for
-        return redirect(url_for('login'))
+    if not _get_user():
+        return redirect("/login")
     return render_template('reportes/index.html')
+
 
 @reportes_bp.route('/api/bases')
 @login_required_r
@@ -46,6 +68,7 @@ def listar_bases():
         del a['mtime']
     return jsonify(archivos)
 
+
 @reportes_bp.route('/api/analizar-base', methods=['POST'])
 @login_required_r
 def analizar_base_guardada():
@@ -65,6 +88,7 @@ def analizar_base_guardada():
 
     return _procesar_bytes(excel_bytes)
 
+
 @reportes_bp.route('/api/analizar', methods=['POST'])
 @login_required_r
 def analizar_excel():
@@ -75,13 +99,14 @@ def analizar_excel():
         return jsonify({'error': 'Archivo vacío'}), 400
     return _procesar_bytes(archivo.read())
 
+
 def _procesar_bytes(excel_bytes):
     try:
         from reportes_logic import leer_excel_cierre, datos_a_chartjs
         hojas_cierre, todas_hojas = leer_excel_cierre(excel_bytes)
 
         if not hojas_cierre:
-            return jsonify({'error': 'No se encontraron hojas Cierre ni hoja Base AFP en el Excel.'}), 400
+            return jsonify({'error': 'No se encontraron hojas Cierre ni datos Base AFP en el Excel.'}), 400
 
         resultado = {}
         for nombre_hoja, datos in hojas_cierre.items():
@@ -107,6 +132,7 @@ def _procesar_bytes(excel_bytes):
     except Exception as e:
         import traceback
         return jsonify({'error': str(e), 'detalle': traceback.format_exc()}), 500
+
 
 def _tabla_a_lista(tabla_dict):
     """Convierte {label: monto} a [{label, monto, pct}] con porcentaje sobre el total."""

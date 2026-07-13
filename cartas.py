@@ -1397,6 +1397,27 @@ def estado_bot(job_id):
         "comprobantes_ruts": list(job.get('comprobantes', {}).keys()),
     })
 
+@cartas_bp.route("/oauth_callback")
+def oauth_callback():
+    """Página de retorno OAuth2 para Microsoft Graph — cierra el popup y envía el código al parent."""
+    return """<!DOCTYPE html>
+<html><head><title>Autenticando...</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#f8fafc;color:#374151">
+<p style="font-size:15px">Autenticando con Microsoft...</p>
+<script>
+  var p = new URLSearchParams(window.location.search);
+  if (window.opener) {
+    window.opener.postMessage(
+      {type:'ms_oauth_callback', code:p.get('code'), error:p.get('error'), errorDesc:p.get('error_description')},
+      window.location.origin
+    );
+    setTimeout(function(){ window.close(); }, 300);
+  } else {
+    document.body.innerHTML = '<p style="color:#dc2626">Error: abre esta página desde el sistema.</p>';
+  }
+</script>
+</body></html>"""
+
 @cartas_bp.route("/api/unificar", methods=["POST"])
 @cartas_login_required
 def unificar_pdfs():

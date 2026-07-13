@@ -592,33 +592,38 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
 
-      <!-- Credenciales Outlook -->
+      <!-- Cuenta Microsoft / Graph API -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-title" style="cursor:pointer" onclick="toggleOutlookCreds()">
-          <span class="card-title-icon">🔐</span> Credenciales Outlook
-          <span id="outlook-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-left:6px"></span>
+          <span class="card-title-icon">🔐</span> Cuenta Microsoft (Outlook)
+          <span id="outlook-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-left:6px;vertical-align:middle"></span>
           <span id="outlook-toggle-arrow" style="margin-left:auto;font-size:11px;color:#94a3b8">▼</span>
         </div>
-        <div id="outlook-creds-section" style="display:none;margin-top:8px">
-          <div style="font-size:11px;color:#64748b;margin-bottom:10px;background:#f8fafc;border-radius:6px;padding:8px 10px">
-            Las credenciales se guardan solo en este navegador y se usan para enviar desde tu cuenta de Outlook / Microsoft 365.
+        <div id="outlook-creds-section" style="display:none;margin-top:10px">
+          <div id="outlook-auth-status" style="font-size:13px;color:#64748b;margin-bottom:12px">Sin autenticar</div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="conectarMicrosoft()">🪟 Conectar con Microsoft</button>
+            <span style="font-size:11px;color:#94a3b8">Se abrirá una ventana de login de Microsoft</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div>
-              <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Correo (remitente)</label>
-              <input type="email" id="outlook-email" placeholder="tucorreo@empresa.cl"
-                     style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
+          <details style="margin-top:12px">
+            <summary style="font-size:12px;font-weight:600;color:#374151;cursor:pointer">⚙ Azure App ID (configuración avanzada)</summary>
+            <div style="margin-top:8px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;font-size:12px">
+              <p style="margin:0 0 8px;color:#64748b">Registra una app en <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps" target="_blank">portal.azure.com</a> con permiso <code>Mail.Send</code> delegado. URI de redirección: <code id="oauth-redirect-uri"></code></p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div>
+                  <label style="font-weight:600;display:block;margin-bottom:3px">Client ID</label>
+                  <input type="text" id="outlook-client-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                         style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;font-family:monospace;box-sizing:border-box">
+                </div>
+                <div>
+                  <label style="font-weight:600;display:block;margin-bottom:3px">Tenant ID</label>
+                  <input type="text" id="outlook-tenant-id" placeholder="common"
+                         style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;font-family:monospace;box-sizing:border-box">
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="guardarAzureConfig()">💾 Guardar</button>
             </div>
-            <div>
-              <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Contraseña / Contraseña de app</label>
-              <input type="password" id="outlook-pass" placeholder="••••••••"
-                     style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
-            </div>
-          </div>
-          <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
-            <button class="btn btn-primary btn-sm" onclick="guardarCredsOutlook()">💾 Guardar credenciales</button>
-            <span id="outlook-creds-msg" style="font-size:12px;color:#059669;display:none">✅ Guardadas</span>
-          </div>
+          </details>
         </div>
       </div>
 
@@ -2154,127 +2159,239 @@ async function unificarPDF(rut) {
   }
 }
 
-// ── Outlook credentials ───────────────────────────────────────────────────────
+// ── Microsoft Graph / OAuth2 PKCE ────────────────────────────────────────────
+let _msToken = null; // {access_token, refresh_token, expires_at}
+
 function toggleOutlookCreds() {
-  const sec = document.getElementById('outlook-creds-section');
+  const sec   = document.getElementById('outlook-creds-section');
   const arrow = document.getElementById('outlook-toggle-arrow');
-  const visible = sec.style.display !== 'none';
-  sec.style.display = visible ? 'none' : '';
-  arrow.textContent = visible ? '▼' : '▲';
-  if (!visible) {
-    const saved = _getOutlookCreds();
-    if (saved.email) document.getElementById('outlook-email').value = saved.email;
-    if (saved.pass)  document.getElementById('outlook-pass').value  = saved.pass;
+  const open  = sec.style.display === 'none' || sec.style.display === '';
+  sec.style.display = open ? '' : 'none';
+  arrow.textContent = open ? '▲' : '▼';
+  if (open) {
+    document.getElementById('oauth-redirect-uri').textContent = window.location.origin + '/cartas/oauth_callback';
+    const cid = localStorage.getItem('ms_client_id') || '';
+    const tid = localStorage.getItem('ms_tenant_id') || '';
+    if (cid) document.getElementById('outlook-client-id').value = cid;
+    if (tid) document.getElementById('outlook-tenant-id').value = tid;
+    _actualizarEstadoAuth();
   }
 }
 
-function _getOutlookCreds() {
-  return {
-    email: localStorage.getItem('outlook_email') || '',
-    pass:  localStorage.getItem('outlook_pass')  || ''
-  };
-}
-
-function guardarCredsOutlook() {
-  const email = document.getElementById('outlook-email').value.trim();
-  const pass  = document.getElementById('outlook-pass').value;
-  if (!email || !pass) { alert('Ingresa el correo y la contraseña.'); return; }
-  localStorage.setItem('outlook_email', email);
-  localStorage.setItem('outlook_pass',  pass);
+function _actualizarEstadoAuth() {
+  const el  = document.getElementById('outlook-auth-status');
   const dot = document.getElementById('outlook-dot');
-  const msg = document.getElementById('outlook-creds-msg');
-  dot.style.display = '';
-  msg.style.display = '';
-  setTimeout(() => { msg.style.display = 'none'; }, 2000);
+  if (_msToken && Date.now() < _msToken.expires_at) {
+    el.innerHTML  = '<span style="color:#059669;font-weight:600">✅ Conectado con Microsoft</span>';
+    dot.style.display = '';
+  } else if (localStorage.getItem('ms_refresh_token')) {
+    el.innerHTML  = '<span style="color:#d97706;font-weight:600">⚠ Sesión expirada — reconecta</span>';
+    dot.style.display = '';
+  } else {
+    el.textContent = 'Sin autenticar';
+    dot.style.display = 'none';
+  }
 }
 
 function _cargarDotOutlook() {
-  if (localStorage.getItem('outlook_email')) {
-    const dot = document.getElementById('outlook-dot');
-    if (dot) dot.style.display = '';
-  }
+  _actualizarEstadoAuth();
 }
 
-// ── Enviar correo ─────────────────────────────────────────────────────────────
-async function enviarCorreo(rut, nombre, institucion) {
-  const creds = _getOutlookCreds();
-  if (!creds.email || !creds.pass) {
-    alert('Configura las credenciales de Outlook primero (sección de arriba).');
+function guardarAzureConfig() {
+  const cid = document.getElementById('outlook-client-id').value.trim();
+  const tid = document.getElementById('outlook-tenant-id').value.trim() || 'common';
+  if (cid) localStorage.setItem('ms_client_id', cid);
+  localStorage.setItem('ms_tenant_id', tid);
+  alert('✅ Configuración guardada. Ahora haz clic en "Conectar con Microsoft".');
+}
+
+async function _pkce() {
+  const arr      = crypto.getRandomValues(new Uint8Array(32));
+  const verifier = btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const buf      = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  return {verifier, challenge};
+}
+
+async function conectarMicrosoft() {
+  const clientId = (document.getElementById('outlook-client-id')?.value.trim()) || localStorage.getItem('ms_client_id') || '';
+  const tenantId = (document.getElementById('outlook-tenant-id')?.value.trim()) || localStorage.getItem('ms_tenant_id') || 'common';
+  if (!clientId) {
+    alert('Ingresa tu Client ID de Azure en la sección "⚙ Azure App ID" de abajo.');
     return;
   }
+  localStorage.setItem('ms_client_id', clientId);
+  localStorage.setItem('ms_tenant_id', tenantId);
+
+  const {verifier, challenge} = await _pkce();
+  sessionStorage.setItem('pkce_verifier', verifier);
+
+  const redirectUri = window.location.origin + '/cartas/oauth_callback';
+  const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`
+    + `?client_id=${encodeURIComponent(clientId)}`
+    + `&response_type=code`
+    + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+    + `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Send offline_access')}`
+    + `&code_challenge=${challenge}&code_challenge_method=S256`;
+
+  const popup = window.open(authUrl, 'ms_login', 'width=520,height=640,resizable=yes');
+
+  const handler = async (evt) => {
+    if (evt.origin !== window.location.origin || evt.data?.type !== 'ms_oauth_callback') return;
+    window.removeEventListener('message', handler);
+    if (evt.data.error) { alert('Error OAuth: ' + (evt.data.errorDesc || evt.data.error)); return; }
+
+    const tokenRes = await fetch(
+      `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+      { method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({
+          client_id: clientId, grant_type: 'authorization_code',
+          code: evt.data.code,
+          redirect_uri: window.location.origin + '/cartas/oauth_callback',
+          code_verifier: sessionStorage.getItem('pkce_verifier'),
+          scope: 'https://graph.microsoft.com/Mail.Send offline_access'
+        }).toString()
+      }
+    ).then(r => r.json());
+
+    if (tokenRes.error) { alert('Error token: ' + tokenRes.error_description); return; }
+
+    _msToken = {
+      access_token:  tokenRes.access_token,
+      refresh_token: tokenRes.refresh_token,
+      expires_at:    Date.now() + (tokenRes.expires_in - 60) * 1000
+    };
+    if (tokenRes.refresh_token) localStorage.setItem('ms_refresh_token', tokenRes.refresh_token);
+    _actualizarEstadoAuth();
+  };
+  window.addEventListener('message', handler);
+}
+
+async function _getToken() {
+  const clientId = localStorage.getItem('ms_client_id');
+  const tenantId = localStorage.getItem('ms_tenant_id') || 'common';
+  if (!clientId) return null;
+
+  if (_msToken && Date.now() < _msToken.expires_at) return _msToken.access_token;
+
+  const refreshToken = _msToken?.refresh_token || localStorage.getItem('ms_refresh_token');
+  if (!refreshToken) return null;
+
+  const res = await fetch(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    { method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        client_id: clientId, grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        scope: 'https://graph.microsoft.com/Mail.Send offline_access'
+      }).toString()
+    }
+  ).then(r => r.json());
+
+  if (res.error) { localStorage.removeItem('ms_refresh_token'); return null; }
+  _msToken = {
+    access_token:  res.access_token,
+    refresh_token: res.refresh_token || refreshToken,
+    expires_at:    Date.now() + (res.expires_in - 60) * 1000
+  };
+  if (res.refresh_token) localStorage.setItem('ms_refresh_token', res.refresh_token);
+  return _msToken.access_token;
+}
+
+// ── Enviar correo (Graph API) ─────────────────────────────────────────────────
+async function enviarCorreo(rut, nombre, institucion) {
   if (!_dirHandle) {
     alert('Selecciona la carpeta de archivos PDF primero.');
     return;
   }
 
-  // Buscar destinatario por institución
   const normInst = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const dest = destinatarios.find(d => normInst(d.institucion) === normInst(institucion));
   if (!dest) {
-    alert(`No hay destinatario registrado para ${institucion}. Agrégalo en la sección de Destinatarios.`);
+    alert(`No hay destinatario para ${institucion}. Agrégalo en Destinatarios.`);
     return;
   }
 
   const rutClean = rut.replace(/[.\-\s]/g, '');
-  const btnId = 'btn-enviar-' + rutClean;
-  const btn = document.getElementById(btnId);
+  const casoName = `Caso_${rutClean}.pdf`;
+  const btnId    = 'btn-enviar-' + rutClean;
+  const btn      = document.getElementById(btnId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
 
   try {
-    // Buscar Caso_<rut>.pdf en la carpeta
+    // Buscar PDF en carpeta
     let pdfHandle = null;
-    const casoName = `Caso_${rutClean}.pdf`;
     for await (const [name, handle] of _dirHandle.entries()) {
       if (handle.kind === 'file' && name.toLowerCase() === casoName.toLowerCase()) {
         pdfHandle = handle; break;
       }
     }
     if (!pdfHandle) {
-      alert(`No se encontró ${casoName} en la carpeta. Unifica primero los documentos.`);
+      alert(`No se encontró ${casoName}. Unifica primero los documentos.`);
       if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
       return;
     }
 
-    const pdfFile = await pdfHandle.getFile();
-    const formData = new FormData();
-    formData.append('email_from', creds.email);
-    formData.append('password',   creds.pass);
-    formData.append('email_to',   dest.email);
-    formData.append('nombre',     nombre);
-    formData.append('rut',        rut);
-    formData.append('institucion', institucion);
-    formData.append('pdf',        pdfFile, casoName);
+    // Obtener token (Graph API)
+    if (btn) btn.textContent = '🔑 Auth...';
+    const token = await _getToken();
 
+    if (!token) {
+      // Fallback: abrir Outlook con mailto
+      const pdfFile = await pdfHandle.getFile();
+      const subject  = encodeURIComponent(`Documentos Previsionales – ${nombre} (${rut})`);
+      const body     = encodeURIComponent(
+        `Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nArchivo adjunto: ${casoName}\n\nSaludos,\nEquipo Optimiza`
+      );
+      window.open(`mailto:${dest.email}?subject=${subject}&body=${body}`, '_blank');
+      alert(`Se abrió Outlook con el correo pre-llenado.\n\nAdjunta manualmente el archivo:\n📎 ${casoName}\n\n(está en la carpeta seleccionada)\n\nPara envío automático conecta tu cuenta Microsoft en "Cuenta Microsoft (Outlook)".`);
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+      return;
+    }
+
+    // Leer PDF como base64
     if (btn) btn.textContent = '📤 Enviando...';
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 50000);
-    let res;
-    try {
-      res = await fetch('/cartas/api/enviar_correo', { method: 'POST', body: formData, signal: ctrl.signal });
-    } finally {
-      clearTimeout(timer);
-    }
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      alert('Error al enviar: ' + (data.error || res.status));
-      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
-      return;
-    }
+    const pdfFile = await pdfHandle.getFile();
+    const arrBuf  = await pdfFile.arrayBuffer();
+    const b64     = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
 
-    if (btn) {
-      btn.textContent = '✅ Enviado';
-      btn.style.cssText += ';background:#059669;border-color:#059669';
-      setTimeout(() => {
-        btn.disabled = false; btn.textContent = '📧 Enviar';
-        btn.style.background = ''; btn.style.borderColor = '';
-      }, 4000);
+    const cuerpo = `Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nSaludos,\nEquipo Optimiza`;
+
+    const graphRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          subject: `Documentos Previsionales – ${nombre} (${rut})`,
+          body: { contentType: 'Text', content: cuerpo },
+          toRecipients: [{ emailAddress: { address: dest.email } }],
+          attachments: [{
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: casoName, contentType: 'application/pdf', contentBytes: b64
+          }]
+        },
+        saveToSentItems: true
+      })
+    });
+
+    if (graphRes.status === 202) {
+      if (btn) {
+        btn.textContent = '✅ Enviado';
+        btn.style.cssText += ';background:#059669;border-color:#059669';
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = '📧 Enviar';
+          btn.style.background = ''; btn.style.borderColor = '';
+        }, 3000);
+      }
+    } else {
+      const errData = await graphRes.json().catch(() => ({}));
+      alert('Error Graph API: ' + (errData.error?.message || graphRes.status));
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
     }
   } catch(e) {
-    if (e.name === 'AbortError') {
-      alert('Tiempo de espera agotado (50s). Verifica tu conexión y que el servidor de correo sea accesible.');
-    } else {
-      alert('Error: ' + e.message);
-    }
+    alert('Error: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
   }
 }

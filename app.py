@@ -436,6 +436,12 @@ def logout():
     return resp
 
 # ── Rutas principales ─────────────────────────────────────────────────────────
+@app.route("/sis-calc")
+@login_required
+def sis_calc():
+    user = get_current_user()
+    return render_template("sis_calc.html", user=user)
+
 @app.route("/")
 @login_required
 def index():

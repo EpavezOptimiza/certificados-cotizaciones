@@ -1758,6 +1758,16 @@ def base_deudas_procesar():
             return f"Base de deuda_{_time.strftime('%Y%m%d')}.xlsx"
 
     nombre_archivo = _nombre_archivo()
+
+    # Guardar copia en el servidor para acceso directo desde Reportes
+    try:
+        _bases_dir = os.path.join(DATA_DIR, "bases")
+        os.makedirs(_bases_dir, exist_ok=True)
+        with open(os.path.join(_bases_dir, nombre_archivo), "wb") as _f:
+            _f.write(resultado_bytes)
+    except Exception:
+        pass
+
     return jsonify({"ok": True, "excel_b64": excel_b64, "logs": logs,
                     "nombre": nombre_archivo})
 

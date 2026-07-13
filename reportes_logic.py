@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Lógica de lectura del Excel de cierre y generación de datos para gráficos.
-Lee las tablas pivot de la hoja "Cierre ..." y devuelve dicts listos para Chart.js.
+Lee las tablas pivot de la hoja "Cierre ..." o la hoja raw "afc-afp" / "Base AFP".
 """
 import io
+import re
 import openpyxl
 
 MESES_ES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -15,8 +16,8 @@ def _fmt_monto(v):
         return 0
 
 def _norm(s):
-    """Normaliza texto: minúsculas, reemplaza ñ corrupta (�) para comparar."""
-    return str(s or '').strip().lower().replace('�', '\xf1')
+    """Normaliza texto: minúsculas, reemplaza ñ corrupta (?) para comparar."""
+    return str(s or '').strip().lower().replace('?', '\xf1')
 
 def leer_cierre(wb, nombre_hoja):
     ws = wb[nombre_hoja]
@@ -167,8 +168,118 @@ def detectar_hojas_cierre(wb):
     return result
 
 
+def _detectar_columnas_raw(ws):
+    """Detecta índices de columna en la hoja raw (afc-afp o Base AFP) leyendo la fila 1."""
+    hdr = {}
+    for col in range(1, min(ws.max_column + 1, 60)):
+        h = str(ws.cell(1, col).value or '').strip().upper()
+        hn = h.replace('_', '').replace(' ', '')
+        if 'INSTITUCION' in hn or 'INSTITUCIÓN' in hn or '10_' in h:
+            hdr['inst'] = col
+        elif 'PERIODOAR' in hn or 'PERIODO' in hn or 'PERÍODO' in hn or '11_' in h:
+            hdr['per'] = col
+        elif 'MONTOINTER' in hn or 'INTERÉS' in hn or 'INTERES' in hn or '13_' in h:
+            hdr['monto'] = col
+        elif 'FEE' in hn or '22_' in h:
+            hdr['fee'] = col
+        elif 'MOTIVO' in hn or '26_' in h:
+            hdr['motivo'] = col
+        elif 'ESTATUS' in hn or 'ESTADO' in hn or '34_' in h:
+            hdr['estatus'] = col
+    # Fallback para "Base AFP" generado por app (columnas fijas conocidas)
+    if 'inst' not in hdr:
+        hdr = {'inst': 6, 'per': 7, 'monto': 10, 'estatus': 8}
+    return hdr
+
+
+def leer_base_afp(wb):
+    """
+    Lee la hoja raw 'afc-afp' o 'Base AFP' y computa los mismos pivots que leer_cierre().
+    Permite mostrar Reportes sin necesitar un Excel con hojas Cierre.
+    """
+    import datetime as _dt
+
+    hoja_nombre = None
+    for candidato in ['afc-afp', 'Base AFP']:
+        if candidato in wb.sheetnames:
+            hoja_nombre = candidato
+            break
+    if not hoja_nombre:
+        return None
+
+    ws = wb[hoja_nombre]
+    hdr = _detectar_columnas_raw(ws)
+
+    datos = {
+        'por_institucion': {},
+        'por_anio': {},
+        'por_estatus': {},
+        'por_motivo': {},
+        'resumen_tabla': {},
+        'por_fee': {},
+        'header_cliente': {},
+    }
+
+    def _anio_de(val):
+        if not val:
+            return ''
+        if isinstance(val, (_dt.date, _dt.datetime)):
+            return str(val.year)
+        s = str(val).strip()
+        m = re.search(r'(\d{4})', s)
+        return m.group(1) if m else ''
+
+    for r in range(2, ws.max_row + 1):
+        inst = str(ws.cell(r, hdr.get('inst', 6)).value or '').strip()
+        if not inst:
+            continue
+
+        monto   = _fmt_monto(ws.cell(r, hdr.get('monto', 10)).value)
+        estatus = str(ws.cell(r, hdr.get('estatus', 8)).value or '').strip()
+        anio    = _anio_de(ws.cell(r, hdr.get('per', 7)).value) if 'per' in hdr else ''
+        motivo  = str(ws.cell(r, hdr.get('motivo', 0)).value or '').strip() if 'motivo' in hdr else ''
+        fee     = _fmt_monto(ws.cell(r, hdr.get('fee', 0)).value) if 'fee' in hdr else 0
+
+        if monto == 0:
+            continue
+
+        datos['por_institucion'][inst] = datos['por_institucion'].get(inst, 0) + monto
+        if anio:
+            datos['por_anio'][anio] = datos['por_anio'].get(anio, 0) + monto
+        if estatus:
+            datos['por_estatus'][estatus] = datos['por_estatus'].get(estatus, 0) + monto
+        if motivo:
+            datos['por_motivo'][motivo] = datos['por_motivo'].get(motivo, 0) + monto
+        if fee and estatus:
+            datos['por_fee'][estatus] = datos['por_fee'].get(estatus, 0) + fee
+
+    # Ordenar años
+    datos['por_anio'] = dict(sorted(datos['por_anio'].items()))
+
+    return datos
+
+
+def detectar_tipo_excel(wb):
+    """Detecta si el Excel tiene hojas Cierre o es una Base de Deudas raw."""
+    nombres_lower = [n.lower() for n in wb.sheetnames]
+    for n in nombres_lower:
+        if 'cierre' in n and 'isapre' not in n:
+            return 'cierre'
+    if 'afc-afp' in nombres_lower or 'base afp' in nombres_lower:
+        return 'base'
+    return 'desconocido'
+
+
 def leer_excel_cierre(excel_bytes):
     wb = openpyxl.load_workbook(io.BytesIO(excel_bytes), data_only=True)
+    tipo = detectar_tipo_excel(wb)
+
+    if tipo == 'base':
+        datos = leer_base_afp(wb)
+        if datos:
+            return {'Base de Deudas': datos}, wb.sheetnames
+        return {}, wb.sheetnames
+
     hojas_cierre = detectar_hojas_cierre(wb)
     resultado = {}
     for h in hojas_cierre:

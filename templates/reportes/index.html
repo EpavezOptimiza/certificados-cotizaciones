@@ -8,7 +8,6 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
 
-/* Nav */
 .nav{background:#1e3a5f;color:#fff;display:flex;align-items:center;padding:0 20px;height:52px;gap:16px}
 .nav-brand{font-weight:700;font-size:15px;letter-spacing:.3px}
 .nav-sep{opacity:.3}
@@ -17,17 +16,32 @@ body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;min-heig
 .nav-link.active{color:#fff;background:rgba(255,255,255,.15)}
 .nav-right{margin-left:auto;font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:12px}
 
-/* Content */
 .wrap{max-width:1200px;margin:28px auto;padding:0 20px}
+
+/* Selector de bases */
+.bases-card{background:#fff;border-radius:14px;box-shadow:0 1px 6px #0001;padding:20px 24px;margin-bottom:22px}
+.bases-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.bases-header h2{font-size:1rem;font-weight:700;color:#1e293b}
+.bases-list{display:flex;flex-wrap:wrap;gap:10px}
+.base-btn{border:1.5px solid #c7d2fe;border-radius:8px;background:#f8f8ff;padding:9px 14px;
+  cursor:pointer;text-align:left;transition:all .15s;max-width:340px}
+.base-btn:hover{border-color:#6366f1;background:#eef2ff}
+.base-btn.active{border-color:#6366f1;background:#eef2ff}
+.base-btn .bname{font-size:.82rem;font-weight:600;color:#4338ca;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+.base-btn .bdate{font-size:.75rem;color:#94a3b8;margin-top:2px}
+.base-empty{color:#94a3b8;font-size:.88rem;padding:8px 0}
+
+.divider{display:flex;align-items:center;gap:12px;margin:18px 0 16px}
+.divider span{color:#94a3b8;font-size:.8rem;white-space:nowrap}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:#e2e8f0}
 
 /* Upload zone */
 .upload-zone{border:2px dashed #c7d2fe;border-radius:14px;background:#f8f8ff;
-  padding:44px 24px;text-align:center;cursor:pointer;transition:all .2s}
+  padding:30px 24px;text-align:center;cursor:pointer;transition:all .2s}
 .upload-zone:hover,.upload-zone.drag{border-color:#6366f1;background:#eef2ff}
-.upload-icon{font-size:40px;margin-bottom:12px}
-.upload-zone h3{font-size:1rem;font-weight:700;color:#4338ca;margin-bottom:6px}
-.upload-zone p{color:#64748b;font-size:.87rem}
-.upload-zone .hint{margin-top:8px;font-size:.78rem;color:#94a3b8}
+.upload-icon{font-size:32px;margin-bottom:10px}
+.upload-zone h3{font-size:.95rem;font-weight:700;color:#4338ca;margin-bottom:4px}
+.upload-zone p{color:#64748b;font-size:.83rem}
 #file-input{display:none}
 
 /* Spinner */
@@ -65,7 +79,6 @@ table.rep-tbl tr:last-child td{border-bottom:none}
 table.rep-tbl .monto{text-align:right;font-family:monospace;font-size:.83rem}
 table.rep-tbl .pct{text-align:right;color:#6366f1;font-weight:600}
 
-/* Error */
 .error-box{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:16px 20px;color:#b91c1c;font-size:.9rem;margin-top:16px}
 pre.detalle{font-size:.72rem;color:#64748b;white-space:pre-wrap;margin-top:8px;max-height:200px;overflow-y:auto}
 </style>
@@ -86,22 +99,34 @@ pre.detalle{font-size:.72rem;color:#64748b;white-space:pre-wrap;margin-top:8px;m
 <div class="wrap">
   <div style="margin-bottom:22px">
     <h1 style="font-size:1.3rem;font-weight:700;color:#1e293b">Reportes de Cierre</h1>
-    <p style="color:#64748b;font-size:.88rem;margin-top:4px">Sube el Excel base de la empresa para generar los gráficos y tablas del informe de cierre.</p>
+    <p style="color:#64748b;font-size:.88rem;margin-top:4px">Selecciona una base procesada o sube un Excel nuevo.</p>
   </div>
+
+  <!-- Bases guardadas -->
+  <div class="bases-card">
+    <div class="bases-header">
+      <span style="font-size:20px">📂</span>
+      <h2>Bases procesadas</h2>
+    </div>
+    <div class="bases-list" id="bases-list">
+      <span class="base-empty">Cargando...</span>
+    </div>
+  </div>
+
+  <div class="divider"><span>o sube un Excel manualmente</span></div>
 
   <!-- Upload -->
   <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
     <div class="upload-icon">📊</div>
-    <h3>Subir Excel de Base</h3>
-    <p>Haz clic o arrastra el archivo aquí</p>
-    <p class="hint">El sistema detectará automáticamente las hojas "Cierre ..." del archivo</p>
+    <h3>Subir Excel</h3>
+    <p>Haz clic o arrastra el archivo aquí (Base de Deudas o Excel con hojas "Cierre ...")</p>
     <input type="file" id="file-input" accept=".xlsx,.xlsm,.xls">
   </div>
 
   <!-- Spinner -->
   <div class="spinner" id="spinner">
     <div class="spin-ring"></div>
-    <span>Leyendo Excel y extrayendo tablas...</span>
+    <span id="spinner-msg">Leyendo datos...</span>
   </div>
 
   <!-- Error -->
@@ -123,7 +148,62 @@ const CLP = v => '$' + Math.round(v || 0).toLocaleString('es-CL');
 let datosGlobal = {};
 let chartsActivos = [];
 
-// Drag & drop
+// ─── Bases guardadas ────────────────────────────────────────
+function cargarBases() {
+  fetch('/reportes/api/bases')
+    .then(r => r.json())
+    .then(lista => {
+      const cont = document.getElementById('bases-list');
+      if (!lista.length) {
+        cont.innerHTML = '<span class="base-empty">No hay bases procesadas todavía. Procesa una Base de Deudas primero.</span>';
+        return;
+      }
+      cont.innerHTML = '';
+      lista.forEach((b, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'base-btn' + (i === 0 ? ' active' : '');
+        btn.dataset.nombre = b.nombre;
+        btn.innerHTML = `<div class="bname">📄 ${b.nombre}</div><div class="bdate">${b.fecha}</div>`;
+        btn.onclick = () => {
+          document.querySelectorAll('.base-btn').forEach(x => x.classList.remove('active'));
+          btn.classList.add('active');
+          analizarBase(b.nombre);
+        };
+        cont.appendChild(btn);
+      });
+      // Auto-cargar la más reciente
+      if (lista.length) analizarBase(lista[0].nombre);
+    })
+    .catch(() => {
+      document.getElementById('bases-list').innerHTML =
+        '<span class="base-empty">No se pudo cargar la lista de bases.</span>';
+    });
+}
+
+function analizarBase(nombre) {
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('resultado').style.display = 'none';
+  document.getElementById('spinner-msg').textContent = 'Leyendo base: ' + nombre;
+  document.getElementById('spinner').style.display = 'flex';
+
+  fetch('/reportes/api/analizar-base', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({nombre})
+  })
+    .then(r => r.json())
+    .then(resp => {
+      document.getElementById('spinner').style.display = 'none';
+      if (!resp.ok) { mostrarError(resp.error, resp.detalle); return; }
+      recibirDatos(resp);
+    })
+    .catch(e => {
+      document.getElementById('spinner').style.display = 'none';
+      mostrarError('Error de conexión: ' + e.message);
+    });
+}
+
+// ─── Upload manual ───────────────────────────────────────────
 const zone = document.getElementById('upload-zone');
 zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
 zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
@@ -138,27 +218,30 @@ document.getElementById('file-input').addEventListener('change', e => {
 function procesarArchivo(file) {
   const fd = new FormData();
   fd.append('excel', file);
-  zone.style.display = 'none';
-  document.getElementById('spinner').style.display = 'flex';
-  document.getElementById('resultado').style.display = 'none';
   document.getElementById('error-box').style.display = 'none';
+  document.getElementById('resultado').style.display = 'none';
+  document.getElementById('spinner-msg').textContent = 'Leyendo Excel...';
+  document.getElementById('spinner').style.display = 'flex';
 
   fetch('/reportes/api/analizar', { method: 'POST', body: fd })
     .then(r => r.json())
     .then(resp => {
       document.getElementById('spinner').style.display = 'none';
-      zone.style.display = 'block';
       if (!resp.ok) { mostrarError(resp.error, resp.detalle); return; }
-      datosGlobal = resp.datos;
-      construirTabs(resp.hojas);
-      document.getElementById('resultado').style.display = 'block';
-      if (resp.hojas.length > 0) mostrarHoja(resp.hojas[0]);
+      recibirDatos(resp);
     })
     .catch(e => {
       document.getElementById('spinner').style.display = 'none';
-      zone.style.display = 'block';
       mostrarError('Error de conexión: ' + e.message);
     });
+}
+
+// ─── Renderizado ─────────────────────────────────────────────
+function recibirDatos(resp) {
+  datosGlobal = resp.datos;
+  construirTabs(resp.hojas);
+  document.getElementById('resultado').style.display = 'block';
+  if (resp.hojas.length > 0) mostrarHoja(resp.hojas[0]);
 }
 
 function construirTabs(hojas) {
@@ -207,10 +290,10 @@ function mostrarHoja(nombre) {
   // Gráficos
   const charts = datos.charts || {};
   const chartDef = [
-    { key: 'por_estatus', titulo: 'Estado de la deuda' },
-    { key: 'por_motivo',  titulo: 'Motivos de deuda' },
+    { key: 'por_estatus',     titulo: 'Estado de la deuda' },
+    { key: 'por_motivo',      titulo: 'Motivos de deuda' },
     { key: 'por_institucion', titulo: 'Deuda por institución' },
-    { key: 'por_anio',   titulo: 'Deuda por año' },
+    { key: 'por_anio',        titulo: 'Deuda por año' },
   ].filter(d => charts[d.key]);
 
   if (chartDef.length) {
@@ -224,9 +307,9 @@ function mostrarHoja(nombre) {
   // Tablas detalle
   const tablaDef = [
     { key: 'por_institucion', titulo: 'Por institución' },
-    { key: 'por_estatus',    titulo: 'Por estatus' },
-    { key: 'por_anio',       titulo: 'Por año' },
-    { key: 'por_motivo',     titulo: 'Por motivo' },
+    { key: 'por_estatus',     titulo: 'Por estatus' },
+    { key: 'por_anio',        titulo: 'Por año' },
+    { key: 'por_motivo',      titulo: 'Por motivo' },
   ].filter(d => datos.tablas[d.key] && datos.tablas[d.key].length);
 
   if (tablaDef.length) {
@@ -290,6 +373,9 @@ function mostrarError(msg, detalle) {
   document.getElementById('error-detalle').textContent = detalle || '';
   document.getElementById('error-box').style.display = 'block';
 }
+
+// Arrancar
+cargarBases();
 </script>
 </body>
 </html>

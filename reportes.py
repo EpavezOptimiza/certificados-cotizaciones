@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, current_app
 from functools import wraps
+import os
 import json
 
 reportes_bp = Blueprint('reportes', __name__, url_prefix='/reportes')
@@ -20,23 +21,67 @@ def index():
         return redirect(url_for('login'))
     return render_template('reportes/index.html')
 
+@reportes_bp.route('/api/bases')
+@login_required_r
+def listar_bases():
+    """Lista los archivos Base de Deudas guardados en DATA_DIR/bases/."""
+    import time as _time
+    data_dir = current_app.config.get('DATA_DIR', os.environ.get('DATA_DIR', 'adjuntos'))
+    bases_dir = os.path.join(data_dir, 'bases')
+    if not os.path.exists(bases_dir):
+        return jsonify([])
+    archivos = []
+    for f in os.listdir(bases_dir):
+        if not f.endswith('.xlsx'):
+            continue
+        ruta = os.path.join(bases_dir, f)
+        mtime = os.path.getmtime(ruta)
+        archivos.append({
+            'nombre': f,
+            'fecha': _time.strftime('%d/%m/%Y %H:%M', _time.localtime(mtime)),
+            'mtime': mtime,
+        })
+    archivos.sort(key=lambda x: x['mtime'], reverse=True)
+    for a in archivos:
+        del a['mtime']
+    return jsonify(archivos)
+
+@reportes_bp.route('/api/analizar-base', methods=['POST'])
+@login_required_r
+def analizar_base_guardada():
+    """Analiza un archivo Base de Deudas guardado en el servidor."""
+    body = request.get_json(force=True) or {}
+    nombre = body.get('nombre', '')
+    if not nombre.endswith('.xlsx') or '/' in nombre or '\\' in nombre or '..' in nombre:
+        return jsonify({'error': 'Nombre de archivo inválido'}), 400
+
+    data_dir = current_app.config.get('DATA_DIR', os.environ.get('DATA_DIR', 'adjuntos'))
+    ruta = os.path.join(data_dir, 'bases', nombre)
+    if not os.path.exists(ruta):
+        return jsonify({'error': 'Archivo no encontrado en el servidor'}), 404
+
+    with open(ruta, 'rb') as f:
+        excel_bytes = f.read()
+
+    return _procesar_bytes(excel_bytes)
+
 @reportes_bp.route('/api/analizar', methods=['POST'])
 @login_required_r
 def analizar_excel():
     if 'excel' not in request.files:
         return jsonify({'error': 'No se recibió archivo'}), 400
-
     archivo = request.files['excel']
     if not archivo.filename:
         return jsonify({'error': 'Archivo vacío'}), 400
+    return _procesar_bytes(archivo.read())
 
+def _procesar_bytes(excel_bytes):
     try:
         from reportes_logic import leer_excel_cierre, datos_a_chartjs
-        excel_bytes = archivo.read()
         hojas_cierre, todas_hojas = leer_excel_cierre(excel_bytes)
 
         if not hojas_cierre:
-            return jsonify({'error': 'No se encontraron hojas de Cierre en el Excel. Asegúrate de que el archivo tenga hojas con nombre "Cierre ..."'}), 400
+            return jsonify({'error': 'No se encontraron hojas Cierre ni hoja Base AFP en el Excel.'}), 400
 
         resultado = {}
         for nombre_hoja, datos in hojas_cierre.items():

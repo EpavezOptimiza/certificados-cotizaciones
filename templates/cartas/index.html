@@ -653,6 +653,18 @@ textarea{resize:vertical;min-height:70px}
         </table>
       </div>
 
+      <!-- CC Recipients -->
+      <div class="card" style="margin-top:12px">
+        <div class="card-title"><span class="card-title-icon">📋</span> Con Copia (CC) — aplica a todos los correos</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+          <input type="email" id="cc-input" placeholder="correo@empresa.cl"
+                 style="flex:1;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px"
+                 onkeydown="if(event.key==='Enter')agregarCC()">
+          <button class="btn btn-outline btn-sm" onclick="agregarCC()">+ Agregar CC</button>
+        </div>
+        <div id="cc-lista" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
+
       <!-- Estado trabajadores (dentro de Correo) -->
       <div class="card" style="margin-top:16px">
         <div class="card-title"><span class="card-title-icon">✅</span> Estado de Trabajadores
@@ -667,11 +679,12 @@ textarea{resize:vertical;min-height:70px}
               <th style="width:36px"><input type="checkbox" id="estado-check-all" onchange="toggleAllEstado(this)"></th>
               <th>Trabajador</th><th>RUT</th><th>Institución</th><th>Períodos</th><th>Estado</th>
               <th style="width:100px">Unificar</th>
-              <th style="width:100px">Enviar</th>
             </tr>
           </thead>
           <tbody id="estado-tbody"></tbody>
         </table>
+        <!-- Envíos agrupados por institución -->
+        <div id="resumen-envios" style="margin-top:14px;border-top:1px solid #e2e8f0;padding-top:14px;display:none"></div>
       </div>
 
     </div>
@@ -801,7 +814,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.querySelectorAll('.tab')[['visor','carta','masiva','destacar','previred','correo'].indexOf(tab)].classList.add('active');
-  if (tab === 'correo') { renderEstado(); cargarDestinatarios(); cargarCarpeta(); _cargarDotOutlook(); }
+  if (tab === 'correo') { renderEstado(); cargarDestinatarios(); cargarCarpeta(); cargarCC(); _cargarDotOutlook(); }
   if (tab === 'previred') renderPreviRedWorkers();
   if (tab === 'masiva') renderMasiva();
   if (tab === 'destacar') renderDestacar();
@@ -1911,14 +1924,14 @@ function renderEstado() {
   const tbody = document.getElementById('estado-tbody');
   const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
   if (!marcados.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">
       Selecciona trabajadores en la lista lateral para verlos aquí.</td></tr>`;
+    document.getElementById('resumen-envios').style.display = 'none';
     return;
   }
   tbody.innerHTML = marcados.map(w => {
     const sel = seleccionados[w.rut_trabajador] || {};
     const btnUnif = `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="unificarPDF('${w.rut_trabajador}')">📎 Unificar</button>`;
-    const btnEnviar = `<button class="btn btn-success btn-sm" style="font-size:11px" id="btn-enviar-${w.rut_trabajador.replace(/[.\-]/g,'')}" onclick="enviarCorreo('${w.rut_trabajador}','${w.nombre.replace(/'/g,"\\'")}','${w.institucion}')">📧 Enviar</button>`;
     return `<tr>
       <td><input type="checkbox" class="estado-check" data-rut="${w.rut_trabajador}" ${sel.estadoCheck?'checked':''}></td>
       <td>${w.nombre}</td><td>${w.rut_trabajador}</td>
@@ -1926,9 +1939,9 @@ function renderEstado() {
       <td>${(w.periodos||[]).slice(0,3).join(', ')}${w.periodos?.length>3?'...':''}</td>
       <td><span class="worker-status status-${sel.status||'pendiente'}">${sel.status||'Pendiente'}</span></td>
       <td>${btnUnif}</td>
-      <td>${btnEnviar}</td>
     </tr>`;
   }).join('');
+  renderResumenEnvios(marcados);
 }
 
 function toggleAllEstado(cb) {
@@ -2403,6 +2416,204 @@ async function enviarCorreo(rut, nombre, institucion) {
   } catch(e) {
     alert('Error: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+  }
+}
+
+// ── CC Recipients ─────────────────────────────────────────────────────────────
+function _getCCList() {
+  try { return JSON.parse(localStorage.getItem('correo_cc') || '[]'); } catch { return []; }
+}
+function _saveCCList(list) { localStorage.setItem('correo_cc', JSON.stringify(list)); }
+
+function cargarCC() {
+  renderCC(_getCCList());
+}
+
+function renderCC(list) {
+  const el = document.getElementById('cc-lista');
+  if (!el) return;
+  el.innerHTML = list.map((email, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:20px;padding:3px 10px;font-size:12px">
+      ${email}
+      <button onclick="eliminarCC(${i})" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:14px;line-height:1;padding:0">×</button>
+    </span>`
+  ).join('') || '<span style="font-size:12px;color:#94a3b8">Sin destinatarios en copia</span>';
+}
+
+function agregarCC() {
+  const input = document.getElementById('cc-input');
+  const email = input.value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Ingresa un email válido.'); return; }
+  const list = _getCCList();
+  if (list.includes(email)) { alert('Ya está en la lista.'); return; }
+  list.push(email);
+  _saveCCList(list);
+  renderCC(list);
+  input.value = '';
+}
+
+function eliminarCC(idx) {
+  const list = _getCCList();
+  list.splice(idx, 1);
+  _saveCCList(list);
+  renderCC(list);
+}
+
+// ── Resumen y envío agrupado por institución ──────────────────────────────────
+function renderResumenEnvios(marcados) {
+  const el = document.getElementById('resumen-envios');
+  if (!el) return;
+  if (!marcados || !marcados.length) { el.style.display = 'none'; return; }
+
+  // Agrupar por institución
+  const grupos = {};
+  marcados.forEach(w => {
+    const inst = w.institucion || 'Sin institución';
+    if (!grupos[inst]) grupos[inst] = [];
+    grupos[inst].push(w);
+  });
+
+  const normInst = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  el.style.display = '';
+  el.innerHTML = '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📬 Enviar correos por institución</div>'
+    + Object.entries(grupos).map(([inst, ws]) => {
+      const dest = destinatarios.find(d => normInst(d.institucion) === normInst(inst));
+      const destInfo = dest
+        ? `<span style="color:#64748b;font-size:11px">${dest.email}</span>`
+        : `<span style="color:#f59e0b;font-size:11px">⚠ Sin destinatario configurado</span>`;
+      const btnId = `btn-inst-${normInst(inst)}`;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 10px;background:#f8fafc;border-radius:8px;margin-bottom:6px">
+        <div style="flex:1">
+          <strong style="font-size:13px">${inst}</strong>
+          <span style="color:#94a3b8;font-size:12px;margin-left:6px">(${ws.length} trabajador${ws.length>1?'es':''})</span>
+          <div style="margin-top:2px">${destInfo}</div>
+        </div>
+        <button id="${btnId}" class="btn btn-success btn-sm"
+          ${!dest ? 'disabled title="Agrega el destinatario primero"' : ''}
+          onclick="enviarCorreoInstitucion('${inst.replace(/'/g,"\\'")}')">
+          📧 Enviar a ${inst}
+        </button>
+      </div>`;
+    }).join('');
+}
+
+async function enviarCorreoInstitucion(institucion) {
+  if (!_dirHandle) {
+    alert('Selecciona la carpeta de archivos PDF primero.');
+    return;
+  }
+  const normInst = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const dest = destinatarios.find(d => normInst(d.institucion) === normInst(institucion));
+  if (!dest) { alert(`Sin destinatario para ${institucion}.`); return; }
+
+  const marcados = trabajadores.filter(w =>
+    seleccionados[w.rut_trabajador]?.checked &&
+    normInst(w.institucion) === normInst(institucion)
+  );
+  if (!marcados.length) { alert('No hay trabajadores seleccionados para esta institución.'); return; }
+
+  const btnId = `btn-inst-${normInst(institucion)}`;
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Preparando...'; }
+
+  try {
+    // Obtener token Graph
+    const token = await _getToken();
+
+    // Datos empresa del primer trabajador
+    const w0 = marcados[0];
+    const empresa = (w0.razon_social || '').trim();
+    const rutEmp  = (w0.rut_empresa  || '').trim();
+    const ccList  = _getCCList();
+
+    // Lista de trabajadores para el cuerpo
+    const listaTrab = marcados.map(w =>
+      `• ${w.rut_trabajador}  ${w.nombre}`
+    ).join('\n');
+
+    const cuerpo = `Estimados ${institucion},\n\nJunto con saludar, solicito de su amable ayuda para regularizar deuda de la empresa ${empresa} ${rutEmp}, por los trabajadores:\n\n${listaTrab}\n\nPor los motivos indicados en cada carta explicativa adjunta.\nJunto a la carta encontrara documentación para la regularización de la deuda.\nAgradezco su ayuda con lo solicitado.\n\nSaluda atentamente,`;
+
+    const subject = `Regularización deuda empresa ${empresa} ${rutEmp}`;
+
+    if (!token) {
+      // Fallback mailto (sin adjuntos automáticos)
+      const a = document.createElement('a');
+      a.href = `mailto:${dest.email}${ccList.length?'?cc='+encodeURIComponent(ccList.join(';'))+'&':'?'}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(cuerpo)}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      const rutsList = marcados.map(w => `📎 Caso_${w.rut_trabajador.replace(/[.\-\s]/g,'')}.pdf`).join('\n');
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#1e293b;color:white;padding:18px 20px;border-radius:10px;z-index:9999;max-width:340px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,0.4)';
+      toast.innerHTML = `<button onclick="this.parentElement.remove()" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px">×</button>
+        <div style="font-weight:700;margin-bottom:6px">📧 Outlook abierto — ${institucion}</div>
+        <div style="color:#94a3b8;font-size:12px;margin-bottom:10px">Adjunta estos archivos de la carpeta seleccionada:</div>
+        <div style="font-family:monospace;font-size:11px;color:#e2e8f0;line-height:1.8">${rutsList}</div>
+        <div style="color:#64748b;font-size:10px;margin-top:10px">Para adjunto automático → conecta tu cuenta Microsoft</div>`;
+      document.body.appendChild(toast);
+      setTimeout(() => { if (toast.parentElement) toast.remove(); }, 20000);
+      if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
+      return;
+    }
+
+    // Graph API — leer PDFs de la carpeta y adjuntarlos
+    if (btn) btn.textContent = '📂 Leyendo PDFs...';
+    const adjuntos = [];
+    for (const w of marcados) {
+      const rutClean = w.rut_trabajador.replace(/[.\-\s]/g, '');
+      const casoName = `Caso_${rutClean}.pdf`;
+      let pdfHandle = null;
+      for await (const [name, handle] of _dirHandle.entries()) {
+        if (handle.kind === 'file' && name.toLowerCase() === casoName.toLowerCase()) {
+          pdfHandle = handle; break;
+        }
+      }
+      if (!pdfHandle) {
+        alert(`No se encontró ${casoName}. Unifica primero los documentos de ${w.nombre}.`);
+        if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
+        return;
+      }
+      const file   = await pdfHandle.getFile();
+      const arrBuf = await file.arrayBuffer();
+      const b64    = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+      adjuntos.push({ '@odata.type': '#microsoft.graph.fileAttachment', name: casoName, contentType: 'application/pdf', contentBytes: b64 });
+    }
+
+    if (btn) btn.textContent = '📤 Enviando...';
+    const toRecipients = [{ emailAddress: { address: dest.email } }];
+    const ccRecipients = ccList.map(e => ({ emailAddress: { address: e } }));
+
+    const graphRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          subject,
+          body: { contentType: 'Text', content: cuerpo },
+          toRecipients,
+          ccRecipients,
+          attachments: adjuntos
+        },
+        saveToSentItems: true
+      })
+    });
+
+    if (graphRes.status === 202) {
+      if (btn) {
+        btn.textContent = `✅ Enviado a ${institucion}`;
+        btn.style.cssText += ';background:#059669;border-color:#059669';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = `📧 Enviar a ${institucion}`;
+          btn.style.background = ''; btn.style.borderColor = '';
+        }, 4000);
+      }
+    } else {
+      const err = await graphRes.json().catch(() => ({}));
+      alert('Error Graph API: ' + (err.error?.message || graphRes.status));
+      if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
   }
 }
 

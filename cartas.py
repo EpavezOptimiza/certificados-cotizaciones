@@ -212,15 +212,15 @@ def agrupar_por_trabajador(datos):
     for d in datos:
         k = d['rut_trabajador']
         if k not in grupos:
-            grupos[k] = {**d, 'periodos': [], 'periodo_motivos': {}, 'periodo_estatus': {}}
+            grupos[k] = {**d, 'periodos': [], 'periodo_motivos': {}, 'periodo_estatus': {}, 'periodo_analisis': {}}
         p = d['periodo']
         if p and p not in grupos[k]['periodos']:
             grupos[k]['periodos'].append(p)
-        # Cada período puede tener su propio motivo y estatus (un mismo
-        # trabajador puede tener distintos periodos con distinto motivo/estatus)
+        # Cada período puede tener su propio motivo, estatus y analisis
         if p:
             grupos[k]['periodo_motivos'][p] = d.get('motivo', '')
             grupos[k]['periodo_estatus'][p] = d.get('estatus', '')
+            grupos[k]['periodo_analisis'][p] = d.get('analisis', '')
 
     # Ordenar períodos de menor a mayor
     for k in grupos:
@@ -998,121 +998,152 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         # Último período: caer al bloque de comprobante (no finalizar)
 
                 # Comprobante — corre siempre después de registrar todos los períodos
-                    page.wait_for_timeout(800)
-                    log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
-                    job['resultados'][w['rut_trabajador']] = 'completado'
+                page.wait_for_timeout(800)
+                log(f"✅ Movimiento registrado: {w['nombre']} ({rut_t})")
+                job['resultados'][w['rut_trabajador']] = 'completado'
 
-                    # Hacer click en "Comprobante por Trabajador" del menú lateral (igual que el usuario)
-                    log("📄 Buscando menú Comprobante por Trabajador...")
-                    try:
-                        comp_menu = page.locator("text='Comprobante por Trabajador'").first
-                        comp_menu.wait_for(state='visible', timeout=8000)
-                        comp_menu.click()
-                        page.wait_for_timeout(2000)
-                        log("✓ Click Comprobante por Trabajador")
-                    except Exception as e:
-                        log(f"⚠ Menú no encontrado: {e}")
-                        # Diagnóstico: listar todos los textos clickeables del menú
-                        menu_items = page.evaluate("""() => Array.from(document.querySelectorAll('a, li, span, div')).filter(e => {
-                            const t = e.textContent.trim();
-                            return t.length > 3 && t.length < 60 && e.offsetHeight > 0;
-                        }).map(e => e.tagName + ': ' + e.textContent.trim()).slice(0, 30)""")
-                        log(f"Elementos visibles: {menu_items}")
+                # Hacer click en "Comprobante por Trabajador" del menú lateral (igual que el usuario)
+                log("📄 Buscando menú Comprobante por Trabajador...")
+                try:
+                    comp_menu = page.locator("text='Comprobante por Trabajador'").first
+                    comp_menu.wait_for(state='visible', timeout=8000)
+                    comp_menu.click()
+                    page.wait_for_timeout(2000)
+                    log("✓ Click Comprobante por Trabajador")
+                except Exception as e:
+                    log(f"⚠ Menú no encontrado: {e}")
+                    menu_items = page.evaluate("""() => Array.from(document.querySelectorAll('a, li, span, div')).filter(e => {
+                        const t = e.textContent.trim();
+                        return t.length > 3 && t.length < 60 && e.offsetHeight > 0;
+                    }).map(e => e.tagName + ': ' + e.textContent.trim()).slice(0, 30)""")
+                    log(f"Elementos visibles: {menu_items}")
 
-                    import datetime as _dt2
-                    hoy = _dt2.date.today().strftime('%d/%m/%Y')
+                import datetime as _dt2
+                try:
+                    from zoneinfo import ZoneInfo
+                    hoy = _dt2.datetime.now(ZoneInfo('America/Santiago')).strftime('%d/%m/%Y')
+                except ImportError:
+                    hoy = (_dt2.datetime.utcnow() - _dt2.timedelta(hours=4)).strftime('%d/%m/%Y')
 
-                    # Diagnóstico: ver selects e inputs visibles
-                    selects_info = page.evaluate("""() => Array.from(document.querySelectorAll('select')).map(s => s.id + '|' + s.name + '|' + Array.from(s.options).map(o => o.value+':'+o.text).join(','))""")
-                    log(f"Selects: {selects_info}")
+                selects_info = page.evaluate("""() => Array.from(document.querySelectorAll('select')).map(s => s.id + '|' + s.name + '|' + Array.from(s.options).map(o => o.value+':'+o.text).join(','))""")
+                log(f"Selects: {selects_info}")
 
-                    # 1. RUT trabajador
-                    try:
-                        rut_inp = page.locator("#web_rut2").first
-                        rut_inp.fill(rut_t, timeout=5000)
-                        log(f"✓ RUT: {rut_t}")
-                    except Exception as e:
-                        log(f"⚠ RUT: {e}")
+                # 1. RUT trabajador
+                try:
+                    rut_inp = page.locator("#web_rut2").first
+                    rut_inp.fill(rut_t, timeout=5000)
+                    log(f"✓ RUT: {rut_t}")
+                except Exception as e:
+                    log(f"⚠ RUT: {e}")
 
-                    # 2. Institución Previsional → la AFP del trabajador (select #web_combo_codigo_afp)
-                    try:
-                        inst_limpia = inst.upper().replace('AFP ', '').replace('AFP', '').strip()
-                        page.evaluate("""(afp) => {
-                            var sel = document.getElementById('web_combo_codigo_afp');
-                            if (!sel) return;
-                            for (var i = 0; i < sel.options.length; i++) {
-                                if (sel.options[i].text.toUpperCase().indexOf(afp) !== -1) {
-                                    sel.selectedIndex = i;
-                                    sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                    break;
-                                }
+                # 2. Institución Previsional — solo cambiar si existe en el dropdown
+                try:
+                    inst_limpia = inst.upper().replace('AFP ', '').replace('AFP', '').strip()
+                    encontrado = page.evaluate("""(afp) => {
+                        var sel = document.getElementById('web_combo_codigo_afp');
+                        if (!sel) return false;
+                        for (var i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].text.toUpperCase().indexOf(afp) !== -1) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                return true;
                             }
-                        }""", inst_limpia)
+                        }
+                        // No encontrado → seleccionar "Todas" (value=0)
+                        for (var j = 0; j < sel.options.length; j++) {
+                            if (sel.options[j].value === '0') {
+                                sel.selectedIndex = j;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                break;
+                            }
+                        }
+                        return false;
+                    }""", inst_limpia)
+                    if encontrado:
                         log(f"✓ Institución: {inst_limpia}")
-                    except Exception as e:
-                        log(f"⚠ Institución: {e}")
-                    page.wait_for_timeout(500)
-
-                    # 3 y 4. Fecha Desde y Hasta → hoy, vía JS porque el campo es readonly
-                    page.evaluate("""(fecha) => {
-                        ['web_desde', 'web_hasta'].forEach(function(id) {
-                            var el = document.getElementById(id);
-                            if (el) {
-                                el.removeAttribute('disabled');
-                                el.removeAttribute('readonly');
-                                el.value = fecha;
-                                el.dispatchEvent(new Event('change', {bubbles: true}));
-                                el.dispatchEvent(new Event('blur', {bubbles: true}));
-                            }
-                        });
-                    }""", hoy)
-                    log(f"✓ Fecha Desde y Hasta: {hoy}")
-
-                    page.wait_for_timeout(800)
-
-                    # Interceptar el PDF real que sirve CtrlPdf antes de hacer click
-                    pdf_capturado = []
-
-                    def capturar_pdf(route):
-                        try:
-                            response = route.fetch()
-                            body = response.body()
-                            if body and len(body) > 1000:
-                                pdf_capturado.append(body)
-                                log(f"📥 PDF capturado: {len(body)} bytes")
-                            route.fulfill(response=response)
-                        except Exception:
-                            route.continue_()
-
-                    ctx.route('**/CtrlPdf**', capturar_pdf)
-
-                    try:
-                        with ctx.expect_page(timeout=25000) as new_page_info:
-                            page.evaluate("""() => {
-                                var all = Array.from(document.querySelectorAll('button, input[type=submit], a, span'));
-                                for (var el of all) {
-                                    var txt = (el.textContent || el.value || '').trim();
-                                    if (txt.indexOf('Generar') !== -1) {
-                                        (el.tagName === 'SPAN' ? el.parentElement : el).click();
-                                        return;
-                                    }
-                                }
-                            }""")
-                        popup = new_page_info.value
-                        popup.wait_for_load_state('networkidle', timeout=20000)
-                        popup.wait_for_timeout(1000)
-                        popup.close()
-                    except Exception as e:
-                        log(f"⚠ Error popup: {e}")
-
-                    ctx.unroute('**/CtrlPdf**')
-
-                    if pdf_capturado:
-                        job['comprobante_bytes'] = pdf_capturado[0]
-                        job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
-                        log(f"✅ Comprobante real: MOV_PER_{rut_t}.pdf ({len(pdf_capturado[0])} bytes)")
                     else:
-                        log("⚠ No se capturó el PDF de CtrlPdf")
+                        log(f"ℹ Institución '{inst_limpia}' no encontrada — seleccionado Todas")
+                except Exception as e:
+                    log(f"⚠ Institución: {e}")
+                page.wait_for_timeout(500)
+
+                # 3 y 4. Fecha Desde y Hasta → hoy
+                page.evaluate("""(fecha) => {
+                    ['web_desde', 'web_hasta'].forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) {
+                            el.removeAttribute('disabled');
+                            el.removeAttribute('readonly');
+                            el.value = fecha;
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                        }
+                    });
+                }""", hoy)
+                log(f"✓ Fecha Desde y Hasta: {hoy}")
+
+                page.wait_for_timeout(800)
+
+                # Capturar comprobante PDF:
+                # 1) ctx.route('**/CtrlPdf**') — sin race condition, activo antes del click
+                # 2) page.expect_popup() — sincrónico, bloquea hasta que el popup existe
+                # 3) popup.on('download') — por si CtrlPdf dispara descarga en el popup
+                log("Click Generar Comprobante...")
+                pdf_capturado = []
+
+                def _ctrlpdf_route(route):
+                    log(f"🎯 CtrlPdf interceptado: {route.request.method} {route.request.url[-60:]}")
+                    try:
+                        resp = route.fetch()
+                        body = resp.body()
+                        ct = resp.headers.get('content-type', '')
+                        log(f"📥 CtrlPdf fetch: {len(body)} bytes, {ct}, HTTP {resp.status}")
+                        if body and len(body) > 500:
+                            pdf_capturado.append(body)
+                        route.fulfill(response=resp)
+                    except Exception as e_fetch:
+                        log(f"⚠ CtrlPdf fetch error: {type(e_fetch).__name__}: {str(e_fetch)[:200]}")
+                        route.continue_()
+
+                ctx.route('**/CtrlPdf**', _ctrlpdf_route)
+
+                try:
+                    with page.expect_popup(timeout=8000) as popup_info:
+                        page.click('#busca_certificados')
+                    popup = popup_info.value
+                    log(f"🪟 Popup: {popup.url or 'blank'}")
+
+                    def _on_download(dl):
+                        log(f"📥 Download popup: {dl.suggested_filename}")
+                        try:
+                            import tempfile as _tf
+                            tmp = _tf.mktemp(suffix='.pdf')
+                            dl.save_as(tmp)
+                            with open(tmp, 'rb') as fh:
+                                b = fh.read()
+                            os.remove(tmp)
+                            if b and len(b) > 500:
+                                pdf_capturado.append(b)
+                                log(f"✅ PDF download popup: {len(b)} bytes")
+                        except Exception as e_dl:
+                            log(f"⚠ download error: {e_dl}")
+
+                    popup.on('download', _on_download)
+
+                except Exception as e_popup:
+                    log(f"⚠ expect_popup: {type(e_popup).__name__}: {e_popup}")
+
+                log("Esperando PDF (15s)...")
+                page.wait_for_timeout(15000)
+                ctx.unroute('**/CtrlPdf**')
+
+                if pdf_capturado:
+                    job['comprobante_bytes'] = pdf_capturado[0]
+                    job['comprobante_name'] = f"MOV_PER_{rut_t}.pdf"
+                    job.setdefault('comprobantes', {})[rut_t] = pdf_capturado[0]
+                    log(f"✅ Comprobante PDF: {len(pdf_capturado[0])} bytes")
+                else:
+                    log("⚠ No se capturó PDF")
 
             ctx.close()
             browser.close()
@@ -1363,7 +1394,162 @@ def estado_bot(job_id):
         "video_name": job.get('video'),
         "has_comprobante": bool(job.get('comprobante_bytes')),
         "comprobante_name": job.get('comprobante_name'),
+        "comprobantes_ruts": list(job.get('comprobantes', {}).keys()),
     })
+
+@cartas_bp.route("/oauth_callback")
+def oauth_callback():
+    """Página de retorno OAuth2 para Microsoft Graph — cierra el popup y envía el código al parent."""
+    return """<!DOCTYPE html>
+<html><head><title>Autenticando...</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#f8fafc;color:#374151">
+<p style="font-size:15px">Autenticando con Microsoft...</p>
+<script>
+  var p = new URLSearchParams(window.location.search);
+  if (window.opener) {
+    window.opener.postMessage(
+      {type:'ms_oauth_callback', code:p.get('code'), error:p.get('error'), errorDesc:p.get('error_description')},
+      window.location.origin
+    );
+    setTimeout(function(){ window.close(); }, 300);
+  } else {
+    document.body.innerHTML = '<p style="color:#dc2626">Error: abre esta página desde el sistema.</p>';
+  }
+</script>
+</body></html>"""
+
+@cartas_bp.route("/api/unificar", methods=["POST"])
+@cartas_login_required
+def unificar_pdfs():
+    """Recibe carta PDF y/o movimiento PDF como archivos multipart y los fusiona."""
+    import io as _io, re as _re
+    from pypdf import PdfWriter, PdfReader
+    from flask import Response
+
+    rut      = request.form.get('rut', '').strip()
+    carta_f  = request.files.get('carta')
+    mov_f    = request.files.get('movimiento')
+
+    if not carta_f and not mov_f:
+        return jsonify({'error': 'Se requiere al menos un archivo'}), 400
+
+    writer = PdfWriter()
+    for label, fobj in [('carta', carta_f), ('movimiento', mov_f)]:
+        if not fobj:
+            continue
+        try:
+            for page in PdfReader(_io.BytesIO(fobj.read())).pages:
+                writer.add_page(page)
+        except Exception as e:
+            return jsonify({'error': f'Error leyendo {label}: {e}'}), 500
+
+    buf = _io.BytesIO()
+    writer.write(buf)
+    rut_clean = _re.sub(r'[\.\-\s]', '', rut)
+    return Response(buf.getvalue(), mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="Caso_{rut_clean}.pdf"'})
+
+@cartas_bp.route("/api/enviar_correo", methods=["POST"])
+@cartas_login_required
+def enviar_correo():
+    """Envía el PDF unificado por correo Outlook/Microsoft 365 via SMTP."""
+    import smtplib, re as _re, io as _io
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    email_from  = request.form.get('email_from', '').strip()
+    password    = request.form.get('password', '').strip()
+    email_to    = request.form.get('email_to', '').strip()
+    nombre      = request.form.get('nombre', '').strip()
+    rut         = request.form.get('rut', '').strip()
+    institucion = request.form.get('institucion', '').strip()
+    pdf_file    = request.files.get('pdf')
+
+    if not all([email_from, password, email_to, pdf_file]):
+        return jsonify({'error': 'Faltan datos requeridos (correo, contraseña, destinatario o PDF)'}), 400
+
+    rut_clean = _re.sub(r'[\.\-\s]', '', rut)
+    pdf_bytes = pdf_file.read()
+
+    msg = MIMEMultipart()
+    msg['From']    = email_from
+    msg['To']      = email_to
+    msg['Subject'] = f"Documentos Previsionales – {nombre} ({rut})"
+
+    cuerpo = (
+        f"Estimados,\n\n"
+        f"Adjunto encontrarán la documentación previsional correspondiente al trabajador "
+        f"{nombre} (RUT: {rut}), institución {institucion}.\n\n"
+        f"Saludos,\nEquipo Optimiza"
+    )
+    msg.attach(MIMEText(cuerpo, 'plain', 'utf-8'))
+
+    adjunto = MIMEBase('application', 'octet-stream')
+    adjunto.set_payload(pdf_bytes)
+    encoders.encode_base64(adjunto)
+    adjunto.add_header('Content-Disposition', f'attachment; filename="Caso_{rut_clean}.pdf"')
+    msg.attach(adjunto)
+
+    try:
+        with smtplib.SMTP('smtp.office365.com', 587, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(email_from, password)
+            server.sendmail(email_from, [email_to], msg.as_string())
+        return jsonify({'ok': True})
+    except smtplib.SMTPAuthenticationError:
+        return jsonify({'error': 'Credenciales incorrectas. Si usas MFA, necesitas una contraseña de aplicación de Microsoft.'}), 401
+    except smtplib.SMTPException as e:
+        return jsonify({'error': f'Error SMTP: {e}'}), 502
+    except OSError as e:
+        return jsonify({'error': f'No se pudo conectar al servidor de correo: {e}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
+
+@cartas_bp.route("/api/destinatarios", methods=["GET"])
+@cartas_login_required
+def listar_destinatarios():
+    from database import get_conn
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM destinatarios_correo ORDER BY institucion, exclusivo, empresa_nombre"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@cartas_bp.route("/api/destinatarios", methods=["POST"])
+@cartas_login_required
+def crear_destinatario():
+    data = request.json or {}
+    institucion    = data.get('institucion', '').strip()
+    email          = data.get('email', '').strip()
+    exclusivo      = 1 if data.get('exclusivo') else 0
+    empresa_rut    = data.get('empresa_rut', '').strip()
+    empresa_nombre = data.get('empresa_nombre', '').strip()
+    if not institucion or not email:
+        return jsonify({"error": "Institución y email son requeridos"}), 400
+    user = _get_user()
+    from database import get_conn
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo('America/Santiago')).strftime('%Y-%m-%d %H:%M')
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO destinatarios_correo
+               (institucion, email, exclusivo, empresa_rut, empresa_nombre, creado_por, creado_en)
+               VALUES (?,?,?,?,?,?,?)""",
+            (institucion, email, exclusivo, empresa_rut, empresa_nombre,
+             user['id'] if user else None, now))
+    return jsonify({"ok": True})
+
+@cartas_bp.route("/api/destinatarios/<int:dest_id>", methods=["DELETE"])
+@cartas_login_required
+def eliminar_destinatario(dest_id):
+    from database import get_conn
+    with get_conn() as conn:
+        conn.execute("DELETE FROM destinatarios_correo WHERE id=?", (dest_id,))
+    return jsonify({"ok": True})
 
 @cartas_bp.route("/api/marcar_gestion", methods=["POST"])
 @cartas_login_required

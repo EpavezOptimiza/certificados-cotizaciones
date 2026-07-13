@@ -252,6 +252,18 @@ def init_db():
                 mostrar_opti  INTEGER DEFAULT 1
             )""")
         except: pass
+        try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS destinatarios_correo (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                institucion    TEXT NOT NULL,
+                email          TEXT NOT NULL,
+                exclusivo      INTEGER DEFAULT 0,
+                empresa_rut    TEXT DEFAULT '',
+                empresa_nombre TEXT DEFAULT '',
+                creado_por     INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                creado_en      TEXT DEFAULT ''
+            )""")
+        except: pass
 
         # Crear usuario admin por defecto si no existe
         admin = conn.execute("SELECT id FROM usuarios WHERE username='admin'").fetchone()

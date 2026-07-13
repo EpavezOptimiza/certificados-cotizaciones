@@ -32,8 +32,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;m
 .nav-role{font-size:10px;color:#4f83c4;text-transform:uppercase;letter-spacing:.5px}
 .nav-back{color:#64748b;text-decoration:none;font-size:12px;padding:5px 11px;border-radius:7px;border:1px solid rgba(255,255,255,.1);transition:.15s;font-weight:500}
 .nav-back:hover{background:rgba(255,255,255,.08);color:#e2e8f0;border-color:rgba(255,255,255,.2)}
-.nav-opti{height:52px;flex-shrink:0;filter:drop-shadow(0 0 10px rgba(37,99,235,.35));transition:transform .25s;cursor:default;margin-right:-4px}
-.nav-opti:hover{transform:scale(1.1) rotate(-3deg)}
+.cred-nav-btn{background:transparent;border:1px solid rgba(255,255,255,.22);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:12px;font-weight:600;color:#94a3b8;font-family:inherit;transition:.18s;white-space:nowrap;letter-spacing:.1px}
+.cred-nav-btn:hover{background:rgba(255,255,255,.08);color:#e2e8f0;border-color:rgba(255,255,255,.35)}
+.cred-nav-btn.saved{border-color:#22c55e;color:#86efac}
 
 /* ── Opti Nav Button ── */
 .opti-nav-wrap{position:relative}
@@ -186,7 +187,6 @@ textarea{resize:vertical;min-height:70px}
   .layout{flex-direction:column}
   .sidebar{width:100%;height:220px}
   .form-grid{grid-template-columns:1fr}
-  .nav-opti{display:none}
 }
 </style>
 </head>
@@ -198,6 +198,11 @@ textarea{resize:vertical;min-height:70px}
   <span class="nav-sep">|</span>
   <span class="nav-module-icon">✉</span>
   <span class="nav-brand">Cartas Previsionales</span>
+  <span class="nav-sep">|</span>
+  <div class="nav-user-info" style="align-items:flex-start">
+    <span class="nav-user">{{ user.nombre }}</span>
+    <span class="nav-role">{{ user.rol }}</span>
+  </div>
   <div class="nav-right">
     <div class="opti-nav-wrap">
       <button class="opti-nav-btn" id="opti-toggle" onclick="toggleOptiPanel()" aria-expanded="false">
@@ -223,13 +228,8 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
     </div>
-    <span class="nav-sep">|</span>
-    <div class="nav-user-info">
-      <span class="nav-user">{{ user.nombre }}</span>
-      <span class="nav-role">{{ user.rol }}</span>
-    </div>
     <a href="/" class="nav-back">← Inicio</a>
-    <img src="/static/opti_wave.png" class="nav-opti" alt="">
+    <button class="cred-nav-btn" id="cred-nav-btn" onclick="abrirCredenciales()">Credenciales PreviRed</button>
   </div>
 </nav>
 
@@ -240,7 +240,7 @@ textarea{resize:vertical;min-height:70px}
   <div class="tab" onclick="switchTab('masiva')">📋 Carta masiva por período</div>
   <div class="tab" onclick="switchTab('destacar')">🖍️ Destacar PDF</div>
   <div class="tab" onclick="switchTab('previred')">⚡ Movimiento PreviRed</div>
-  <div class="tab" onclick="switchTab('estado')">✅ Estado</div>
+  <div class="tab" onclick="switchTab('correo')">📧 Correo</div>
 </div>
 
 <!-- Layout -->
@@ -575,9 +575,98 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
 
-    <!-- Tab: Estado -->
-    <div class="tab-content" id="tab-estado">
+    <!-- Tab: Correo -->
+    <div class="tab-content" id="tab-correo">
+
+      <!-- Carpeta de PDFs -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="card-title-icon">📁</span> Carpeta de archivos PDF</div>
+        <div style="display:flex;gap:12px;align-items:center">
+          <button class="btn btn-primary" onclick="seleccionarCarpeta()" style="white-space:nowrap">
+            📁 Seleccionar carpeta
+          </button>
+          <span id="carpeta-nombre" style="font-size:13px;color:#64748b;font-weight:500">Sin carpeta seleccionada</span>
+        </div>
+        <div id="carpeta-hint" style="font-size:11px;color:#64748b;margin-top:8px">
+          Selecciona la carpeta donde están las cartas y movimientos de personal. Los archivos <strong>Caso_RUT.pdf</strong> se guardarán ahí mismo.
+        </div>
+      </div>
+
+      <!-- Cuenta Microsoft / Graph API -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="cursor:pointer" onclick="toggleOutlookCreds()">
+          <span class="card-title-icon">🔐</span> Cuenta Microsoft (Outlook)
+          <span id="outlook-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-left:6px;vertical-align:middle"></span>
+          <span id="outlook-toggle-arrow" style="margin-left:auto;font-size:11px;color:#94a3b8">▼</span>
+        </div>
+        <div id="outlook-creds-section" style="display:none;margin-top:10px">
+          <div id="outlook-auth-status" style="font-size:13px;color:#64748b;margin-bottom:12px">Sin autenticar</div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="conectarMicrosoft()">🪟 Conectar con Microsoft</button>
+            <span style="font-size:11px;color:#94a3b8">Se abrirá una ventana de login de Microsoft</span>
+          </div>
+          <details style="margin-top:12px">
+            <summary style="font-size:12px;font-weight:600;color:#374151;cursor:pointer">⚙ Azure App ID (configuración avanzada)</summary>
+            <div style="margin-top:8px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;font-size:12px">
+              <p style="margin:0 0 8px;color:#64748b">Registra una app en <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps" target="_blank">portal.azure.com</a> con permiso <code>Mail.Send</code> delegado. URI de redirección: <code id="oauth-redirect-uri"></code></p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div>
+                  <label style="font-weight:600;display:block;margin-bottom:3px">Client ID</label>
+                  <input type="text" id="outlook-client-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                         style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;font-family:monospace;box-sizing:border-box">
+                </div>
+                <div>
+                  <label style="font-weight:600;display:block;margin-bottom:3px">Tenant ID</label>
+                  <input type="text" id="outlook-tenant-id" placeholder="common"
+                         style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;font-family:monospace;box-sizing:border-box">
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="guardarAzureConfig()">💾 Guardar</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- Destinatarios -->
       <div class="card">
+        <div class="card-title">
+          <span class="card-title-icon">📧</span> Destinatarios de Correo
+          <div style="margin-left:auto">
+            <button class="btn btn-primary btn-sm" onclick="abrirNuevoDestinatario()">+ Nuevo Destinatario</button>
+          </div>
+        </div>
+        <div id="correo-empty" style="text-align:center;padding:28px 16px;color:#94a3b8">
+          <div style="font-size:28px;margin-bottom:6px">📭</div>
+          <div style="font-size:13px;font-weight:600">Sin destinatarios registrados</div>
+          <div style="font-size:12px;margin-top:4px">Agrega un destinatario para habilitar el envío automático por institución.</div>
+        </div>
+        <table class="tabla-estado" id="correo-tabla" style="display:none">
+          <thead>
+            <tr>
+              <th>Institución</th>
+              <th>Email</th>
+              <th>Alcance</th>
+              <th style="width:60px"></th>
+            </tr>
+          </thead>
+          <tbody id="correo-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- CC Recipients -->
+      <div class="card" style="margin-top:12px">
+        <div class="card-title"><span class="card-title-icon">📋</span> Con Copia (CC) — aplica a todos los correos</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+          <input type="email" id="cc-input" placeholder="correo@empresa.cl"
+                 style="flex:1;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px"
+                 onkeydown="if(event.key==='Enter')agregarCC()">
+          <button class="btn btn-outline btn-sm" onclick="agregarCC()">+ Agregar CC</button>
+        </div>
+        <div id="cc-lista" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
+
+      <!-- Estado trabajadores (dentro de Correo) -->
+      <div class="card" style="margin-top:16px">
         <div class="card-title"><span class="card-title-icon">✅</span> Estado de Trabajadores
           <div style="margin-left:auto;display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="marcarTodosEstado()">☑ Marcar todos</button>
@@ -589,11 +678,15 @@ textarea{resize:vertical;min-height:70px}
             <tr>
               <th style="width:36px"><input type="checkbox" id="estado-check-all" onchange="toggleAllEstado(this)"></th>
               <th>Trabajador</th><th>RUT</th><th>Institución</th><th>Períodos</th><th>Estado</th>
+              <th style="width:100px">Unificar</th>
             </tr>
           </thead>
           <tbody id="estado-tbody"></tbody>
         </table>
+        <!-- Envíos agrupados por institución -->
+        <div id="resumen-envios" style="margin-top:14px;border-top:1px solid #e2e8f0;padding-top:14px;display:none"></div>
       </div>
+
     </div>
 
   </div>
@@ -616,8 +709,60 @@ textarea{resize:vertical;min-height:70px}
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="iniciarBot()">▶ Iniciar</button>
+      <button class="btn btn-outline" onclick="cerrarModal()">Cerrar</button>
+      <button class="btn btn-outline" onclick="guardarCredenciales()">💾 Guardar</button>
+      <button class="btn btn-primary" onclick="guardarYIniciar()">▶ Iniciar Bot</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nuevo Destinatario -->
+<div class="modal-overlay" id="modal-nuevo-dest">
+  <div class="modal">
+    <div class="modal-header">📧 Nuevo Destinatario</div>
+    <div class="modal-body">
+      <div id="dest-error" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 12px;color:#b91c1c;font-size:12px;margin-bottom:10px"></div>
+      <div class="form-group">
+        <label>Institución</label>
+        <select id="dest-institucion" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+          <option value="">Seleccione institución...</option>
+          <optgroup label="AFP">
+            <option>Cuprum</option><option>Habitat</option><option>PlanVital</option>
+            <option>Provida</option><option>Capital</option><option>Modelo</option>
+            <option>UNO</option><option>AFC</option>
+          </optgroup>
+          <optgroup label="Salud">
+            <option>FONASA</option><option>Banmédica</option><option>Vida Tres</option>
+            <option>Cruz Blanca</option><option>Colmena</option><option>Consalud</option>
+            <option>Esencial</option><option>MasVida</option><option>Nueva Más Vida</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Email del destinatario</label>
+        <input type="email" id="dest-email" placeholder="ejecutivo@institucion.cl"
+               style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500">
+          <input type="checkbox" id="dest-exclusivo" onchange="toggleDestExclusivo()">
+          Solo para esta empresa
+        </label>
+        <div style="font-size:11px;color:#64748b;margin-top:3px;padding-left:20px">
+          Activa esto cuando el ejecutivo varía según la empresa (el email aplica solo a esta empresa)
+        </div>
+      </div>
+      <div id="dest-empresa-section" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:4px">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Empresa</label>
+        <input type="text" id="dest-empresa-nombre" placeholder="Carga el Excel primero para autocompletar"
+               style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;box-sizing:border-box">
+        <input type="hidden" id="dest-empresa-rut">
+        <div id="dest-empresa-hint" style="font-size:11px;color:#64748b;margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarNuevoDestinatario()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarDestinatario()">💾 Guardar</button>
     </div>
   </div>
 </div>
@@ -633,13 +778,23 @@ let visorDatos = [];
 let visorCols = [];
 let currentNavIndex = -1;  // Índice en la lista de marcados
 
-const MOTIVOS = [
-  'Trabajador finiquitado con fecha ',
-  'Periodo pagado en otra institucion: ',
-  'Trabajador con licencia medica desde ',
-  'Periodo pagado de forma correcta.',
-  'Cotizacion voluntaria no descontada.',
-  'Trabajador con ausentismo mes completo, sin remuneracion imponible.',
+const MOTIVOS_AFP = [
+  { full: 'Trabajador finiquitado con fecha ', short: 'Finiquitado' },
+  { full: 'Periodo pagado en otra institucion: ', short: 'Pagado otra institución' },
+  { full: 'Trabajador con licencia medica desde ', short: 'Licencia médica' },
+  { full: 'Periodo pagado de forma correcta.', short: 'Pagado correctamente' },
+  { full: 'Cotizacion voluntaria no descontada.', short: 'Cot. voluntaria' },
+  { full: 'Trabajador con ausentismo mes completo, sin remuneracion imponible.', short: 'Ausentismo mes completo' },
+  { full: 'Finiquito con pago posterior al finiquito.', short: 'Pago posterior finiquito' },
+];
+const MOTIVOS_ISAPRE = [
+  { full: 'Trabajador finiquitado con fecha ', short: 'Finiquitado' },
+  { full: 'Periodo pagado en otra institucion: ', short: 'Pagado otra institución' },
+  { full: 'Trabajador con licencia medica desde ', short: 'Licencia médica' },
+  { full: 'Periodo pagado de forma correcta.', short: 'Pagado correctamente' },
+  { full: 'Cotizacion voluntaria no descontada.', short: 'Cot. voluntaria' },
+  { full: 'Trabajador con ausentismo mes completo, sin remuneracion imponible.', short: 'Ausentismo mes completo' },
+  { full: 'Finiquito con pago posterior al finiquito.', short: 'Pago posterior finiquito' },
 ];
 
 const MESES_MAP = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
@@ -658,8 +813,8 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  document.querySelectorAll('.tab')[['visor','carta','masiva','destacar','previred','estado'].indexOf(tab)].classList.add('active');
-  if (tab === 'estado') renderEstado();
+  document.querySelectorAll('.tab')[['visor','carta','masiva','destacar','previred','correo'].indexOf(tab)].classList.add('active');
+  if (tab === 'correo') { renderEstado(); cargarDestinatarios(); cargarCarpeta(); cargarCC(); _cargarDotOutlook(); }
   if (tab === 'previred') renderPreviRedWorkers();
   if (tab === 'masiva') renderMasiva();
   if (tab === 'destacar') renderDestacar();
@@ -857,6 +1012,10 @@ function toggleWorker(rut, cb) {
   }
   renderSidebar();
   refreshDependientes();
+  if (document.getElementById('tab-correo')?.classList.contains('active')) {
+    renderEstado();
+    renderDestinatarios();
+  }
 }
 
 // Actualiza el badge verde con el número de trabajadores marcados
@@ -974,6 +1133,7 @@ function renderCartaForm() {
   const INST_LIST = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital',
     'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC'];
   instEl.innerHTML = INST_LIST.map(i => `<option>${i}</option>`).join('');
+  instEl.onchange = renderMotivos;
   if (w.institucion) {
     const instLow = w.institucion.toLowerCase().trim();
     const match = INST_LIST.find(i => i.toLowerCase() === instLow)
@@ -1035,32 +1195,43 @@ function agregarPeriodosExtra() {
 }
 
 function renderMotivos() {
+  const inst = document.getElementById('f-inst')?.value || '';
+  const isIsapre = /colmena|consalud|cruz|vida|esencial|fonasa/i.test(inst);
+  const lista = isIsapre ? MOTIVOS_ISAPRE : MOTIVOS_AFP;
   const cont = document.getElementById('motivos-btns');
-  cont.innerHTML = MOTIVOS.map(m => {
-    const short = m.length > 35 ? m.slice(0,35)+'...' : m;
-    return `<button class="btn btn-outline btn-sm" onclick="setMotivo('${m}')">${short}</button>`;
-  }).join('');
+  cont.innerHTML = lista.map(({full, short}) =>
+    `<button class="btn btn-outline btn-sm" onclick='setMotivo(${JSON.stringify(full)})'>${short}</button>`
+  ).join('');
 }
 
 function setMotivo(m) {
   const sel = currentRut ? seleccionados[currentRut] : null;
+  const w = trabajadores.find(t => t.rut_trabajador === currentRut);
   const fecha = sel ? (sel.fecha_cese || '') : '';
+
+  // Pago posterior al finiquito: construye texto completo con fecha_cese + período del analisis
+  if (m.toLowerCase().includes('pago posterior al finiquito')) {
+    const pa = (w && w.periodo_analisis) || {};
+    let analisisTxt = '';
+    for (const p of (sel?.periodos_sel || [])) {
+      if (pa[p] && /[A-Za-z]{3}-\d{2,4}/i.test(pa[p])) { analisisTxt = pa[p]; break; }
+    }
+    if (!analisisTxt) analisisTxt = (w && w.analisis) || '';
+    const periodoMatch = analisisTxt.match(/\b([A-Za-z]{3}-\d{2,4})\b/i);
+    const periodo = periodoMatch ? periodoMatch[1] : '';
+    m = 'Trabajador finiquitado con fecha' + (fecha ? ' ' + fecha : '') +
+        ' con pago posterior al finiquito' + (periodo ? ' en ' + periodo : '');
+    document.getElementById('f-motivo').value = m;
+    guardarForm();
+    return;
+  }
+
   if (m.toLowerCase().includes('con fecha') && fecha) {
     m = m + ' ' + fecha;
   }
   if (m.toLowerCase().includes('licencia medica desde') && sel) {
     const primer = (sel.periodos_sel && sel.periodos_sel.length > 0) ? sel.periodos_sel[0] : '';
     if (primer) m = m + primer;
-  }
-  // Motivos que deben respetar el/los período(s) que se está(n) cobrando
-  // (el marcado en "Períodos de deuda"), en vez de dejarlo genérico
-  const requierePeriodo = ['periodo pagado de forma correcta', 'periodo pagado en otra institucion'];
-  if (sel && requierePeriodo.some(p => m.toLowerCase().includes(p))) {
-    const periodos = (sel.periodos_sel && sel.periodos_sel.length > 0) ? sel.periodos_sel.join(', ') : '';
-    if (periodos) {
-      m = m.replace(/\.?\s*$/, '');  // quitar punto/espacio final
-      m = m.endsWith(':') ? `${m} ${periodos}` : `${m}: ${periodos}`;
-    }
   }
   document.getElementById('f-motivo').value = m;
   guardarForm();
@@ -1285,14 +1456,70 @@ function renderPreviRedWorkers() {
   </table>`;
 }
 
+// ── Credenciales PreviRed ────────────────────────────────────────────────────
+function _credFromStorage() {
+  return {
+    rut: localStorage.getItem('previred_rut') || '',
+    clave: localStorage.getItem('previred_clave') || ''
+  };
+}
+
+function _actualizarDotCredenciales() {
+  const {rut, clave} = _credFromStorage();
+  const btn = document.getElementById('cred-nav-btn');
+  if (btn) btn.classList.toggle('saved', !!(rut && clave));
+}
+
+function abrirCredenciales() {
+  const {rut, clave} = _credFromStorage();
+  if (rut) document.getElementById('modal-rut').value = rut;
+  if (clave) document.getElementById('modal-clave').value = clave;
+  document.getElementById('modal-credenciales').classList.add('show');
+}
+
+function guardarCredenciales() {
+  const rut = document.getElementById('modal-rut').value.trim();
+  const clave = document.getElementById('modal-clave').value;
+  const err = document.getElementById('modal-error');
+  if (!rut || !clave) {
+    err.style.display = 'block';
+    err.textContent = !rut ? 'Ingresa tu RUT.' : 'Ingresa tu clave.';
+    return;
+  }
+  localStorage.setItem('previred_rut', rut);
+  localStorage.setItem('previred_clave', clave);
+  err.style.display = 'none';
+  _actualizarDotCredenciales();
+  document.getElementById('modal-credenciales').classList.remove('show');
+}
+
+function guardarYIniciar() {
+  const rut = document.getElementById('modal-rut').value.trim();
+  const clave = document.getElementById('modal-clave').value;
+  if (rut && clave) {
+    localStorage.setItem('previred_rut', rut);
+    localStorage.setItem('previred_clave', clave);
+    _actualizarDotCredenciales();
+  }
+  iniciarBot();
+}
+
 function abrirModal() {
   const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
   if (!marcados.length) { alert('Selecciona al menos un trabajador.'); return; }
-  document.getElementById('modal-credenciales').classList.add('show');
+  const {rut, clave} = _credFromStorage();
+  if (rut && clave) {
+    document.getElementById('modal-rut').value = rut;
+    document.getElementById('modal-clave').value = clave;
+    iniciarBot();
+  } else {
+    document.getElementById('modal-credenciales').classList.add('show');
+  }
 }
 
 function cerrarModal() {
   document.getElementById('modal-credenciales').classList.remove('show');
+  document.getElementById('modal-error').style.display = 'none';
 }
 
 async function iniciarBot() {
@@ -1358,14 +1585,27 @@ async function pollBot() {
     document.getElementById('bot-spinner').style.display = 'none';
     document.getElementById('bot-prog-fill').style.width = '100%';
     mostrarPDFs(data.resultados);
-    // Descargar comprobante automáticamente
+    // Registrar qué RUTs tienen comprobante disponible en este job
+    if (data.comprobantes_ruts && data.comprobantes_ruts.length) {
+      data.comprobantes_ruts.forEach(rut => {
+        if (seleccionados[rut]) seleccionados[rut].job_id_comp = jobId;
+      });
+    }
+    // Descargar comprobante automáticamente via Blob (evita bloqueo del navegador)
     if (data.has_comprobante) {
-      const a = document.createElement('a');
-      a.href = `/cartas/api/comprobante/${jobId}`;
-      a.download = data.comprobante_name || 'Comprobante.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      fetch(`/cartas/api/comprobante/${jobId}`)
+        .then(r => r.blob())
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = data.comprobante_name || 'Comprobante.pdf';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        })
+        .catch(() => {});
     }
     // Actualizar estado
     Object.keys(data.resultados).forEach(rut => {
@@ -1682,16 +1922,26 @@ async function destacarPDF(file) {
 // ── Estado ────────────────────────────────────────────────────────────────────
 function renderEstado() {
   const tbody = document.getElementById('estado-tbody');
-  tbody.innerHTML = trabajadores.map(w => {
+  const marcados = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
+  if (!marcados.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px;font-size:13px">
+      Selecciona trabajadores en la lista lateral para verlos aquí.</td></tr>`;
+    document.getElementById('resumen-envios').style.display = 'none';
+    return;
+  }
+  tbody.innerHTML = marcados.map(w => {
     const sel = seleccionados[w.rut_trabajador] || {};
+    const btnUnif = `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="unificarPDF('${w.rut_trabajador}')">📎 Unificar</button>`;
     return `<tr>
       <td><input type="checkbox" class="estado-check" data-rut="${w.rut_trabajador}" ${sel.estadoCheck?'checked':''}></td>
       <td>${w.nombre}</td><td>${w.rut_trabajador}</td>
       <td>${w.institucion}</td>
       <td>${(w.periodos||[]).slice(0,3).join(', ')}${w.periodos?.length>3?'...':''}</td>
       <td><span class="worker-status status-${sel.status||'pendiente'}">${sel.status||'Pendiente'}</span></td>
+      <td>${btnUnif}</td>
     </tr>`;
   }).join('');
+  renderResumenEnvios(marcados);
 }
 
 function toggleAllEstado(cb) {
@@ -1729,6 +1979,653 @@ function llamarOptiBot(){
   document.getElementById('opti-toggle').classList.remove('open');
   switchTab('previred');
 }
+// ── Correo / Destinatarios ────────────────────────────────────────────────────
+let destinatarios = [];
+
+function cargarDestinatarios() {
+  fetch('/cartas/api/destinatarios')
+    .then(r => r.json())
+    .then(data => { destinatarios = data; renderDestinatarios(); })
+    .catch(() => {});
+}
+
+function renderDestinatarios() {
+  const tbody  = document.getElementById('correo-tbody');
+  const tabla  = document.getElementById('correo-tabla');
+  const empty  = document.getElementById('correo-empty');
+
+  const marcados    = trabajadores.filter(w => seleccionados[w.rut_trabajador]?.checked);
+  const normInst    = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const instsMarcados = new Set(marcados.map(w => normInst(w.institucion)).filter(Boolean));
+
+  const lista = instsMarcados.size > 0
+    ? destinatarios.filter(d => instsMarcados.has(normInst(d.institucion)))
+    : destinatarios;
+
+  if (!lista.length) {
+    tabla.style.display = 'none';
+    empty.style.display = '';
+    if (instsMarcados.size > 0 && destinatarios.length > 0) {
+      const instsNombres = [...new Set(marcados.map(w => w.institucion).filter(Boolean))].join(', ');
+      empty.innerHTML = `<div style="font-size:28px;margin-bottom:6px">📭</div>
+        <div style="font-size:13px;font-weight:600">Sin destinatarios para las instituciones seleccionadas</div>
+        <div style="font-size:12px;margin-top:4px">No hay destinatarios para: <strong>${instsNombres}</strong></div>`;
+    } else {
+      empty.innerHTML = `<div style="font-size:28px;margin-bottom:6px">📭</div>
+        <div style="font-size:13px;font-weight:600">Sin destinatarios registrados</div>
+        <div style="font-size:12px;margin-top:4px">Agrega un destinatario para habilitar el envío automático por institución.</div>`;
+    }
+    return;
+  }
+  empty.innerHTML = `<div style="font-size:28px;margin-bottom:6px">📭</div>
+    <div style="font-size:13px;font-weight:600">Sin destinatarios registrados</div>
+    <div style="font-size:12px;margin-top:4px">Agrega un destinatario para habilitar el envío automático por institución.</div>`;
+  tabla.style.display = '';
+  empty.style.display = 'none';
+  tbody.innerHTML = lista.map(d => {
+    const alcance = d.exclusivo
+      ? `<span style="background:#dbeafe;color:#1d4ed8;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">Exclusivo — ${d.empresa_nombre}</span>`
+      : `<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">General</span>`;
+    return `<tr>
+      <td><strong>${d.institucion}</strong></td>
+      <td style="color:#475569">${d.email}</td>
+      <td>${alcance}</td>
+      <td><button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fca5a5;padding:3px 8px"
+          onclick="eliminarDestinatario(${d.id},'${d.institucion}')">🗑</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function abrirNuevoDestinatario() {
+  document.getElementById('dest-institucion').value = '';
+  document.getElementById('dest-email').value = '';
+  document.getElementById('dest-exclusivo').checked = false;
+  document.getElementById('dest-empresa-section').style.display = 'none';
+  document.getElementById('dest-empresa-nombre').value = '';
+  document.getElementById('dest-empresa-rut').value = '';
+  document.getElementById('dest-error').style.display = 'none';
+  document.getElementById('modal-nuevo-dest').classList.add('show');
+}
+
+function cerrarNuevoDestinatario() {
+  document.getElementById('modal-nuevo-dest').classList.remove('show');
+}
+
+function toggleDestExclusivo() {
+  const checked = document.getElementById('dest-exclusivo').checked;
+  document.getElementById('dest-empresa-section').style.display = checked ? '' : 'none';
+  if (checked) {
+    const emp = trabajadores.length ? trabajadores[0] : null;
+    const nombre = emp ? (emp.razon_social || emp.empresa_nombre || '') : '';
+    const rut    = emp ? (emp.rut_empresa  || emp.empresa_rut   || '') : '';
+    document.getElementById('dest-empresa-nombre').value = nombre;
+    document.getElementById('dest-empresa-rut').value   = rut;
+    document.getElementById('dest-empresa-hint').textContent =
+      nombre ? `Empresa tomada del Excel: ${nombre}` : '⚠ Carga el Excel primero para autocompletar';
+  }
+}
+
+function guardarDestinatario() {
+  const institucion    = document.getElementById('dest-institucion').value.trim();
+  const email          = document.getElementById('dest-email').value.trim();
+  const exclusivo      = document.getElementById('dest-exclusivo').checked;
+  const empresa_nombre = document.getElementById('dest-empresa-nombre').value.trim();
+  const empresa_rut    = document.getElementById('dest-empresa-rut').value.trim();
+  const errEl = document.getElementById('dest-error');
+  errEl.style.display = 'none';
+  if (!institucion || !email) {
+    errEl.textContent = 'Institución y email son obligatorios.';
+    errEl.style.display = ''; return;
+  }
+  if (exclusivo && !empresa_nombre) {
+    errEl.textContent = 'Indica la empresa para el correo exclusivo (carga el Excel primero).';
+    errEl.style.display = ''; return;
+  }
+  fetch('/cartas/api/destinatarios', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({institucion, email, exclusivo, empresa_nombre, empresa_rut})
+  }).then(r => r.json()).then(d => {
+    if (d.error) { errEl.textContent = d.error; errEl.style.display = ''; return; }
+    cerrarNuevoDestinatario();
+    cargarDestinatarios();
+  }).catch(e => { errEl.textContent = 'Error: ' + e; errEl.style.display = ''; });
+}
+
+let _dirHandle = null;
+
+async function seleccionarCarpeta() {
+  if (!window.showDirectoryPicker) {
+    alert('Tu navegador no soporta el selector de carpetas. Usa Chrome o Edge.');
+    return;
+  }
+  try {
+    _dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    const nombreEl = document.getElementById('carpeta-nombre');
+    nombreEl.textContent = '📁 ' + _dirHandle.name;
+    nombreEl.style.color = '#059669';
+    document.getElementById('carpeta-hint').innerHTML =
+      `<span style="color:#059669">✅ Carpeta seleccionada: <strong>${_dirHandle.name}</strong> — los archivos Caso_RUT.pdf se guardarán aquí.</span>`;
+  } catch(e) {
+    if (e.name !== 'AbortError') alert('Error al seleccionar carpeta: ' + e.message);
+  }
+}
+
+function cargarCarpeta() { /* handle vive en memoria; el usuario re-selecciona al recargar */ }
+
+async function unificarPDF(rut) {
+  if (!_dirHandle) {
+    alert('Primero selecciona la carpeta de archivos PDF.');
+    return;
+  }
+  const btn = event.currentTarget;
+  btn.disabled = true; btn.textContent = '⏳...';
+  try {
+    const rutNorm = rut.replace(/[.\-\s]/g, '').toLowerCase();
+    let cartaHandle = null, movHandle = null;
+
+    for await (const [name, handle] of _dirHandle.entries()) {
+      if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
+      const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
+      if (!nameNorm.includes(rutNorm)) continue;
+      if (/carta/i.test(name)) cartaHandle = handle;
+      else if (/mov_?per|movimiento|comprobante/i.test(name)) movHandle = handle;
+    }
+
+    if (!cartaHandle && !movHandle) {
+      alert(`No se encontraron archivos para RUT ${rut} en la carpeta seleccionada.`);
+      btn.disabled = false; btn.textContent = '📎 Unificar';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('rut', rut);
+    if (cartaHandle) formData.append('carta',       await cartaHandle.getFile(), cartaHandle.name);
+    if (movHandle)   formData.append('movimiento',  await movHandle.getFile(),   movHandle.name);
+
+    const res = await fetch('/cartas/api/unificar', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const e = await res.json();
+      alert('Error: ' + (e.error || res.status));
+      btn.disabled = false; btn.textContent = '📎 Unificar';
+      return;
+    }
+
+    const arrBuf   = await res.arrayBuffer();
+    const rutClean = rut.replace(/[.\-\s]/g, '');
+    const outName  = `Caso_${rutClean}.pdf`;
+
+    const outHandle = await _dirHandle.getFileHandle(outName, { create: true });
+    const writable  = await outHandle.createWritable();
+    await writable.write(arrBuf);
+    await writable.close();
+
+    btn.textContent = '✅ Guardado';
+    btn.style.cssText += ';background:#059669;border-color:#059669';
+    setTimeout(() => {
+      btn.disabled = false; btn.textContent = '📎 Unificar';
+      btn.style.background = ''; btn.style.borderColor = '';
+    }, 3000);
+  } catch(e) {
+    alert('Error al unificar: ' + e.message);
+    btn.disabled = false; btn.textContent = '📎 Unificar';
+  }
+}
+
+// ── Microsoft Graph / OAuth2 PKCE ────────────────────────────────────────────
+let _msToken = null; // {access_token, refresh_token, expires_at}
+
+function toggleOutlookCreds() {
+  const sec   = document.getElementById('outlook-creds-section');
+  const arrow = document.getElementById('outlook-toggle-arrow');
+  const open  = sec.style.display === 'none' || sec.style.display === '';
+  sec.style.display = open ? '' : 'none';
+  arrow.textContent = open ? '▲' : '▼';
+  if (open) {
+    document.getElementById('oauth-redirect-uri').textContent = window.location.origin + '/cartas/oauth_callback';
+    const cid = localStorage.getItem('ms_client_id') || '';
+    const tid = localStorage.getItem('ms_tenant_id') || '';
+    if (cid) document.getElementById('outlook-client-id').value = cid;
+    if (tid) document.getElementById('outlook-tenant-id').value = tid;
+    _actualizarEstadoAuth();
+  }
+}
+
+function _actualizarEstadoAuth() {
+  const el  = document.getElementById('outlook-auth-status');
+  const dot = document.getElementById('outlook-dot');
+  if (_msToken && Date.now() < _msToken.expires_at) {
+    el.innerHTML  = '<span style="color:#059669;font-weight:600">✅ Conectado con Microsoft</span>';
+    dot.style.display = '';
+  } else if (localStorage.getItem('ms_refresh_token')) {
+    el.innerHTML  = '<span style="color:#d97706;font-weight:600">⚠ Sesión expirada — reconecta</span>';
+    dot.style.display = '';
+  } else {
+    el.textContent = 'Sin autenticar';
+    dot.style.display = 'none';
+  }
+}
+
+function _cargarDotOutlook() {
+  _actualizarEstadoAuth();
+}
+
+function guardarAzureConfig() {
+  const cid = document.getElementById('outlook-client-id').value.trim();
+  const tid = document.getElementById('outlook-tenant-id').value.trim() || 'common';
+  if (cid) localStorage.setItem('ms_client_id', cid);
+  localStorage.setItem('ms_tenant_id', tid);
+  alert('✅ Configuración guardada. Ahora haz clic en "Conectar con Microsoft".');
+}
+
+async function _pkce() {
+  const arr      = crypto.getRandomValues(new Uint8Array(32));
+  const verifier = btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const buf      = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  return {verifier, challenge};
+}
+
+async function conectarMicrosoft() {
+  const clientId = (document.getElementById('outlook-client-id')?.value.trim()) || localStorage.getItem('ms_client_id') || '';
+  const tenantId = (document.getElementById('outlook-tenant-id')?.value.trim()) || localStorage.getItem('ms_tenant_id') || 'common';
+  if (!clientId) {
+    alert('Ingresa tu Client ID de Azure en la sección "⚙ Azure App ID" de abajo.');
+    return;
+  }
+  localStorage.setItem('ms_client_id', clientId);
+  localStorage.setItem('ms_tenant_id', tenantId);
+
+  const {verifier, challenge} = await _pkce();
+  sessionStorage.setItem('pkce_verifier', verifier);
+
+  const redirectUri = window.location.origin + '/cartas/oauth_callback';
+  const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`
+    + `?client_id=${encodeURIComponent(clientId)}`
+    + `&response_type=code`
+    + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+    + `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Send offline_access')}`
+    + `&code_challenge=${challenge}&code_challenge_method=S256`;
+
+  const popup = window.open(authUrl, 'ms_login', 'width=520,height=640,resizable=yes');
+
+  const handler = async (evt) => {
+    if (evt.origin !== window.location.origin || evt.data?.type !== 'ms_oauth_callback') return;
+    window.removeEventListener('message', handler);
+    if (evt.data.error) { alert('Error OAuth: ' + (evt.data.errorDesc || evt.data.error)); return; }
+
+    const tokenRes = await fetch(
+      `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+      { method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({
+          client_id: clientId, grant_type: 'authorization_code',
+          code: evt.data.code,
+          redirect_uri: window.location.origin + '/cartas/oauth_callback',
+          code_verifier: sessionStorage.getItem('pkce_verifier'),
+          scope: 'https://graph.microsoft.com/Mail.Send offline_access'
+        }).toString()
+      }
+    ).then(r => r.json());
+
+    if (tokenRes.error) { alert('Error token: ' + tokenRes.error_description); return; }
+
+    _msToken = {
+      access_token:  tokenRes.access_token,
+      refresh_token: tokenRes.refresh_token,
+      expires_at:    Date.now() + (tokenRes.expires_in - 60) * 1000
+    };
+    if (tokenRes.refresh_token) localStorage.setItem('ms_refresh_token', tokenRes.refresh_token);
+    _actualizarEstadoAuth();
+  };
+  window.addEventListener('message', handler);
+}
+
+async function _getToken() {
+  const clientId = localStorage.getItem('ms_client_id');
+  const tenantId = localStorage.getItem('ms_tenant_id') || 'common';
+  if (!clientId) return null;
+
+  if (_msToken && Date.now() < _msToken.expires_at) return _msToken.access_token;
+
+  const refreshToken = _msToken?.refresh_token || localStorage.getItem('ms_refresh_token');
+  if (!refreshToken) return null;
+
+  const res = await fetch(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    { method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        client_id: clientId, grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        scope: 'https://graph.microsoft.com/Mail.Send offline_access'
+      }).toString()
+    }
+  ).then(r => r.json());
+
+  if (res.error) { localStorage.removeItem('ms_refresh_token'); return null; }
+  _msToken = {
+    access_token:  res.access_token,
+    refresh_token: res.refresh_token || refreshToken,
+    expires_at:    Date.now() + (res.expires_in - 60) * 1000
+  };
+  if (res.refresh_token) localStorage.setItem('ms_refresh_token', res.refresh_token);
+  return _msToken.access_token;
+}
+
+// ── Enviar correo (Graph API) ─────────────────────────────────────────────────
+async function enviarCorreo(rut, nombre, institucion) {
+  if (!_dirHandle) {
+    alert('Selecciona la carpeta de archivos PDF primero.');
+    return;
+  }
+
+  const normInst = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const dest = destinatarios.find(d => normInst(d.institucion) === normInst(institucion));
+  if (!dest) {
+    alert(`No hay destinatario para ${institucion}. Agrégalo en Destinatarios.`);
+    return;
+  }
+
+  const rutClean = rut.replace(/[.\-\s]/g, '');
+  const casoName = `Caso_${rutClean}.pdf`;
+  const btnId    = 'btn-enviar-' + rutClean;
+  const btn      = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+
+  try {
+    // Buscar PDF en carpeta
+    let pdfHandle = null;
+    for await (const [name, handle] of _dirHandle.entries()) {
+      if (handle.kind === 'file' && name.toLowerCase() === casoName.toLowerCase()) {
+        pdfHandle = handle; break;
+      }
+    }
+    if (!pdfHandle) {
+      alert(`No se encontró ${casoName}. Unifica primero los documentos.`);
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+      return;
+    }
+
+    // Obtener token (Graph API)
+    if (btn) btn.textContent = '🔑 Auth...';
+    const token = await _getToken();
+
+    if (!token) {
+      // Fallback: mostrar toast con link mailto directo (el usuario hace clic = gesto fresco)
+      const subject    = encodeURIComponent(`Documentos Previsionales – ${nombre} (${rut})`);
+      const mailtoBody = encodeURIComponent(`Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nSaludos,\nEquipo Optimiza`);
+      const mailtoUrl  = `mailto:${dest.email}?subject=${subject}&body=${mailtoBody}`;
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#1e293b;color:white;padding:18px 20px;border-radius:10px;z-index:9999;max-width:320px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,0.4);line-height:1.5';
+      toast.innerHTML = `
+        <button onclick="this.parentElement.remove()" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px">×</button>
+        <div style="font-weight:700;margin-bottom:6px;font-size:14px">📧 Correo listo para enviar</div>
+        <div style="color:#94a3b8;margin-bottom:10px;font-size:12px">Para: <strong style="color:#e2e8f0">${dest.email}</strong></div>
+        <a href="${mailtoUrl}" target="_blank" style="display:block;background:#2563eb;color:white;padding:9px 14px;border-radius:7px;text-decoration:none;text-align:center;font-weight:600;margin-bottom:10px">
+          📬 Abrir en Outlook
+        </a>
+        <div style="color:#94a3b8;font-size:11px">Adjunta el archivo: <strong style="color:#e2e8f0">📎 ${casoName}</strong> (en la carpeta seleccionada)</div>
+        <div style="color:#64748b;font-size:10px;margin-top:8px">Para adjunto automático → conecta tu cuenta Microsoft</div>
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => { if (toast.parentElement) toast.remove(); }, 15000);
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+      return;
+    }
+
+    // Leer PDF como base64
+    if (btn) btn.textContent = '📤 Enviando...';
+    const pdfFile = await pdfHandle.getFile();
+    const arrBuf  = await pdfFile.arrayBuffer();
+    const b64     = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+
+    const cuerpo = `Estimados,\n\nAdjunto encontrarán la documentación previsional de ${nombre} (RUT: ${rut}), institución ${institucion}.\n\nSaludos,\nEquipo Optimiza`;
+
+    const graphRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          subject: `Documentos Previsionales – ${nombre} (${rut})`,
+          body: { contentType: 'Text', content: cuerpo },
+          toRecipients: [{ emailAddress: { address: dest.email } }],
+          attachments: [{
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: casoName, contentType: 'application/pdf', contentBytes: b64
+          }]
+        },
+        saveToSentItems: true
+      })
+    });
+
+    if (graphRes.status === 202) {
+      if (btn) {
+        btn.textContent = '✅ Enviado';
+        btn.style.cssText += ';background:#059669;border-color:#059669';
+        setTimeout(() => {
+          btn.disabled = false; btn.textContent = '📧 Enviar';
+          btn.style.background = ''; btn.style.borderColor = '';
+        }, 3000);
+      }
+    } else {
+      const errData = await graphRes.json().catch(() => ({}));
+      alert('Error Graph API: ' + (errData.error?.message || graphRes.status));
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '📧 Enviar'; }
+  }
+}
+
+// ── CC Recipients ─────────────────────────────────────────────────────────────
+function _getCCList() {
+  try { return JSON.parse(localStorage.getItem('correo_cc') || '[]'); } catch { return []; }
+}
+function _saveCCList(list) { localStorage.setItem('correo_cc', JSON.stringify(list)); }
+
+function cargarCC() {
+  renderCC(_getCCList());
+}
+
+function renderCC(list) {
+  const el = document.getElementById('cc-lista');
+  if (!el) return;
+  el.innerHTML = list.map((email, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:20px;padding:3px 10px;font-size:12px">
+      ${email}
+      <button onclick="eliminarCC(${i})" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:14px;line-height:1;padding:0">×</button>
+    </span>`
+  ).join('') || '<span style="font-size:12px;color:#94a3b8">Sin destinatarios en copia</span>';
+}
+
+function agregarCC() {
+  const input = document.getElementById('cc-input');
+  const email = input.value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Ingresa un email válido.'); return; }
+  const list = _getCCList();
+  if (list.includes(email)) { alert('Ya está en la lista.'); return; }
+  list.push(email);
+  _saveCCList(list);
+  renderCC(list);
+  input.value = '';
+}
+
+function eliminarCC(idx) {
+  const list = _getCCList();
+  list.splice(idx, 1);
+  _saveCCList(list);
+  renderCC(list);
+}
+
+// ── Resumen y envío agrupado por institución ──────────────────────────────────
+function renderResumenEnvios(marcados) {
+  const el = document.getElementById('resumen-envios');
+  if (!el) return;
+  if (!marcados || !marcados.length) { el.style.display = 'none'; return; }
+
+  // Agrupar por institución
+  const grupos = {};
+  marcados.forEach(w => {
+    const inst = w.institucion || 'Sin institución';
+    if (!grupos[inst]) grupos[inst] = [];
+    grupos[inst].push(w);
+  });
+
+  const normInst = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  el.style.display = '';
+  el.innerHTML = '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📬 Enviar correos por institución</div>'
+    + Object.entries(grupos).map(([inst, ws]) => {
+      const dest = destinatarios.find(d => normInst(d.institucion) === normInst(inst));
+      const destInfo = dest
+        ? `<span style="color:#64748b;font-size:11px">${dest.email}</span>`
+        : `<span style="color:#f59e0b;font-size:11px">⚠ Sin destinatario configurado</span>`;
+      const btnId = `btn-inst-${normInst(inst)}`;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 10px;background:#f8fafc;border-radius:8px;margin-bottom:6px">
+        <div style="flex:1">
+          <strong style="font-size:13px">${inst}</strong>
+          <span style="color:#94a3b8;font-size:12px;margin-left:6px">(${ws.length} trabajador${ws.length>1?'es':''})</span>
+          <div style="margin-top:2px">${destInfo}</div>
+        </div>
+        <button id="${btnId}" class="btn btn-success btn-sm"
+          ${!dest ? 'disabled title="Agrega el destinatario primero"' : ''}
+          onclick="enviarCorreoInstitucion('${inst.replace(/'/g,"\\'")}')">
+          📧 Enviar a ${inst}
+        </button>
+      </div>`;
+    }).join('');
+}
+
+async function enviarCorreoInstitucion(institucion) {
+  if (!_dirHandle) {
+    alert('Selecciona la carpeta de archivos PDF primero.');
+    return;
+  }
+  const normInst = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const dest = destinatarios.find(d => normInst(d.institucion) === normInst(institucion));
+  if (!dest) { alert(`Sin destinatario para ${institucion}.`); return; }
+
+  const marcados = trabajadores.filter(w =>
+    seleccionados[w.rut_trabajador]?.checked &&
+    normInst(w.institucion) === normInst(institucion)
+  );
+  if (!marcados.length) { alert('No hay trabajadores seleccionados para esta institución.'); return; }
+
+  const btnId = `btn-inst-${normInst(institucion)}`;
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Preparando...'; }
+
+  try {
+    // Obtener token Graph
+    const token = await _getToken();
+
+    // Datos empresa del primer trabajador
+    const w0 = marcados[0];
+    const empresa = (w0.razon_social || '').trim();
+    const rutEmp  = (w0.rut_empresa  || '').trim();
+    const ccList  = _getCCList();
+
+    // Lista de trabajadores para el cuerpo
+    const listaTrab = marcados.map(w =>
+      `• ${w.rut_trabajador}  ${w.nombre}`
+    ).join('\n');
+
+    const cuerpo = `Estimados ${institucion},\n\nJunto con saludar, solicito de su amable ayuda para regularizar deuda de la empresa ${empresa} ${rutEmp}, por los trabajadores:\n\n${listaTrab}\n\nPor los motivos indicados en cada carta explicativa adjunta.\nJunto a la carta encontrara documentación para la regularización de la deuda.\nAgradezco su ayuda con lo solicitado.\n\nSaluda atentamente,`;
+
+    const subject = `Regularización deuda empresa ${empresa} ${rutEmp}`;
+
+    if (!token) {
+      // Fallback mailto (sin adjuntos automáticos)
+      const a = document.createElement('a');
+      a.href = `mailto:${dest.email}${ccList.length?'?cc='+encodeURIComponent(ccList.join(';'))+'&':'?'}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(cuerpo)}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      const rutsList = marcados.map(w => `📎 Caso_${w.rut_trabajador.replace(/[.\-\s]/g,'')}.pdf`).join('\n');
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#1e293b;color:white;padding:18px 20px;border-radius:10px;z-index:9999;max-width:340px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,0.4)';
+      toast.innerHTML = `<button onclick="this.parentElement.remove()" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px">×</button>
+        <div style="font-weight:700;margin-bottom:6px">📧 Outlook abierto — ${institucion}</div>
+        <div style="color:#94a3b8;font-size:12px;margin-bottom:10px">Adjunta estos archivos de la carpeta seleccionada:</div>
+        <div style="font-family:monospace;font-size:11px;color:#e2e8f0;line-height:1.8">${rutsList}</div>
+        <div style="color:#64748b;font-size:10px;margin-top:10px">Para adjunto automático → conecta tu cuenta Microsoft</div>`;
+      document.body.appendChild(toast);
+      setTimeout(() => { if (toast.parentElement) toast.remove(); }, 20000);
+      if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
+      return;
+    }
+
+    // Graph API — leer PDFs de la carpeta y adjuntarlos
+    if (btn) btn.textContent = '📂 Leyendo PDFs...';
+    const adjuntos = [];
+    for (const w of marcados) {
+      const rutClean = w.rut_trabajador.replace(/[.\-\s]/g, '');
+      const casoName = `Caso_${rutClean}.pdf`;
+      let pdfHandle = null;
+      for await (const [name, handle] of _dirHandle.entries()) {
+        if (handle.kind === 'file' && name.toLowerCase() === casoName.toLowerCase()) {
+          pdfHandle = handle; break;
+        }
+      }
+      if (!pdfHandle) {
+        alert(`No se encontró ${casoName}. Unifica primero los documentos de ${w.nombre}.`);
+        if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
+        return;
+      }
+      const file   = await pdfHandle.getFile();
+      const arrBuf = await file.arrayBuffer();
+      const b64    = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+      adjuntos.push({ '@odata.type': '#microsoft.graph.fileAttachment', name: casoName, contentType: 'application/pdf', contentBytes: b64 });
+    }
+
+    if (btn) btn.textContent = '📤 Enviando...';
+    const toRecipients = [{ emailAddress: { address: dest.email } }];
+    const ccRecipients = ccList.map(e => ({ emailAddress: { address: e } }));
+
+    const graphRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          subject,
+          body: { contentType: 'Text', content: cuerpo },
+          toRecipients,
+          ccRecipients,
+          attachments: adjuntos
+        },
+        saveToSentItems: true
+      })
+    });
+
+    if (graphRes.status === 202) {
+      if (btn) {
+        btn.textContent = `✅ Enviado a ${institucion}`;
+        btn.style.cssText += ';background:#059669;border-color:#059669';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = `📧 Enviar a ${institucion}`;
+          btn.style.background = ''; btn.style.borderColor = '';
+        }, 4000);
+      }
+    } else {
+      const err = await graphRes.json().catch(() => ({}));
+      alert('Error Graph API: ' + (err.error?.message || graphRes.status));
+      if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = `📧 Enviar a ${institucion}`; }
+  }
+}
+
+function eliminarDestinatario(id, nombre) {
+  if (!confirm(`¿Eliminar destinatario de ${nombre}?`)) return;
+  fetch(`/cartas/api/destinatarios/${id}`, {method:'DELETE'})
+    .then(() => cargarDestinatarios());
+}
+
+// Inicializar dot de credenciales al cargar
+_actualizarDotCredenciales();
+
 document.addEventListener('click',function(e){
   if(!e.target.closest('.opti-nav-wrap')){
     const panel=document.getElementById('opti-panel');

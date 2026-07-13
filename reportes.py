@@ -52,7 +52,9 @@ def analizar_excel():
                     'por_estatus':     _tabla_a_lista(datos.get('por_estatus', {})),
                     'por_motivo':      _tabla_a_lista(datos.get('por_motivo', {})),
                     'resumen':         datos.get('resumen_tabla', {}),
-                }
+                    'por_fee':         _tabla_a_lista(datos.get('por_fee', {})),
+                },
+                'header_cliente': datos.get('header_cliente', {}),
             }
 
         return jsonify({'ok': True, 'hojas': list(resultado.keys()), 'datos': resultado})

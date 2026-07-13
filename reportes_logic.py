@@ -169,46 +169,63 @@ def detectar_hojas_cierre(wb):
 
 
 def _detectar_columnas_raw(ws):
-    """Detecta índices de columna en la hoja raw (afc-afp o Base AFP) leyendo la fila 1."""
+    """Detecta columnas en hoja raw afc-afp (EMS BASE) leyendo la fila 1."""
     hdr = {}
     for col in range(1, min(ws.max_column + 1, 60)):
         h = str(ws.cell(1, col).value or '').strip().upper()
         hn = h.replace('_', '').replace(' ', '')
-        if 'INSTITUCION' in hn or 'INSTITUCIÓN' in hn or '10_' in h:
+        if 'INSTITUCION' in hn or 'INSTITUCIÓN' in hn:
             hdr['inst'] = col
-        elif 'PERIODOAR' in hn or 'PERIODO' in hn or 'PERÍODO' in hn or '11_' in h:
+        elif 'PERIODOAR' in hn or 'PERIODOA' in hn:
             hdr['per'] = col
-        elif 'MONTOINTER' in hn or 'INTERÉS' in hn or 'INTERES' in hn or '13_' in h:
+        elif 'MONTOINTER' in hn or 'INTERÉS' in hn or 'INTERES' in hn:
             hdr['monto'] = col
-        elif 'FEE' in hn or '22_' in h:
+        elif 'FEE' in hn:
             hdr['fee'] = col
-        elif 'MOTIVO' in hn or '26_' in h:
+        elif 'MOTIVO' in hn:
             hdr['motivo'] = col
-        elif 'ESTATUS' in hn or 'ESTADO' in hn or '34_' in h:
+        elif 'ESTATUS' in hn or 'ESTADO' in hn:
             hdr['estatus'] = col
-    # Fallback para "Base AFP" generado por app (columnas fijas conocidas)
-    if 'inst' not in hdr:
-        hdr = {'inst': 6, 'per': 7, 'monto': 10, 'estatus': 8}
     return hdr
+
+
+def _anio_de(val):
+    import datetime as _dt
+    if not val:
+        return ''
+    if isinstance(val, (_dt.date, _dt.datetime)):
+        return str(val.year)
+    s = str(val).strip()
+    m = re.search(r'(\d{4})', s)
+    return m.group(1) if m else ''
+
+
+def _acumular(datos, inst, monto, estatus, anio, motivo, fee):
+    datos['por_institucion'][inst] = datos['por_institucion'].get(inst, 0) + monto
+    if anio:
+        datos['por_anio'][anio] = datos['por_anio'].get(anio, 0) + monto
+    if estatus:
+        datos['por_estatus'][estatus] = datos['por_estatus'].get(estatus, 0) + monto
+    if motivo:
+        datos['por_motivo'][motivo] = datos['por_motivo'].get(motivo, 0) + monto
+    if fee and estatus:
+        datos['por_fee'][estatus] = datos['por_fee'].get(estatus, 0) + fee
 
 
 def leer_base_afp(wb):
     """
-    Lee la hoja raw 'afc-afp' o 'Base AFP' y computa los mismos pivots que leer_cierre().
-    Permite mostrar Reportes sin necesitar un Excel con hojas Cierre.
+    Lee hojas 'Base AFP', 'Base Isapre' y/o 'afc-afp' y computa los mismos pivots
+    que leer_cierre(). Columnas fijas según template_base_deudas.xlsx conocido.
     """
-    import datetime as _dt
-
-    hoja_nombre = None
-    for candidato in ['afc-afp', 'Base AFP']:
-        if candidato in wb.sheetnames:
-            hoja_nombre = candidato
-            break
-    if not hoja_nombre:
-        return None
-
-    ws = wb[hoja_nombre]
-    hdr = _detectar_columnas_raw(ws)
+    # Columnas fijas por hoja (del template_base_deudas.xlsx verificado)
+    HOJAS = {
+        'Base AFP': {
+            'inst': 6, 'per': 7, 'monto': 10, 'fee': 11, 'motivo': 14, 'estatus': 8,
+        },
+        'Base Isapre': {
+            'inst': 6, 'per': 7, 'monto': 12, 'fee': 13, 'motivo': 16, 'estatus': 18,
+        },
+    }
 
     datos = {
         'por_institucion': {},
@@ -219,43 +236,50 @@ def leer_base_afp(wb):
         'por_fee': {},
         'header_cliente': {},
     }
+    encontro = False
 
-    def _anio_de(val):
-        if not val:
-            return ''
-        if isinstance(val, (_dt.date, _dt.datetime)):
-            return str(val.year)
-        s = str(val).strip()
-        m = re.search(r'(\d{4})', s)
-        return m.group(1) if m else ''
-
-    for r in range(2, ws.max_row + 1):
-        inst = str(ws.cell(r, hdr.get('inst', 6)).value or '').strip()
-        if not inst:
+    # Leer hojas Base AFP y Base Isapre
+    for hoja_nombre, hdr in HOJAS.items():
+        if hoja_nombre not in wb.sheetnames:
             continue
+        ws = wb[hoja_nombre]
+        for r in range(2, ws.max_row + 1):
+            inst = str(ws.cell(r, hdr['inst']).value or '').strip()
+            if not inst:
+                continue
+            monto   = _fmt_monto(ws.cell(r, hdr['monto']).value)
+            if monto == 0:
+                continue
+            encontro = True
+            estatus = str(ws.cell(r, hdr['estatus']).value or '').strip()
+            fee     = _fmt_monto(ws.cell(r, hdr['fee']).value)
+            motivo  = str(ws.cell(r, hdr['motivo']).value or '').strip()
+            anio    = _anio_de(ws.cell(r, hdr['per']).value)
+            _acumular(datos, inst, monto, estatus, anio, motivo, fee)
 
-        monto   = _fmt_monto(ws.cell(r, hdr.get('monto', 10)).value)
-        estatus = str(ws.cell(r, hdr.get('estatus', 8)).value or '').strip()
-        anio    = _anio_de(ws.cell(r, hdr.get('per', 7)).value) if 'per' in hdr else ''
-        motivo  = str(ws.cell(r, hdr.get('motivo', 0)).value or '').strip() if 'motivo' in hdr else ''
-        fee     = _fmt_monto(ws.cell(r, hdr.get('fee', 0)).value) if 'fee' in hdr else 0
+    # Leer hoja afc-afp (formato raw EMS)
+    if 'afc-afp' in wb.sheetnames:
+        ws = wb['afc-afp']
+        hdr = _detectar_columnas_raw(ws)
+        if 'inst' in hdr and 'monto' in hdr:
+            for r in range(2, ws.max_row + 1):
+                inst = str(ws.cell(r, hdr['inst']).value or '').strip()
+                if not inst:
+                    continue
+                monto   = _fmt_monto(ws.cell(r, hdr['monto']).value)
+                if monto == 0:
+                    continue
+                encontro = True
+                estatus = str(ws.cell(r, hdr.get('estatus', 0)).value or '').strip() if 'estatus' in hdr else ''
+                fee     = _fmt_monto(ws.cell(r, hdr.get('fee', 0)).value) if 'fee' in hdr else 0
+                motivo  = str(ws.cell(r, hdr.get('motivo', 0)).value or '').strip() if 'motivo' in hdr else ''
+                anio    = _anio_de(ws.cell(r, hdr.get('per', 0)).value) if 'per' in hdr else ''
+                _acumular(datos, inst, monto, estatus, anio, motivo, fee)
 
-        if monto == 0:
-            continue
+    if not encontro:
+        return None
 
-        datos['por_institucion'][inst] = datos['por_institucion'].get(inst, 0) + monto
-        if anio:
-            datos['por_anio'][anio] = datos['por_anio'].get(anio, 0) + monto
-        if estatus:
-            datos['por_estatus'][estatus] = datos['por_estatus'].get(estatus, 0) + monto
-        if motivo:
-            datos['por_motivo'][motivo] = datos['por_motivo'].get(motivo, 0) + monto
-        if fee and estatus:
-            datos['por_fee'][estatus] = datos['por_fee'].get(estatus, 0) + fee
-
-    # Ordenar años
     datos['por_anio'] = dict(sorted(datos['por_anio'].items()))
-
     return datos
 
 

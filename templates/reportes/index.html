@@ -155,7 +155,7 @@ function cargarBases() {
     .then(lista => {
       const cont = document.getElementById('bases-list');
       if (!lista.length) {
-        cont.innerHTML = '<span class="base-empty">No hay bases procesadas todavía. Procesa una Base de Deudas primero.</span>';
+        cont.innerHTML = '<span class="base-empty">⚠️ Aún no hay bases guardadas. Procesa una Base de Deudas en la página de inicio y la próxima vez aparecerá aquí sola. O <strong>arrastra abajo el Excel que ya descargaste</strong>.</span>';
         return;
       }
       cont.innerHTML = '';

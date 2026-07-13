@@ -2294,10 +2294,15 @@ async function optiSend(){
     setTimeout(async()=>{
       optiHideTyping();
       try{
-        await fetch('/api/certi_report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensaje:text,usuario:_currentUser.nombre})});
+        const r = await fetch('/api/reportar_error',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({mensaje:text, modulo:'Cartas Previsionales'})});
         setOptiImg('talk');
-        optiAddMsg('bot','✅ Reporte enviado al administrador. Te contactarán pronto.');
-      }catch(e){ optiAddMsg('bot','❌ No se pudo enviar. Contacta directamente al administrador.'); }
+        if(r.ok){
+          optiAddMsg('bot','✅ Error reportado. El administrador lo verá en su panel y te contactará pronto.');
+        } else {
+          optiAddMsg('bot','❌ No se pudo enviar. Intenta de nuevo.');
+        }
+      }catch(e){ optiAddMsg('bot','❌ No se pudo conectar. Intenta de nuevo.'); }
       setTimeout(()=>{ optiShowOptions(); setOptiImg('wave'); }, 800);
     }, 1500);
     return;

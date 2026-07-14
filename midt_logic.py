@@ -350,25 +350,40 @@ def _ir_a_formulario(page, log, snap=None):
     log("Formulario cargado", "info")
 
 
-def _frame_form(page):
-    """Devuelve el objeto Frame del formulario (iframe de registro)."""
-    for fr in page.frames:
-        if fr == page.main_frame:
-            continue
-        try:
-            if fr.query_selector("input, select"):
-                return fr
-        except Exception:
-            continue
-    # fallback: el primer frame hijo
-    hijos = [f for f in page.frames if f != page.main_frame]
-    return hijos[0] if hijos else page.main_frame
+def _frame_form(page, espera=20, log=None):
+    """Devuelve el Frame (main o iframe) que contiene el formulario, detectado
+    por ser el que tiene más inputs. Espera hasta `espera` seg a que carguen."""
+    for intento in range(espera):
+        best, best_n = None, 0
+        for fr in page.frames:
+            try:
+                n = fr.evaluate(
+                    "() => document.querySelectorAll('input, select, textarea').length"
+                )
+            except Exception:
+                n = 0
+            if n and n > best_n:
+                best_n, best = n, fr
+        if best and best_n > 0:
+            if log and intento == 0:
+                log(f"[debug] Frame del formulario: {best.url[:70]} ({best_n} campos)", "info")
+            return best
+        time.sleep(1)
+    if log:
+        # Volcar panorama de frames para diagnóstico
+        for fr in page.frames:
+            try:
+                n = fr.evaluate("() => document.querySelectorAll('input,select,textarea').length")
+            except Exception:
+                n = -1
+            log(f"[debug] frame {fr.url[:60]} → {n} campos", "info")
+    return page.main_frame
 
 
 def _dump_iframe(page, log):
-    """Vuelca los campos del formulario dentro del iframe."""
+    """Vuelca los campos del formulario (main o iframe)."""
     try:
-        fr = _frame_form(page)
+        fr = _frame_form(page, log=log)
         campos = fr.evaluate("""() => {
             const out = [];
             for (const el of document.querySelectorAll('input, select, textarea')) {
@@ -403,11 +418,8 @@ def _dump_iframe(page, log):
 
 def _consultar_rut(page, rut, log):
     """Rellena el RUT del trabajador y extrae los datos auto-rellenados."""
-    frame = page.frame_locator("iframe")
-
-    # Scroll al iframe para asegurar visibilidad
-    page.locator("iframe").scroll_into_view_if_needed()
-    time.sleep(0.5)
+    # Detectar el frame que realmente contiene el formulario (main o iframe)
+    frame = _frame_form(page)
 
     # Campo RUT Persona Trabajadora — probar varias estrategias de localización
     rut_input = None
@@ -428,8 +440,9 @@ def _consultar_rut(page, rut, log):
             continue
 
     if rut_input is None:
-        raise Exception("No se encontró el campo 'RUT Persona Trabajadora' en el iframe")
+        raise Exception("No se encontró el campo 'RUT Persona Trabajadora' en el formulario")
 
+    rut_input.scroll_into_view_if_needed(timeout=5000)
     rut_input.click(timeout=10000)
     rut_input.fill("")
     rut_input.fill(rut)

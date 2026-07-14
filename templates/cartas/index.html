@@ -1360,8 +1360,7 @@ Me dirijo a ustedes en representacion de la empresa ${esc(w.razon_social)}. Rut:
 
 NOMBRE: ${esc(w.nombre.toUpperCase())}
 RUT: ${esc(w.rut_trabajador)}.
-TIPO DE PRODUCTO: ${esc(w.tipo)}.
-PERIODO DE DEUDA: ${esc(periodoTxt)}.
+${tipoTab !== 'isapre' ? `TIPO DE PRODUCTO: ${esc(w.tipo)}.\n` : ''}PERIODO DE DEUDA: ${esc(periodoTxt)}.
 MOTIVO DE NO PAGO: ${esc(motivo)}${esc(fechaCese)}
 
 

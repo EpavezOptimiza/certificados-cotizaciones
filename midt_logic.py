@@ -97,30 +97,89 @@ def hacer_login(page, run, clave, log):
 
 def seleccionar_empresa(page, rut_empresa, log):
     """Selecciona perfil EMPLEADOR → Persona Jurídica → empresa."""
-    # Puede que ya esté en la pantalla de selección de perfil
-    try:
-        page.click("button:has-text('EMPLEADOR')", timeout=8000)
-        page.wait_for_load_state("domcontentloaded", timeout=15000)
-    except PWTimeout:
-        pass
+    time.sleep(2)  # dejar que /roles renderice
 
-    try:
-        page.click("a:has-text('Empleador Persona Jurídica'), "
-                   "button:has-text('Empleador Persona Jurídica')", timeout=8000)
-        page.wait_for_load_state("domcontentloaded", timeout=15000)
-    except PWTimeout:
-        pass
+    # Desplegar la pestaña/sección EMPLEADOR (puede ser tab, button, a, div...)
+    for sel in [
+        "button:has-text('EMPLEADOR')", "a:has-text('EMPLEADOR')",
+        "[role='tab']:has-text('EMPLEADOR')", "li:has-text('EMPLEADOR')",
+        "div:has-text('EMPLEADOR')", "*:has-text('Empleador')",
+    ]:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible():
+                el.click(timeout=4000)
+                log("[debug] Pestaña EMPLEADOR desplegada", "info")
+                time.sleep(1.5)
+                break
+        except Exception:
+            continue
 
-    # RUT normalizado (sin puntos, con guión)
+    # Intentar también "Persona Jurídica" por si es un segundo nivel
+    for sel in [
+        "button:has-text('Persona Jurídica')", "a:has-text('Persona Jurídica')",
+        "[role='tab']:has-text('Persona Jurídica')", "li:has-text('Persona Jurídica')",
+    ]:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible():
+                el.click(timeout=4000)
+                time.sleep(1)
+                break
+        except Exception:
+            continue
+
     rut_norm = rut_empresa.replace(".", "").upper()
-    rut_con_puntos = rut_empresa.upper()
+
+    # Volcado de depuración: mostrar todo lo que parezca perfil/empresa en pantalla
+    try:
+        textos = page.evaluate("""() => {
+            const out = [];
+            for (const el of document.querySelectorAll('button, a, [role=tab], li, .card, .role, .perfil')) {
+                const t = (el.innerText || '').trim().replace(/\\s+/g, ' ');
+                if (t && t.length < 80) out.push(t);
+            }
+            return [...new Set(out)].slice(0, 40);
+        }""")
+        log(f"[debug] Elementos en pantalla: {' | '.join(textos)}", "info")
+    except Exception:
+        pass
 
     log(f"Seleccionando empresa {rut_empresa}...", "info")
-    empresa_btn = page.locator(
-        f"button:has-text('{rut_norm}'), button:has-text('{rut_con_puntos}')"
-    ).first
-    empresa_btn.click(timeout=15000)
+
+    # Buscar el elemento que contenga el RUT (cualquier tipo de nodo) y clickearlo
+    # por JS — funciona aunque esté oculto por un acordeón/pestaña colapsada.
+    clicked = page.evaluate("""(rut) => {
+        const rutClean = rut.replace(/\\./g, '').toUpperCase();
+        const nodes = document.querySelectorAll('button, a, li, div, .card, [role=button]');
+        for (const el of nodes) {
+            const txt = (el.innerText || '').replace(/\\./g, '').toUpperCase();
+            if (txt.includes(rutClean)) {
+                // Buscar el ancestro clickeable más cercano
+                let target = el;
+                for (let i = 0; i < 4 && target; i++) {
+                    if (target.tagName === 'BUTTON' || target.tagName === 'A' ||
+                        target.getAttribute('role') === 'button' ||
+                        target.onclick || target.className.includes('card') ||
+                        target.className.includes('role')) {
+                        target.click();
+                        return true;
+                    }
+                    target = target.parentElement;
+                }
+                el.click();
+                return true;
+            }
+        }
+        return false;
+    }""", rut_norm)
+
+    if not clicked:
+        raise Exception(f"No se encontró la empresa {rut_empresa} en la lista de perfiles")
+
     page.wait_for_load_state("domcontentloaded", timeout=20000)
+    time.sleep(2)
+    log(f"[debug] URL tras seleccionar empresa: {page.url}", "info")
     log("Empresa seleccionada", "ok")
 
 

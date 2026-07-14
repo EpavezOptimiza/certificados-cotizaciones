@@ -188,15 +188,40 @@ def seleccionar_empresa(page, rut_empresa, log):
 def _ir_a_formulario(page, log):
     """Va a Registro Electrónico Laboral → Contrato Individual → Registrar."""
     page.goto(f"{_URL}/empleador/registro-electronico-laboral",
-              wait_until="domcontentloaded", timeout=30000)
-    time.sleep(1)
+              wait_until="networkidle", timeout=45000)
+    time.sleep(2)
+    log(f"[debug] URL registro: {page.url}", "info")
 
-    # Buscar el botón "Registrar" dentro del card de Contrato Individual
-    registrar = page.locator(
-        "button:has-text('Registrar'), a:has-text('Registrar')"
-    ).first
-    registrar.click(timeout=15000)
-    page.wait_for_load_state("domcontentloaded", timeout=30000)
+    # Volcado: mostrar todos los botones/enlaces disponibles en esta página
+    try:
+        botones = page.evaluate("""() => {
+            const out = [];
+            for (const el of document.querySelectorAll('button, a, [role=button]')) {
+                const t = (el.innerText || '').trim().replace(/\\s+/g, ' ');
+                if (t && t.length < 60) out.push(t);
+            }
+            return [...new Set(out)].slice(0, 40);
+        }""")
+        log(f"[debug] Botones registro: {' | '.join(botones)}", "info")
+    except Exception:
+        pass
+
+    # Buscar botón "Registrar" (o variantes) — click por JS si está oculto
+    clicked = page.evaluate("""() => {
+        const rx = /registrar|nuevo|crear|ingresar contrato|contrato individual/i;
+        for (const el of document.querySelectorAll('button, a, [role=button]')) {
+            const t = (el.innerText || '').trim();
+            if (rx.test(t)) { el.click(); return t; }
+        }
+        return null;
+    }""")
+
+    if not clicked:
+        raise Exception("No se encontró el botón 'Registrar' en la página de registro. "
+                        "Revisa la línea [debug] Botones registro para ver qué hay.")
+
+    log(f"[debug] Click en botón: {clicked}", "info")
+    page.wait_for_load_state("networkidle", timeout=30000)
 
     # Esperar iframe
     page.wait_for_selector("iframe", timeout=20000)

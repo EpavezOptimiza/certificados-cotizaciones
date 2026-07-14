@@ -347,21 +347,47 @@ def _ir_a_formulario(page, log, snap=None):
     except PWTimeout:
         pass
 
-    # Esperar activamente a que aparezcan campos en ALGÚN frame (hasta 35s)
-    total = 0
-    for _ in range(35):
-        total = 0
+    def _contar_campos():
+        t = 0
         for fr in page_form.frames:
             try:
-                total += fr.evaluate(
-                    "() => document.querySelectorAll('input,select,textarea').length"
-                )
+                t += fr.evaluate("() => document.querySelectorAll('input,select,textarea').length")
             except Exception:
                 pass
-        if total > 0:
-            break
-        time.sleep(1)
+        return t
 
+    def _esperar_campos(segundos):
+        for _ in range(segundos):
+            if _contar_campos() > 0:
+                return True
+            time.sleep(1)
+        return False
+
+    # Esperar activamente a que aparezcan campos (hasta 25s)
+    ok = _esperar_campos(25)
+
+    # Fallback 1: si no renderizó, navegar directo a la URL del formulario
+    if not ok:
+        url_form = page_form.url
+        if "registroContratoTrabajo" not in url_form:
+            url_form = f"{_URL}/empleador/registro-electronico-laboral/registroContratoTrabajo"
+        log("[debug] Formulario sin campos; navegando directo a la URL...", "warn")
+        try:
+            page_form.goto(url_form, wait_until="networkidle", timeout=40000)
+        except Exception:
+            pass
+        ok = _esperar_campos(20)
+
+    # Fallback 2: recargar la página del formulario
+    if not ok:
+        log("[debug] Aún sin campos; recargando el formulario...", "warn")
+        try:
+            page_form.reload(wait_until="networkidle", timeout=40000)
+        except Exception:
+            pass
+        ok = _esperar_campos(20)
+
+    total = _contar_campos()
     time.sleep(2)
     log(f"[debug] Pestañas abiertas: {len(ctx.pages)} (antes {pags_antes})", "info")
     log(f"[debug] URL formulario: {page_form.url}", "info")

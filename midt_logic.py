@@ -600,11 +600,27 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
     """Consulta todos los RUTs y devuelve lista de dicts."""
     resultados = []
 
-    with sync_playwright() as pw:
+    # Pantalla virtual (xvfb): permite correr el navegador CON pantalla en el
+    # servidor. El portal DT no renderiza el formulario en modo headless, así
+    # que arrancamos un display virtual y lanzamos Chromium headed. Si no está
+    # disponible (p. ej. en local Windows), caemos a headless.
+    _display = None
+    _headless = True
+    try:
+        from pyvirtualdisplay import Display
+        _display = Display(visible=0, size=(1440, 1000))
+        _display.start()
+        _headless = False
+        log("[debug] Pantalla virtual (xvfb) iniciada — navegador con pantalla", "info")
+    except Exception as e:
+        log(f"[debug] Sin pantalla virtual ({str(e)[:50]}); usando headless", "warn")
+
+    try:
+      with sync_playwright() as pw:
         # Medidas anti-detección: el portal DT no renderiza el formulario si
         # detecta un navegador automatizado (headless / navigator.webdriver).
         browser = pw.chromium.launch(
-            headless=True,
+            headless=_headless,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--disable-features=IsolateOrigins,site-per-process",
@@ -692,6 +708,12 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
             raise
         finally:
             browser.close()
+    finally:
+        if _display:
+            try:
+                _display.stop()
+            except Exception:
+                pass
 
     return resultados
 

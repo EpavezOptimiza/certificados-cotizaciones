@@ -146,14 +146,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- Lista de RUTs -->
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title"><span>📋</span> RUTs a consultar</div>
+      <div class="card-title">
+        <span>📋</span> RUTs a consultar
+        <span style="margin-left:auto">
+          <input type="file" id="input-excel-ruts" accept=".xlsx,.xls" style="display:none"
+            onchange="cargarDesdeExcel(this)">
+          <button type="button" id="btn-cargar-excel" onclick="document.getElementById('input-excel-ruts').click()"
+            style="padding:5px 12px;font-size:11px;font-weight:600;border:1px solid #1E3A5F;border-radius:6px;background:#eff6ff;color:#1E3A5F;cursor:pointer;display:flex;align-items:center;gap:5px">
+            <span id="excel-btn-icon">📂</span> <span id="excel-btn-label">Cargar Excel</span>
+          </button>
+        </span>
+      </div>
       <div class="field">
-        <label>Un RUT por línea</label>
+        <label>Un RUT por línea — o carga un Excel con los RUTs en cualquier columna</label>
         <textarea id="lista-ruts" placeholder="12.345.678-9&#10;9.876.543-2&#10;11.222.333-4"
           oninput="actualizarContador()"></textarea>
         <div class="ruts-counter" id="ruts-counter">0 RUTs ingresados</div>
       </div>
-      <p class="tip">Puedes pegar desde Excel. El formato puede ser con o sin puntos (12345678-9 o 12.345.678-9).</p>
+      <p class="tip">Pega RUTs manualmente o carga un Excel. El sistema detecta RUTs en cualquier columna (con o sin puntos).</p>
     </div>
 
     <!-- Botón -->
@@ -281,6 +291,39 @@ function addLogLine(msg, tipo, hora){
     <div class="log-time">${hora||''}</div>`;
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
+}
+
+async function cargarDesdeExcel(input){
+  const file = input.files[0];
+  if(!file){ return; }
+  const btn   = document.getElementById('btn-cargar-excel');
+  const icon  = document.getElementById('excel-btn-icon');
+  const label = document.getElementById('excel-btn-label');
+  icon.textContent  = '⏳';
+  label.textContent = 'Leyendo...';
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('excel', file);
+  try {
+    const res  = await fetch('/api/midt/leer_ruts', {method:'POST', body: fd});
+    const data = await res.json();
+    if(data.error){ toast(data.error); return; }
+    const textarea = document.getElementById('lista-ruts');
+    const existentes = textarea.value.trim().split('\n').filter(r => r.trim());
+    const nuevos     = data.ruts.filter(r => !existentes.includes(r));
+    const todos      = [...existentes, ...nuevos];
+    textarea.value   = todos.join('\n');
+    actualizarContador();
+    toast(`${nuevos.length} RUT(s) cargados desde "${file.name}"`);
+  } catch(e) {
+    toast('Error al leer el Excel');
+  } finally {
+    icon.textContent  = '📂';
+    label.textContent = 'Cargar Excel';
+    btn.disabled = false;
+    input.value  = '';
+  }
 }
 
 function toast(msg){

@@ -2414,6 +2414,30 @@ def _midt_log(tid: str, msg: str, tipo: str = "info"):
 def midt_page():
     return render_template("midt.html")
 
+@app.route("/api/midt/leer_ruts", methods=["POST"])
+@api_login_required
+def midt_leer_ruts():
+    import openpyxl, re as _re
+    archivo = request.files.get("excel")
+    if not archivo:
+        return jsonify({"error": "No se recibió archivo"}), 400
+    _rut_re = _re.compile(r'\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]')
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(archivo.read()), read_only=True, data_only=True)
+        ruts, seen = [], set()
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                for cell in row:
+                    val = str(cell).strip() if cell is not None else ""
+                    m = _rut_re.search(val)
+                    if m and m.group(0) not in seen:
+                        seen.add(m.group(0))
+                        ruts.append(m.group(0))
+        wb.close()
+        return jsonify({"ruts": ruts, "total": len(ruts)})
+    except Exception as e:
+        return jsonify({"error": f"Error al leer Excel: {e}"}), 400
+
 @app.route("/api/midt/consultar", methods=["POST"])
 @api_login_required
 def midt_consultar():

@@ -39,18 +39,38 @@ def hacer_login(page, run, clave, log):
         page.wait_for_load_state("domcontentloaded", timeout=20000)
 
     log(f"[debug] URL ClaveÚnica: {page.url}", "info")
-    log("Ingresando ClaveÚnica...", "info")
+    log("Ingresando RUN...", "info")
 
-    # Campo RUN — ClaveÚnica usa input type="text" con name/id "run" o "username"
+    # ── Paso 1: ingresar RUN y continuar ──────────────────────────────────────
     run_field = page.locator(
         "input[name='run'], input[id='run'], input[name='username'], "
         "input[placeholder*='RUN'], input[placeholder*='run'], input[type='text']"
     ).first
-    run_field.fill(run, timeout=10000)
+    run_field.wait_for(state="visible", timeout=15000)
+    run_field.fill(run)
+
+    continuar = page.locator(
+        "button:has-text('Continuar'), button:has-text('Siguiente'), "
+        "button:has-text('Next'), button:has-text('Aceptar'), "
+        "button[type='submit'], input[type='submit']"
+    ).first
+    log(f"[debug] Clickeando continuar paso 1...", "info")
+    continuar.click(timeout=10000)
+
+    # ── Paso 2: esperar campo contraseña y enviar ──────────────────────────────
+    log("Esperando campo de contraseña...", "info")
+    page.locator("input[type='password']").first.wait_for(state="visible", timeout=20000)
+    log("Ingresando contraseña...", "info")
     page.locator("input[type='password']").first.fill(clave)
 
+    ingresar = page.locator(
+        "button:has-text('Ingresar'), button:has-text('Acceder'), "
+        "button:has-text('Iniciar'), button:has-text('Login'), "
+        "button[type='submit'], input[type='submit']"
+    ).first
+    log(f"[debug] Clickeando ingresar paso 2...", "info")
     with page.expect_navigation(wait_until="domcontentloaded", timeout=35000):
-        page.locator("button[type='submit'], input[type='submit']").first.click()
+        ingresar.click(timeout=10000)
 
     log(f"[debug] URL post-login: {page.url}", "info")
 

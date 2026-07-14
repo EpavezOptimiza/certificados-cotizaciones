@@ -325,12 +325,13 @@ def _ir_a_formulario(page, log, snap=None):
         except Exception:
             return False
 
-    # Estrategias de click sobre "Registrar", verificando que SALGA de las tarjetas
+    # Estrategias de click sobre "Registrar", verificando que SALGA de las tarjetas.
+    # El botón real es: <button class="ui blue basic button btn-register">Registrar</button>
     estrategias = [
-        ("role=button", lambda: page.get_by_role("button", name="Registrar").first),
-        ("text-exact",  lambda: page.get_by_text("Registrar", exact=True).first),
-        ("link",        lambda: page.get_by_role("link", name="Registrar").first),
-        ("css-button",  lambda: page.locator("button:has-text('Registrar')").first),
+        ("btn-register", lambda: page.locator("button.btn-register").first),
+        ("role=button",  lambda: page.get_by_role("button", name="Registrar").first),
+        ("text-exact",   lambda: page.get_by_text("Registrar", exact=True).first),
+        ("css-button",   lambda: page.locator("button:has-text('Registrar')").first),
     ]
 
     clicado = False
@@ -358,11 +359,13 @@ def _ir_a_formulario(page, log, snap=None):
             log(f"[debug] estrategia {nombre} falló: {str(e)[:60]}", "warn")
             continue
 
-    # Último recurso: click por JS sobre el botón cuyo texto es 'Registrar'
+    # Último recurso: click por JS sobre el botón .btn-register (o texto 'Registrar')
     if not clicado:
-        log("[debug] Probando click por JS sobre 'Registrar'...", "warn")
+        log("[debug] Probando click por JS sobre '.btn-register'...", "warn")
         try:
             page.evaluate("""() => {
+                const b = document.querySelector('button.btn-register');
+                if (b) { b.click(); return true; }
                 for (const el of document.querySelectorAll('button, a')) {
                     if ((el.innerText||'').trim() === 'Registrar') { el.click(); return true; }
                 }

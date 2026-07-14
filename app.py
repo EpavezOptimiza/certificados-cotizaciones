@@ -2391,6 +2391,95 @@ def get_pendientes_resumen():
     return jsonify({"notas_urgentes": notas_count, "tareas_pendientes": tareas_count, "tareas_vencidas": tareas_vencidas})
 
 
+# ============================================================
+#  CONSULTA MASIVA DT (Mi DT)
+# ============================================================
+
+_midt_tareas: dict = {}
+
+def _midt_nueva_tarea() -> str:
+    tid = uuid.uuid4().hex[:10]
+    _midt_tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None}
+    return tid
+
+def _midt_log(tid: str, msg: str, tipo: str = "info"):
+    if tid in _midt_tareas:
+        _midt_tareas[tid]["logs"].append({
+            "msg": msg, "tipo": tipo,
+            "t": _time.strftime("%H:%M:%S")
+        })
+
+@app.route("/midt")
+@login_required
+def midt_page():
+    return render_template("midt.html")
+
+@app.route("/api/midt/consultar", methods=["POST"])
+@api_login_required
+def midt_consultar():
+    d = request.json or {}
+    run         = d.get("run", "").strip()
+    clave       = d.get("clave", "").strip()
+    rut_empresa = d.get("rut_empresa", "").strip()
+    ruts        = [r.strip() for r in d.get("ruts", []) if r.strip()]
+
+    if not run or not clave or not rut_empresa or not ruts:
+        return jsonify({"error": "Faltan campos obligatorios"}), 400
+
+    tid = _midt_nueva_tarea()
+
+    def run_task():
+        import traceback
+        try:
+            from midt_logic import consultar_ruts, generar_excel
+            resultados = consultar_ruts(
+                run, clave, rut_empresa, ruts,
+                log=lambda m, t="info": _midt_log(tid, m, t)
+            )
+            xls_bytes = generar_excel(resultados)
+            nombre = f"ConsultaDT_{_time.strftime('%Y%m%d_%H%M%S')}.xlsx"
+            ruta   = os.path.join(_EXCELS_DIR, nombre)
+            with open(ruta, "wb") as fh:
+                fh.write(xls_bytes)
+            _midt_tareas[tid]["archivo"] = ruta
+            _midt_log(tid, f"Excel listo: {nombre}", "ok")
+            _midt_log(tid, f"Proceso finalizado — {len(resultados)} RUT(s) consultados", "ok")
+        except Exception as e:
+            tb = traceback.format_exc()
+            _midt_log(tid, f"Error: {e}", "err")
+            _midt_log(tid, tb[:400], "err")
+            _midt_tareas[tid]["error"] = True
+        finally:
+            _midt_tareas[tid]["done"] = True
+
+    threading.Thread(target=run_task, daemon=True).start()
+    return jsonify({"task_id": tid})
+
+@app.route("/api/midt/tarea/<tid>")
+@api_login_required
+def midt_tarea(tid):
+    t = _midt_tareas.get(tid)
+    if not t:
+        return jsonify({"error": "Tarea no encontrada"}), 404
+    since = int(request.args.get("since", 0))
+    return jsonify({
+        "logs":    t["logs"][since:],
+        "done":    t["done"],
+        "error":   t["error"],
+        "archivo": bool(t["archivo"]),
+    })
+
+@app.route("/api/midt/descargar/<tid>")
+@api_login_required
+def midt_descargar(tid):
+    t = _midt_tareas.get(tid)
+    if not t or not t.get("archivo") or not os.path.exists(t["archivo"]):
+        return jsonify({"error": "Archivo no disponible"}), 404
+    return send_file(t["archivo"], as_attachment=True,
+                     download_name=os.path.basename(t["archivo"]),
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

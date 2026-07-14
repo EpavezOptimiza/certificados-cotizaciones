@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consulta DT</title>
+<script src="/static/theme.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#1E3A5F;--sidebar-bg:#0d1b2e}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#0f172a;min-height:100vh;display:flex;flex-direction:column}
+.topnav{background:var(--sidebar-bg);padding:0 16px;height:50px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-shrink:0}
+.topnav::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:var(--themed-bg-image,none);background-size:var(--themed-bg-size,cover);z-index:0}
+.topnav>*{position:relative;z-index:1}
+.toggle-btn{width:32px;height:32px;border-radius:6px;background:rgba(255,255,255,.08);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.toggle-btn:hover{background:rgba(255,255,255,.15)}
+.nav-cur{color:#fff;font-weight:600;font-size:13px}
+.nav-sep{color:rgba(255,255,255,.25);font-size:12px}
+.layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - 50px)}
+.side-panel{width:0;overflow:hidden;transition:width .25s ease;background:#fff;border-right:1px solid #e2e8f0;flex-shrink:0;display:flex;flex-direction:column}
+.side-panel.open{width:256px}
+.panel-inner{width:256px;display:flex;flex-direction:column;height:100%}
+.panel-header{padding:16px;border-bottom:1px solid #f1f5f9}
+.panel-brand{font-size:14px;font-weight:700;color:#0f172a}
+.panel-sub{font-size:11px;color:#64748b;margin-top:2px}
+.panel-section-label{font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;padding:12px 14px 5px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;transition:background .12s;text-decoration:none}
+.nav-item:hover{background:#f8fafc}
+.nav-item.active{background:#eff6ff}
+.nav-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.nav-title{font-size:13px;font-weight:500;color:#0f172a}
+.nav-item.active .nav-title{color:#1E3A5F}
+.nav-item-sub{font-size:10px;color:#64748b;margin-top:1px}
+.panel-footer{margin-top:auto;padding:12px 14px;border-top:1px solid #f1f5f9}
+.logout-link{font-size:12px;color:#94a3b8;text-decoration:none;display:flex;align-items:center;gap:5px}
+.logout-link:hover{color:#dc2626}
+.main-content{flex:1;overflow-y:auto;padding:24px}
+.page-header{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.page-icon{width:42px;height:42px;background:#dbeafe;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.page-title{font-size:19px;font-weight:700;color:#0f172a;letter-spacing:-.3px}
+.page-sub{font-size:12px;color:#64748b;margin-top:2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px}
+.card-title{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.field input,.field textarea,.field select{width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;font-family:inherit;outline:none}
+.field input:focus,.field textarea:focus{border-color:#1E3A5F;box-shadow:0 0 0 3px rgba(30,58,95,.1)}
+.field textarea{resize:vertical;min-height:120px;line-height:1.5}
+.btn-consultar{width:100%;padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none;font-family:inherit;background:#1E3A5F;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s;margin-bottom:16px}
+.btn-consultar:hover:not(:disabled){opacity:.88}
+.btn-consultar:disabled{opacity:.45;cursor:not-allowed}
+.log-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+.log-header{padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:12px;font-weight:600;color:#374151;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.log-body{padding:4px 0;max-height:280px;overflow-y:auto}
+.log-line{display:flex;align-items:flex-start;gap:10px;padding:7px 16px;border-bottom:1px solid #f9fafb;font-size:12px}
+.log-line:last-child{border-bottom:none}
+.log-dot{width:7px;height:7px;border-radius:50%;margin-top:3px;flex-shrink:0}
+.dot-ok{background:#1D9E75}.dot-warn{background:#d97706}.dot-info{background:#185FA5}.dot-err{background:#dc2626}
+.log-text{color:#374151;flex:1}
+.log-time{color:#94a3b8;font-size:11px;white-space:nowrap}
+.log-empty{padding:20px;text-align:center;color:#94a3b8;font-size:13px}
+.badge-running{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#185FA5;font-weight:500}
+.spinner{width:10px;height:10px;border:2px solid #dbeafe;border-top-color:#185FA5;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.btn-dl-excel{display:none;padding:8px 16px;background:#1D9E75;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;align-items:center;gap:6px}
+.btn-dl-excel.show{display:inline-flex}
+.ruts-counter{font-size:11px;color:#64748b;margin-top:4px}
+#toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
+#toast.show{opacity:1}
+.tip{font-size:11px;color:#64748b;margin-top:6px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <button class="toggle-btn" onclick="togglePanel()">☰</button>
+  <span class="nav-sep">›</span>
+  <span class="nav-cur">Consulta DT</span>
+</div>
+
+<div class="layout">
+  <div class="side-panel open" id="side-panel">
+    <div class="panel-inner">
+      <div class="panel-header">
+        <div class="panel-brand">⬡ Optimiza</div>
+        <div class="panel-sub">Selecciona un módulo</div>
+      </div>
+      <div class="panel-section-label">Principal</div>
+      <a href="/" class="nav-item">
+        <div class="nav-icon" style="background:#eff6ff">📊</div>
+        <div><div class="nav-title">Portal certificados</div><div class="nav-item-sub">Grupos y certificados</div></div>
+      </a>
+      <div class="panel-section-label">Herramientas</div>
+      <a href="/empresas" class="nav-item">
+        <div class="nav-icon" style="background:#dbeafe">🏢</div>
+        <div><div class="nav-title">Empresas</div><div class="nav-item-sub">Base de datos centralizada</div></div>
+      </a>
+      <a href="/previred" class="nav-item">
+        <div class="nav-icon" style="background:#f0fdf4">⚙</div>
+        <div><div class="nav-title">Previred</div><div class="nav-item-sub">Descarga y conversión</div></div>
+      </a>
+      <a href="/midt" class="nav-item active">
+        <div class="nav-icon" style="background:#dbeafe">🏛</div>
+        <div><div class="nav-title">Consulta DT</div><div class="nav-item-sub">Datos trabajadores Mi DT</div></div>
+      </a>
+      <div class="panel-footer">
+        <a href="/logout" class="logout-link">↩ Cerrar sesión</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="page-header">
+      <div class="page-icon">🏛</div>
+      <div>
+        <div class="page-title">Consulta masiva DT</div>
+        <div class="page-sub">Extrae dirección, comuna, correo y fecha de nacimiento desde Mi DT</div>
+      </div>
+    </div>
+
+    <!-- Credenciales y empresa -->
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title"><span>🔑</span> Credenciales ClaveÚnica</div>
+        <div class="field">
+          <label>RUN personal</label>
+          <input type="text" id="run" placeholder="12345678-9" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>ClaveÚnica</label>
+          <input type="password" id="clave" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div class="tip">Estas credenciales no se guardan — se usan solo para esta consulta.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>🏢</span> Empresa</div>
+        <div class="field">
+          <label>RUT Empresa (Persona Jurídica)</label>
+          <input type="text" id="rut-empresa" placeholder="88.973.300-4">
+        </div>
+        <div class="tip">El RUT debe estar registrado como Empleador Persona Jurídica en tu cuenta Mi DT.</div>
+      </div>
+    </div>
+
+    <!-- Lista de RUTs -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title"><span>📋</span> RUTs a consultar</div>
+      <div class="field">
+        <label>Un RUT por línea</label>
+        <textarea id="lista-ruts" placeholder="12.345.678-9&#10;9.876.543-2&#10;11.222.333-4"
+          oninput="actualizarContador()"></textarea>
+        <div class="ruts-counter" id="ruts-counter">0 RUTs ingresados</div>
+      </div>
+      <p class="tip">Puedes pegar desde Excel. El formato puede ser con o sin puntos (12345678-9 o 12.345.678-9).</p>
+    </div>
+
+    <!-- Botón -->
+    <button class="btn-consultar" id="btn-consultar" onclick="iniciarConsulta()" disabled>
+      🔍 Iniciar consulta
+    </button>
+
+    <!-- Log -->
+    <div class="log-card">
+      <div class="log-header">
+        <span>Progreso</span>
+        <span id="estado-badge" class="badge-running" style="display:none">
+          <div class="spinner"></div> Consultando...
+        </span>
+        <button id="btn-excel" class="btn-dl-excel" onclick="descargarExcel()">⬇ Descargar Excel</button>
+      </div>
+      <div class="log-body" id="log-body">
+        <div class="log-empty">Completa el formulario y presiona "Iniciar consulta"</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let _taskId  = null;
+let _polling = null;
+let _logSince = 0;
+
+function togglePanel(){
+  document.getElementById('side-panel').classList.toggle('open');
+}
+
+function actualizarContador(){
+  const ruts = getRuts();
+  const el = document.getElementById('ruts-counter');
+  el.textContent = `${ruts.length} RUT${ruts.length !== 1 ? 's' : ''} ingresado${ruts.length !== 1 ? 's' : ''}`;
+  document.getElementById('btn-consultar').disabled = !ruts.length ||
+    !document.getElementById('run').value.trim() ||
+    !document.getElementById('clave').value.trim() ||
+    !document.getElementById('rut-empresa').value.trim();
+}
+
+// Habilitar botón cuando se completan todos los campos
+['run','clave','rut-empresa'].forEach(id => {
+  document.getElementById(id).addEventListener('input', actualizarContador);
+});
+
+function getRuts(){
+  return document.getElementById('lista-ruts').value
+    .split('\n')
+    .map(r => r.trim())
+    .filter(r => r.length > 0);
+}
+
+async function iniciarConsulta(){
+  const run         = document.getElementById('run').value.trim();
+  const clave       = document.getElementById('clave').value.trim();
+  const rutEmpresa  = document.getElementById('rut-empresa').value.trim();
+  const ruts        = getRuts();
+
+  if(!run || !clave || !rutEmpresa || !ruts.length){
+    toast('Completa todos los campos'); return;
+  }
+
+  document.getElementById('btn-consultar').disabled = true;
+  document.getElementById('btn-excel').classList.remove('show');
+  document.getElementById('estado-badge').style.display = 'inline-flex';
+  limpiarLog();
+  addLogLine(`Iniciando consulta de ${ruts.length} RUT(s)...`, 'info');
+
+  const res  = await fetch('/api/midt/consultar', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ run, clave, rut_empresa: rutEmpresa, ruts })
+  });
+  const data = await res.json();
+  if(data.error){ toast(data.error); document.getElementById('btn-consultar').disabled = false; return; }
+
+  _taskId   = data.task_id;
+  _logSince = 0;
+  clearInterval(_polling);
+  _polling  = setInterval(pollLogs, 1500);
+}
+
+async function pollLogs(){
+  if(!_taskId) return;
+  const res  = await fetch(`/api/midt/tarea/${_taskId}?since=${_logSince}`);
+  const data = await res.json();
+  if(data.error && !data.logs){ clearInterval(_polling); return; }
+  data.logs.forEach(l => addLogLine(l.msg, l.tipo, l.t));
+  _logSince += data.logs.length;
+  if(data.done){
+    clearInterval(_polling);
+    document.getElementById('estado-badge').style.display = 'none';
+    document.getElementById('btn-consultar').disabled = false;
+    if(data.archivo){
+      document.getElementById('btn-excel').classList.add('show');
+    }
+  }
+}
+
+async function descargarExcel(){
+  if(!_taskId) return;
+  const a = document.createElement('a');
+  a.href  = `/api/midt/descargar/${_taskId}`;
+  a.click();
+}
+
+function limpiarLog(){
+  document.getElementById('log-body').innerHTML = '';
+}
+
+function addLogLine(msg, tipo, hora){
+  const el    = document.getElementById('log-body');
+  const empty = el.querySelector('.log-empty');
+  if(empty) empty.remove();
+  const dots = {ok:'dot-ok',warn:'dot-warn',info:'dot-info',err:'dot-err'};
+  const div  = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<div class="log-dot ${dots[tipo]||'dot-info'}"></div>
+    <div class="log-text">${msg}</div>
+    <div class="log-time">${hora||''}</div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 3200);
+}
+</script>
+</body>
+</html>

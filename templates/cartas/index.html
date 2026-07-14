@@ -1204,10 +1204,11 @@ function renderCartaForm() {
     }
   }
 
-  // Instituciones
+  // Instituciones — filtradas según tab AFP / Isapre
   const instEl = document.getElementById('f-inst');
-  const INST_LIST = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital',
-    'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC'];
+  const INST_AFP    = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Planvital','AFP Provida','AFP Uno','AFC'];
+  const INST_ISAPRE = ['FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial'];
+  const INST_LIST   = tipoTab === 'isapre' ? INST_ISAPRE : INST_AFP;
   instEl.innerHTML = INST_LIST.map(i => `<option>${i}</option>`).join('');
   instEl.onchange = renderMotivos;
   if (w.institucion) {
@@ -1747,8 +1748,8 @@ function mostrarPDFs(resultados) {
 
 
 // ── Carta masiva por período ──────────────────────────────────────────────────
-const INST_LIST_MASIVA = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Plan Vital',
-  'AFP Provida','AFP Uno','FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial','AFC'];
+const INST_AFP_MASIVA    = ['AFP Capital','AFP Cuprum','AFP Habitat','AFP Modelo','AFP Plan Vital','AFP Provida','AFP Uno','AFC'];
+const INST_ISAPRE_MASIVA = ['FONASA','Colmena','Consalud','Cruz Blanca','Nueva Mas Vida','Esencial'];
 
 let masivaInit = false;
 
@@ -1760,9 +1761,8 @@ function renderMasiva() {
   const marcados = trabajadoresMarcados();
 
   const instEl = document.getElementById('m-inst');
-  if (!instEl.options.length) {
-    instEl.innerHTML = INST_LIST_MASIVA.map(i => `<option>${i}</option>`).join('');
-  }
+  const INST_LIST_MASIVA = tipoTab === 'isapre' ? INST_ISAPRE_MASIVA : INST_AFP_MASIVA;
+  instEl.innerHTML = INST_LIST_MASIVA.map(i => `<option>${i}</option>`).join('');
 
   // Institución: siempre se recalcula según los trabajadores marcados actualmente
   const normInst = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');

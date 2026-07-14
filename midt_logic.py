@@ -95,94 +95,120 @@ def hacer_login(page, run, clave, log):
 
 # ── Selección empresa ──────────────────────────────────────────────────────────
 
-def seleccionar_empresa(page, rut_empresa, log, snap=None):
-    """Selecciona perfil EMPLEADOR → Persona Jurídica → empresa."""
-    time.sleep(2)  # dejar que /roles renderice
-    if snap:
-        snap("1a_roles_inicial")
+# JS: hace click en el elemento cuyo texto es EXACTAMENTE `texto` (o empieza por él),
+# eligiendo el nodo más pequeño y subiendo a su ancestro clickeable. Devuelve el
+# texto clickeado o null.
+_JS_CLICK_EXACTO = """
+(texto) => {
+    const objetivo = texto.trim().toUpperCase();
+    let best = null;
+    for (const el of document.querySelectorAll('button, a, div, span, li, [role=button], .card, .mat-card')) {
+        const t = (el.innerText || '').trim().toUpperCase();
+        if (t === objetivo || t.startsWith(objetivo + ' ') || t === objetivo.replace(/\\s+/g,'')) {
+            if (!best || (el.innerText || '').length < (best.innerText || '').length) best = el;
+        }
+    }
+    if (!best) return null;
+    let target = best;
+    for (let i = 0; i < 5 && target; i++) {
+        const cs = getComputedStyle(target);
+        if (target.tagName === 'BUTTON' || target.tagName === 'A' ||
+            target.getAttribute('role') === 'button' || target.onclick ||
+            cs.cursor === 'pointer') {
+            target.click();
+            return best.innerText.trim();
+        }
+        target = target.parentElement;
+    }
+    best.click();
+    return best.innerText.trim();
+}
+"""
 
-    # Desplegar la pestaña/sección EMPLEADOR (puede ser tab, button, a, div...)
-    for sel in [
-        "button:has-text('EMPLEADOR')", "a:has-text('EMPLEADOR')",
-        "[role='tab']:has-text('EMPLEADOR')", "li:has-text('EMPLEADOR')",
-        "div:has-text('EMPLEADOR')", "*:has-text('Empleador')",
-    ]:
-        try:
-            el = page.locator(sel).first
-            if el.count() and el.is_visible():
-                el.click(timeout=4000)
-                log("[debug] Pestaña EMPLEADOR desplegada", "info")
-                time.sleep(1.5)
-                if snap:
-                    snap("1b_post_empleador")
-                break
-        except Exception:
-            continue
+# JS: hace click en el elemento que CONTIENE el RUT dado (empresa en la lista).
+_JS_CLICK_RUT = """
+(rut) => {
+    const rutClean = rut.replace(/[\\.\\-]/g, '').toUpperCase();
+    let best = null;
+    for (const el of document.querySelectorAll('button, a, div, li, span, .card, .mat-card, [role=button]')) {
+        const txt = (el.innerText || '').replace(/[\\.\\-]/g, '').toUpperCase();
+        if (txt.includes(rutClean)) {
+            if (!best || (el.innerText || '').length < (best.innerText || '').length) best = el;
+        }
+    }
+    if (!best) return null;
+    let target = best;
+    for (let i = 0; i < 5 && target; i++) {
+        const cs = getComputedStyle(target);
+        if (target.tagName === 'BUTTON' || target.tagName === 'A' ||
+            target.getAttribute('role') === 'button' || target.onclick ||
+            cs.cursor === 'pointer') {
+            target.click();
+            return best.innerText.trim();
+        }
+        target = target.parentElement;
+    }
+    best.click();
+    return best.innerText.trim();
+}
+"""
 
-    # Intentar también "Persona Jurídica" por si es un segundo nivel
-    for sel in [
-        "button:has-text('Persona Jurídica')", "a:has-text('Persona Jurídica')",
-        "[role='tab']:has-text('Persona Jurídica')", "li:has-text('Persona Jurídica')",
-    ]:
-        try:
-            el = page.locator(sel).first
-            if el.count() and el.is_visible():
-                el.click(timeout=4000)
-                time.sleep(1)
-                break
-        except Exception:
-            continue
 
-    rut_norm = rut_empresa.replace(".", "").upper()
-
-    # Volcado de depuración: mostrar todo lo que parezca perfil/empresa en pantalla
+def _dump_pantalla(page, log, etiqueta):
     try:
         textos = page.evaluate("""() => {
             const out = [];
-            for (const el of document.querySelectorAll('button, a, [role=tab], li, .card, .role, .perfil')) {
+            for (const el of document.querySelectorAll('button, a, [role=button], li, .card, .mat-card')) {
                 const t = (el.innerText || '').trim().replace(/\\s+/g, ' ');
                 if (t && t.length < 80) out.push(t);
             }
             return [...new Set(out)].slice(0, 40);
         }""")
-        log(f"[debug] Elementos en pantalla: {' | '.join(textos)}", "info")
+        log(f"[debug] {etiqueta}: {' | '.join(textos)}", "info")
     except Exception:
         pass
 
+
+def seleccionar_empresa(page, rut_empresa, log, snap=None):
+    """Selecciona perfil EMPLEADOR → empresa por RUT."""
+    time.sleep(2)  # dejar que /roles renderice
+    if snap:
+        snap("1a_roles_inicial")
+
+    # ── Paso 1: click en el perfil EMPLEADOR ───────────────────────────────────
+    log("Seleccionando perfil EMPLEADOR...", "info")
+    emp = page.evaluate(_JS_CLICK_EXACTO, "EMPLEADOR")
+    if not emp:
+        _dump_pantalla(page, log, "Perfiles disponibles")
+        raise Exception("No se encontró el perfil EMPLEADOR en la pantalla de roles")
+    log(f"[debug] Click perfil: {emp}", "info")
+
+    # Esperar a que aparezca la pantalla de selección de empresa
+    time.sleep(3)
+    try:
+        page.wait_for_load_state("networkidle", timeout=20000)
+    except PWTimeout:
+        pass
+    if snap:
+        snap("1b_post_empleador")
+    log(f"[debug] URL tras EMPLEADOR: {page.url}", "info")
+    _dump_pantalla(page, log, "Empresas/opciones tras EMPLEADOR")
+
+    # ── Paso 2: click en la empresa por RUT ────────────────────────────────────
+    rut_norm = rut_empresa.replace(".", "").replace("-", "").upper()
     log(f"Seleccionando empresa {rut_empresa}...", "info")
+    empresa = page.evaluate(_JS_CLICK_RUT, rut_empresa)
+    if not empresa:
+        raise Exception(f"No se encontró la empresa {rut_empresa} tras elegir EMPLEADOR")
+    log(f"[debug] Click empresa: {empresa}", "info")
 
-    # Buscar el elemento que contenga el RUT (cualquier tipo de nodo) y clickearlo
-    # por JS — funciona aunque esté oculto por un acordeón/pestaña colapsada.
-    clicked = page.evaluate("""(rut) => {
-        const rutClean = rut.replace(/\\./g, '').toUpperCase();
-        const nodes = document.querySelectorAll('button, a, li, div, .card, [role=button]');
-        for (const el of nodes) {
-            const txt = (el.innerText || '').replace(/\\./g, '').toUpperCase();
-            if (txt.includes(rutClean)) {
-                // Buscar el ancestro clickeable más cercano
-                let target = el;
-                for (let i = 0; i < 4 && target; i++) {
-                    if (target.tagName === 'BUTTON' || target.tagName === 'A' ||
-                        target.getAttribute('role') === 'button' ||
-                        target.onclick || target.className.includes('card') ||
-                        target.className.includes('role')) {
-                        target.click();
-                        return true;
-                    }
-                    target = target.parentElement;
-                }
-                el.click();
-                return true;
-            }
-        }
-        return false;
-    }""", rut_norm)
-
-    if not clicked:
-        raise Exception(f"No se encontró la empresa {rut_empresa} en la lista de perfiles")
-
-    page.wait_for_load_state("domcontentloaded", timeout=20000)
-    time.sleep(2)
+    time.sleep(3)
+    try:
+        page.wait_for_load_state("networkidle", timeout=20000)
+    except PWTimeout:
+        pass
+    if snap:
+        snap("1c_post_empresa")
     log(f"[debug] URL tras seleccionar empresa: {page.url}", "info")
     log("Empresa seleccionada", "ok")
 

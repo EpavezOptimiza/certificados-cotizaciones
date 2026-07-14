@@ -197,26 +197,48 @@ def _dump_pantalla(page, log, etiqueta):
         pass
 
 
+def _click_texto(page, candidatos, log, timeout=15000):
+    """Intenta clickear el primer elemento visible que coincida, probando
+    role=button → role=link → texto. `candidatos` es lista de textos a probar.
+    Usa clicks nativos de Playwright (manejan Angular y esperan actionability).
+    Devuelve el texto que funcionó, o None."""
+    for texto in candidatos:
+        for loc in [
+            page.get_by_role("button", name=texto),
+            page.get_by_role("link", name=texto),
+            page.get_by_text(texto),
+        ]:
+            try:
+                el = loc.first
+                el.wait_for(state="visible", timeout=3500)
+                el.scroll_into_view_if_needed(timeout=3000)
+                el.click(timeout=timeout)
+                return texto
+            except Exception:
+                continue
+    return None
+
+
 def seleccionar_empresa(page, rut_empresa, log, snap=None):
-    """Selecciona perfil EMPLEADOR → empresa por RUT."""
+    """Selecciona perfil EMPLEADOR → Empleador Persona Jurídica → empresa por RUT."""
     time.sleep(2)  # dejar que /roles renderice
     if snap:
         snap("1a_roles_inicial")
 
     # ── Paso 1: click en el perfil EMPLEADOR ───────────────────────────────────
     log("Seleccionando perfil EMPLEADOR...", "info")
-    emp = page.evaluate(_JS_CLICK_EXACTO, "EMPLEADOR")
+    emp = _click_texto(page, ["EMPLEADOR", "Empleador"], log)
     if not emp:
         _dump_pantalla(page, log, "Perfiles disponibles")
         raise Exception("No se encontró el perfil EMPLEADOR en la pantalla de roles")
     log(f"[debug] Click perfil: {emp}", "info")
 
     # Esperar a que aparezca la pantalla "Indica qué tipo de empleador"
-    time.sleep(3)
     try:
-        page.wait_for_load_state("networkidle", timeout=20000)
+        page.get_by_text("Persona Jurídica").first.wait_for(state="visible", timeout=20000)
     except PWTimeout:
         pass
+    time.sleep(1)
     if snap:
         snap("1b_post_empleador")
     log(f"[debug] URL tras EMPLEADOR: {page.url}", "info")
@@ -224,16 +246,19 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
 
     # ── Paso 2: click en "Empleador Persona Jurídica" ──────────────────────────
     log("Seleccionando Empleador Persona Jurídica...", "info")
-    pj = page.evaluate(_JS_CLICK_CONTIENE, "PERSONA JUR")
+    pj = _click_texto(page, ["Empleador Persona Jurídica", "Persona Jurídica"], log)
     if not pj:
         raise Exception("No se encontró 'Empleador Persona Jurídica' tras elegir EMPLEADOR")
     log(f"[debug] Click tipo empleador: {pj}", "info")
 
-    time.sleep(3)
+    # Esperar a que aparezca la lista de empresas (que contenga el RUT)
+    rut_sin = rut_empresa.replace(".", "").replace("-", "")
+    rut_con = rut_empresa
     try:
-        page.wait_for_load_state("networkidle", timeout=20000)
+        page.get_by_text(rut_sin[:6]).first.wait_for(state="visible", timeout=20000)
     except PWTimeout:
         pass
+    time.sleep(1.5)
     if snap:
         snap("1c_post_persona_juridica")
     log(f"[debug] URL tras Persona Jurídica: {page.url}", "info")
@@ -241,9 +266,9 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
 
     # ── Paso 3: click en la empresa por RUT ────────────────────────────────────
     log(f"Seleccionando empresa {rut_empresa}...", "info")
-    empresa = page.evaluate(_JS_CLICK_RUT, rut_empresa)
+    empresa = _click_texto(page, [rut_sin, rut_con, rut_empresa.replace("-", "")], log)
     if not empresa:
-        raise Exception(f"No se encontró la empresa {rut_empresa} tras elegir EMPLEADOR")
+        raise Exception(f"No se encontró la empresa {rut_empresa} tras elegir Persona Jurídica")
     log(f"[debug] Click empresa: {empresa}", "info")
 
     time.sleep(3)

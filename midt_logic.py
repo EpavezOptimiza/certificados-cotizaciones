@@ -49,11 +49,39 @@ def hacer_login(page, run, clave, log):
     pass_field = page.locator("#pword, input[type='password']").first
     pass_field.fill(clave)
 
-    # El botón INGRESA es type="button" y arranca deshabilitado hasta llenar ambos campos
+    # El botón #login-submit arranca con atributo disabled=true; ClaveÚnica lo
+    # habilita solo cuando los campos disparan keyup/blur. page.fill() no dispara
+    # keyup, así que forzamos los eventos para que la validación JS active el botón.
+    page.evaluate("""() => {
+        for (const sel of ['#uname', '#pword']) {
+            const el = document.querySelector(sel);
+            if (!el) continue;
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+            el.dispatchEvent(new Event('change', {bubbles:true}));
+            el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
+            el.dispatchEvent(new Event('blur', {bubbles:true}));
+        }
+    }""")
+
     ingresar = page.locator("#login-submit, button:has-text('INGRESA')").first
+    log("[debug] Esperando que INGRESA se habilite...", "info")
+    try:
+        ingresar.wait_for(state="visible", timeout=8000)
+        # Esperar hasta que ya no esté deshabilitado
+        page.wait_for_function(
+            "() => { const b = document.querySelector('#login-submit'); return b && !b.disabled; }",
+            timeout=8000
+        )
+    except PWTimeout:
+        pass
+
     log("[debug] Clickeando INGRESA...", "info")
     with page.expect_navigation(wait_until="domcontentloaded", timeout=35000):
-        ingresar.click(timeout=10000)
+        try:
+            ingresar.click(timeout=8000)
+        except PWTimeout:
+            # Fallback: click forzado saltando la comprobación de habilitado
+            ingresar.click(timeout=8000, force=True)
 
     log(f"[debug] URL post-login: {page.url}", "info")
 

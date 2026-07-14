@@ -2508,12 +2508,25 @@ def midt_descargar(tid):
 @api_login_required
 def midt_capturas():
     """Lista las capturas de depuración disponibles."""
-    shots = []
+    shots, htmls = [], []
     if os.path.isdir(_EXCELS_DIR):
         for fn in sorted(os.listdir(_EXCELS_DIR)):
             if fn.startswith("midt_") and fn.endswith(".png"):
                 shots.append(fn)
-    return jsonify({"capturas": shots})
+            elif fn.startswith("midt_") and fn.endswith(".html"):
+                htmls.append(fn)
+    return jsonify({"capturas": shots, "htmls": htmls})
+
+@app.route("/api/midt/html/<nombre>")
+@api_login_required
+def midt_html(nombre):
+    """Muestra el HTML capturado de una pantalla (para depuración)."""
+    if not (nombre.startswith("midt_") and nombre.endswith(".html")):
+        return jsonify({"error": "Nombre inválido"}), 400
+    ruta = os.path.join(_EXCELS_DIR, os.path.basename(nombre))
+    if not os.path.exists(ruta):
+        return jsonify({"error": "HTML no encontrado"}), 404
+    return send_file(ruta, mimetype="text/plain")
 
 @app.route("/api/midt/captura/<nombre>")
 @api_login_required

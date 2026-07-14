@@ -183,16 +183,36 @@ _JS_CLICK_RUT = """
 
 
 def _dump_pantalla(page, log, etiqueta):
+    """Vuelca al log los elementos clickeables con tag+atributos+texto,
+    para poder deducir selectores exactos sin ver el HTML completo."""
     try:
-        textos = page.evaluate("""() => {
+        items = page.evaluate("""() => {
             const out = [];
-            for (const el of document.querySelectorAll('button, a, [role=button], li, .card, .mat-card')) {
-                const t = (el.innerText || '').trim().replace(/\\s+/g, ' ');
-                if (t && t.length < 80) out.push(t);
+            const els = document.querySelectorAll(
+                'button, a, [role=button], [routerlink], .card, .mat-card, ' +
+                'input, [class*=btn], [class*=card], [class*=item]'
+            );
+            for (const el of els) {
+                const t = (el.innerText || el.value || '').trim().replace(/\\s+/g, ' ').slice(0, 45);
+                const cs = getComputedStyle(el);
+                const clickable = el.tagName === 'BUTTON' || el.tagName === 'A' ||
+                    el.onclick || el.getAttribute('role') === 'button' ||
+                    el.hasAttribute('routerlink') || cs.cursor === 'pointer';
+                if (!t && !clickable) continue;
+                let desc = el.tagName.toLowerCase();
+                if (el.id) desc += '#' + el.id;
+                if (el.className && typeof el.className === 'string')
+                    desc += '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.');
+                const rl = el.getAttribute('routerlink');
+                if (rl) desc += `[routerlink=${rl}]`;
+                if (clickable) desc += '*';
+                out.push(`${desc} "${t}"`);
             }
-            return [...new Set(out)].slice(0, 40);
+            return [...new Set(out)].slice(0, 30);
         }""")
-        log(f"[debug] {etiqueta}: {' | '.join(textos)}", "info")
+        log(f"[debug] {etiqueta}:", "info")
+        for it in items:
+            log(f"    {it}", "info")
     except Exception:
         pass
 
@@ -416,11 +436,18 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
         def snap(nombre):
             if not debug_dir:
                 return
+            import os as _os
             try:
-                import os as _os
                 ruta = _os.path.join(debug_dir, f"midt_{nombre}.png")
                 page.screenshot(path=ruta, full_page=True)
                 log(f"[shot] captura guardada: midt_{nombre}.png", "info")
+            except Exception:
+                pass
+            # Guardar también el HTML de la pantalla (para inspeccionar el DOM real)
+            try:
+                ruta_html = _os.path.join(debug_dir, f"midt_{nombre}.html")
+                with open(ruta_html, "w", encoding="utf-8") as fh:
+                    fh.write(page.content())
             except Exception:
                 pass
 

@@ -2458,7 +2458,8 @@ def midt_consultar():
             from midt_logic import consultar_ruts, generar_excel
             resultados = consultar_ruts(
                 run, clave, rut_empresa, ruts,
-                log=lambda m, t="info": _midt_log(tid, m, t)
+                log=lambda m, t="info": _midt_log(tid, m, t),
+                debug_dir=_EXCELS_DIR
             )
             xls_bytes = generar_excel(resultados)
             nombre = f"ConsultaDT_{_time.strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -2502,6 +2503,28 @@ def midt_descargar(tid):
     return send_file(t["archivo"], as_attachment=True,
                      download_name=os.path.basename(t["archivo"]),
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+@app.route("/api/midt/capturas")
+@api_login_required
+def midt_capturas():
+    """Lista las capturas de depuración disponibles."""
+    shots = []
+    if os.path.isdir(_EXCELS_DIR):
+        for fn in sorted(os.listdir(_EXCELS_DIR)):
+            if fn.startswith("midt_") and fn.endswith(".png"):
+                shots.append(fn)
+    return jsonify({"capturas": shots})
+
+@app.route("/api/midt/captura/<nombre>")
+@api_login_required
+def midt_captura(nombre):
+    """Muestra una captura de depuración en el navegador (inline)."""
+    if not (nombre.startswith("midt_") and nombre.endswith(".png")):
+        return jsonify({"error": "Nombre inválido"}), 400
+    ruta = os.path.join(_EXCELS_DIR, os.path.basename(nombre))
+    if not os.path.exists(ruta):
+        return jsonify({"error": "Captura no encontrada"}), 404
+    return send_file(ruta, mimetype="image/png")
 
 
 if __name__ == "__main__":

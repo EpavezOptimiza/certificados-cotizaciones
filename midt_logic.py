@@ -95,9 +95,11 @@ def hacer_login(page, run, clave, log):
 
 # ── Selección empresa ──────────────────────────────────────────────────────────
 
-def seleccionar_empresa(page, rut_empresa, log):
+def seleccionar_empresa(page, rut_empresa, log, snap=None):
     """Selecciona perfil EMPLEADOR → Persona Jurídica → empresa."""
     time.sleep(2)  # dejar que /roles renderice
+    if snap:
+        snap("1a_roles_inicial")
 
     # Desplegar la pestaña/sección EMPLEADOR (puede ser tab, button, a, div...)
     for sel in [
@@ -111,6 +113,8 @@ def seleccionar_empresa(page, rut_empresa, log):
                 el.click(timeout=4000)
                 log("[debug] Pestaña EMPLEADOR desplegada", "info")
                 time.sleep(1.5)
+                if snap:
+                    snap("1b_post_empleador")
                 break
         except Exception:
             continue
@@ -185,12 +189,14 @@ def seleccionar_empresa(page, rut_empresa, log):
 
 # ── Navegación al formulario ───────────────────────────────────────────────────
 
-def _ir_a_formulario(page, log):
+def _ir_a_formulario(page, log, snap=None):
     """Va a Registro Electrónico Laboral → Contrato Individual → Registrar."""
     page.goto(f"{_URL}/empleador/registro-electronico-laboral",
               wait_until="networkidle", timeout=45000)
     time.sleep(2)
     log(f"[debug] URL registro: {page.url}", "info")
+    if snap:
+        snap("2a_registro")
 
     # Volcado: mostrar todos los botones/enlaces disponibles en esta página
     try:
@@ -301,21 +307,35 @@ def _consultar_rut(page, rut, log):
 
 # ── Función principal ──────────────────────────────────────────────────────────
 
-def consultar_ruts(run, clave, rut_empresa, lista_ruts, log):
+def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
     """Consulta todos los RUTs y devuelve lista de dicts."""
     resultados = []
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
-        ctx     = browser.new_context()
+        ctx     = browser.new_context(viewport={"width": 1400, "height": 900})
         page    = ctx.new_page()
         page.set_default_timeout(45000)
         page.set_default_navigation_timeout(45000)
 
+        def snap(nombre):
+            if not debug_dir:
+                return
+            try:
+                import os as _os
+                ruta = _os.path.join(debug_dir, f"midt_{nombre}.png")
+                page.screenshot(path=ruta, full_page=True)
+                log(f"[shot] captura guardada: midt_{nombre}.png", "info")
+            except Exception:
+                pass
+
         try:
             hacer_login(page, run, clave, log)
-            seleccionar_empresa(page, rut_empresa, log)
-            _ir_a_formulario(page, log)
+            snap("1_roles")
+            seleccionar_empresa(page, rut_empresa, log, snap)
+            snap("2_post_empresa")
+            _ir_a_formulario(page, log, snap)
+            snap("3_formulario")
 
             for i, rut in enumerate(lista_ruts, 1):
                 rut = rut.strip()
@@ -339,6 +359,10 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log):
 
         except Exception as e:
             log(f"Error fatal: {e}", "err")
+            try:
+                snap("error")
+            except Exception:
+                pass
             raise
         finally:
             browser.close()

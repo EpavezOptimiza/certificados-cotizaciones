@@ -305,7 +305,8 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
 # ── Navegación al formulario ───────────────────────────────────────────────────
 
 def _ir_a_formulario(page, log, snap=None):
-    """Va a Registro Electrónico Laboral → Contrato Individual → Registrar."""
+    """Va a Registro Electrónico Laboral → 'Registrar'. Devuelve la página del
+    formulario (puede ser una pestaña nueva)."""
     page.goto(f"{_URL}/empleador/registro-electronico-laboral",
               wait_until="networkidle", timeout=45000)
     time.sleep(2)
@@ -313,41 +314,39 @@ def _ir_a_formulario(page, log, snap=None):
     if snap:
         snap("2a_registro")
 
-    # Volcado: mostrar todos los botones/enlaces disponibles en esta página
+    ctx = page.context
+    pags_antes = len(ctx.pages)
+
+    # Click en "Registrar" (el de la tarjeta 'Registro de Contrato de Trabajo
+    # Individual'). Capturar posible pestaña nueva.
+    registrar = page.get_by_role("button", name="Registrar").first
     try:
-        botones = page.evaluate("""() => {
-            const out = [];
-            for (const el of document.querySelectorAll('button, a, [role=button]')) {
-                const t = (el.innerText || '').trim().replace(/\\s+/g, ' ');
-                if (t && t.length < 60) out.push(t);
-            }
-            return [...new Set(out)].slice(0, 40);
-        }""")
-        log(f"[debug] Botones registro: {' | '.join(botones)}", "info")
-    except Exception:
+        registrar.wait_for(state="visible", timeout=8000)
+    except PWTimeout:
+        registrar = page.get_by_text("Registrar", exact=True).first
+
+    page_form = page
+    try:
+        with ctx.expect_page(timeout=8000) as nueva_info:
+            registrar.click(timeout=10000)
+        page_form = nueva_info.value
+        log("[debug] Se abrió una pestaña nueva con el formulario", "info")
+    except PWTimeout:
+        # No hubo pestaña nueva: navegó en la misma página
+        log("[debug] Registrar no abrió pestaña nueva; misma página", "info")
+
+    log("[debug] Click en botón: Registrar", "info")
+
+    try:
+        page_form.wait_for_load_state("networkidle", timeout=30000)
+    except PWTimeout:
         pass
-
-    # Buscar botón "Registrar" (o variantes) — click por JS si está oculto
-    clicked = page.evaluate("""() => {
-        const rx = /registrar|nuevo|crear|ingresar contrato|contrato individual/i;
-        for (const el of document.querySelectorAll('button, a, [role=button]')) {
-            const t = (el.innerText || '').trim();
-            if (rx.test(t)) { el.click(); return t; }
-        }
-        return null;
-    }""")
-
-    if not clicked:
-        raise Exception("No se encontró el botón 'Registrar' en la página de registro. "
-                        "Revisa la línea [debug] Botones registro para ver qué hay.")
-
-    log(f"[debug] Click en botón: {clicked}", "info")
-    page.wait_for_load_state("networkidle", timeout=30000)
-
-    # Esperar iframe
-    page.wait_for_selector("iframe", timeout=20000)
     time.sleep(3)
+
+    log(f"[debug] Pestañas abiertas: {len(ctx.pages)} (antes {pags_antes})", "info")
+    log(f"[debug] URL formulario: {page_form.url}", "info")
     log("Formulario cargado", "info")
+    return page_form
 
 
 def _frame_form(page, espera=20, log=None):
@@ -514,13 +513,17 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
         page.set_default_timeout(45000)
         page.set_default_navigation_timeout(45000)
 
+        # La página "activa" puede cambiar si el formulario abre pestaña nueva
+        estado = {"page": page}
+
         def snap(nombre):
             if not debug_dir:
                 return
             import os as _os
+            pg = estado["page"]
             try:
                 ruta = _os.path.join(debug_dir, f"midt_{nombre}.png")
-                page.screenshot(path=ruta, full_page=True)
+                pg.screenshot(path=ruta, full_page=True)
                 log(f"[shot] captura guardada: midt_{nombre}.png", "info")
             except Exception:
                 pass
@@ -528,7 +531,7 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
             try:
                 ruta_html = _os.path.join(debug_dir, f"midt_{nombre}.html")
                 with open(ruta_html, "w", encoding="utf-8") as fh:
-                    fh.write(page.content())
+                    fh.write(pg.content())
             except Exception:
                 pass
 
@@ -537,9 +540,10 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
             snap("1_roles")
             seleccionar_empresa(page, rut_empresa, log, snap)
             snap("2_post_empresa")
-            _ir_a_formulario(page, log, snap)
+            page_form = _ir_a_formulario(page, log, snap)
+            estado["page"] = page_form
             snap("3_formulario")
-            _dump_iframe(page, log)   # volcar campos del iframe una vez
+            _dump_iframe(page_form, log)   # volcar campos del formulario una vez
 
             for i, rut in enumerate(lista_ruts, 1):
                 rut = rut.strip()
@@ -547,7 +551,7 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
                     continue
                 log(f"[{i}/{len(lista_ruts)}] {rut}...", "info")
                 try:
-                    datos = _consultar_rut(page, rut, log)
+                    datos = _consultar_rut(page_form, rut, log)
                     resultados.append(datos)
                     ok = datos.get("Nombres") or datos.get("Calle")
                     log(f"[{i}] {'✓' if ok else '⚠'} {rut} → "
@@ -555,9 +559,10 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
                 except Exception as e:
                     log(f"[{i}] Error {rut}: {e}", "warn")
                     resultados.append({"RUT Trabajador": rut, "Error": str(e)})
-                    # Reintentar con nuevo formulario
+                    # Reintentar reabriendo el formulario
                     try:
-                        _ir_a_formulario(page, log)
+                        page_form = _ir_a_formulario(page, log)
+                        estado["page"] = page_form
                     except Exception:
                         pass
 

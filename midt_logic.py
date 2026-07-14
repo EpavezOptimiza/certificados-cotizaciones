@@ -346,8 +346,57 @@ def _ir_a_formulario(page, log, snap=None):
 
     # Esperar iframe
     page.wait_for_selector("iframe", timeout=20000)
-    time.sleep(2)
+    time.sleep(3)
     log("Formulario cargado", "info")
+
+
+def _frame_form(page):
+    """Devuelve el objeto Frame del formulario (iframe de registro)."""
+    for fr in page.frames:
+        if fr == page.main_frame:
+            continue
+        try:
+            if fr.query_selector("input, select"):
+                return fr
+        except Exception:
+            continue
+    # fallback: el primer frame hijo
+    hijos = [f for f in page.frames if f != page.main_frame]
+    return hijos[0] if hijos else page.main_frame
+
+
+def _dump_iframe(page, log):
+    """Vuelca los campos del formulario dentro del iframe."""
+    try:
+        fr = _frame_form(page)
+        campos = fr.evaluate("""() => {
+            const out = [];
+            for (const el of document.querySelectorAll('input, select, textarea')) {
+                let label = '';
+                if (el.id) {
+                    const l = document.querySelector(`label[for="${el.id}"]`);
+                    if (l) label = l.innerText.trim();
+                }
+                if (!label && el.getAttribute('aria-label')) label = el.getAttribute('aria-label');
+                if (!label) {
+                    const p = el.closest('mat-form-field, .form-group, div');
+                    if (p) { const l = p.querySelector('label, mat-label'); if (l) label = l.innerText.trim(); }
+                }
+                const desc = el.tagName.toLowerCase() +
+                    (el.type ? `[type=${el.type}]` : '') +
+                    (el.id ? `#${el.id}` : '') +
+                    (el.name ? `[name=${el.name}]` : '') +
+                    (el.getAttribute('formcontrolname') ? `[fcn=${el.getAttribute('formcontrolname')}]` : '') +
+                    (el.placeholder ? `[ph="${el.placeholder}"]` : '');
+                out.push(`${desc} label="${label}"`);
+            }
+            return out.slice(0, 40);
+        }""")
+        log("[debug] Campos del iframe:", "info")
+        for c in campos:
+            log(f"    {c}", "info")
+    except Exception as e:
+        log(f"[debug] No se pudo volcar iframe: {e}", "warn")
 
 
 # ── Consulta de un RUT ─────────────────────────────────────────────────────────
@@ -360,10 +409,29 @@ def _consultar_rut(page, rut, log):
     page.locator("iframe").scroll_into_view_if_needed()
     time.sleep(0.5)
 
-    # Campo RUT Persona Trabajadora
-    rut_input = frame.get_by_label("RUT Persona Trabajadora", exact=False)
+    # Campo RUT Persona Trabajadora — probar varias estrategias de localización
+    rut_input = None
+    for intento in [
+        lambda: frame.get_by_label("RUT Persona Trabajadora", exact=False),
+        lambda: frame.get_by_placeholder("RUT", exact=False),
+        lambda: frame.locator("input[formcontrolname*='rut' i]"),
+        lambda: frame.locator("input[name*='rut' i]"),
+        lambda: frame.locator("input[id*='rut' i]"),
+        lambda: frame.locator("input[type='text']").first,
+    ]:
+        try:
+            cand = intento().first
+            cand.wait_for(state="visible", timeout=4000)
+            rut_input = cand
+            break
+        except Exception:
+            continue
+
+    if rut_input is None:
+        raise Exception("No se encontró el campo 'RUT Persona Trabajadora' en el iframe")
+
     rut_input.click(timeout=10000)
-    rut_input.triple_click()
+    rut_input.fill("")
     rut_input.fill(rut)
 
     # Botón buscar (el botón azul junto al campo RUT)
@@ -458,6 +526,7 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
             snap("2_post_empresa")
             _ir_a_formulario(page, log, snap)
             snap("3_formulario")
+            _dump_iframe(page, log)   # volcar campos del iframe una vez
 
             for i, rut in enumerate(lista_ruts, 1):
                 rut = rut.strip()

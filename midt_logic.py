@@ -561,8 +561,31 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
     resultados = []
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        ctx     = browser.new_context(viewport={"width": 1400, "height": 900})
+        # Medidas anti-detección: el portal DT no renderiza el formulario si
+        # detecta un navegador automatizado (headless / navigator.webdriver).
+        browser = pw.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--no-sandbox",
+            ],
+        )
+        ctx = browser.new_context(
+            viewport={"width": 1400, "height": 900},
+            user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/125.0.0.0 Safari/537.36"),
+            locale="es-CL",
+            timezone_id="America/Santiago",
+        )
+        # Ocultar señales de automatización antes de cargar cualquier página
+        ctx.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['es-CL','es']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+            window.chrome = window.chrome || {runtime: {}};
+        """)
         page    = ctx.new_page()
         page.set_default_timeout(45000)
         page.set_default_navigation_timeout(45000)

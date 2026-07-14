@@ -125,6 +125,34 @@ _JS_CLICK_EXACTO = """
 }
 """
 
+# JS: hace click en el elemento más pequeño cuyo texto CONTIENE `sub` (subcadena).
+_JS_CLICK_CONTIENE = """
+(sub) => {
+    const objetivo = sub.trim().toUpperCase();
+    let best = null;
+    for (const el of document.querySelectorAll('button, a, div, span, li, [role=button], .card, .mat-card')) {
+        const t = (el.innerText || '').trim().toUpperCase();
+        if (t.includes(objetivo)) {
+            if (!best || (el.innerText || '').length < (best.innerText || '').length) best = el;
+        }
+    }
+    if (!best) return null;
+    let target = best;
+    for (let i = 0; i < 5 && target; i++) {
+        const cs = getComputedStyle(target);
+        if (target.tagName === 'BUTTON' || target.tagName === 'A' ||
+            target.getAttribute('role') === 'button' || target.onclick ||
+            cs.cursor === 'pointer') {
+            target.click();
+            return best.innerText.trim();
+        }
+        target = target.parentElement;
+    }
+    best.click();
+    return best.innerText.trim();
+}
+"""
+
 # JS: hace click en el elemento que CONTIENE el RUT dado (empresa en la lista).
 _JS_CLICK_RUT = """
 (rut) => {
@@ -183,7 +211,7 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
         raise Exception("No se encontró el perfil EMPLEADOR en la pantalla de roles")
     log(f"[debug] Click perfil: {emp}", "info")
 
-    # Esperar a que aparezca la pantalla de selección de empresa
+    # Esperar a que aparezca la pantalla "Indica qué tipo de empleador"
     time.sleep(3)
     try:
         page.wait_for_load_state("networkidle", timeout=20000)
@@ -192,10 +220,26 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
     if snap:
         snap("1b_post_empleador")
     log(f"[debug] URL tras EMPLEADOR: {page.url}", "info")
-    _dump_pantalla(page, log, "Empresas/opciones tras EMPLEADOR")
+    _dump_pantalla(page, log, "Opciones tras EMPLEADOR")
 
-    # ── Paso 2: click en la empresa por RUT ────────────────────────────────────
-    rut_norm = rut_empresa.replace(".", "").replace("-", "").upper()
+    # ── Paso 2: click en "Empleador Persona Jurídica" ──────────────────────────
+    log("Seleccionando Empleador Persona Jurídica...", "info")
+    pj = page.evaluate(_JS_CLICK_CONTIENE, "PERSONA JUR")
+    if not pj:
+        raise Exception("No se encontró 'Empleador Persona Jurídica' tras elegir EMPLEADOR")
+    log(f"[debug] Click tipo empleador: {pj}", "info")
+
+    time.sleep(3)
+    try:
+        page.wait_for_load_state("networkidle", timeout=20000)
+    except PWTimeout:
+        pass
+    if snap:
+        snap("1c_post_persona_juridica")
+    log(f"[debug] URL tras Persona Jurídica: {page.url}", "info")
+    _dump_pantalla(page, log, "Empresas tras Persona Jurídica")
+
+    # ── Paso 3: click en la empresa por RUT ────────────────────────────────────
     log(f"Seleccionando empresa {rut_empresa}...", "info")
     empresa = page.evaluate(_JS_CLICK_RUT, rut_empresa)
     if not empresa:
@@ -208,7 +252,7 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
     except PWTimeout:
         pass
     if snap:
-        snap("1c_post_empresa")
+        snap("1d_post_empresa")
     log(f"[debug] URL tras seleccionar empresa: {page.url}", "info")
     log("Empresa seleccionada", "ok")
 

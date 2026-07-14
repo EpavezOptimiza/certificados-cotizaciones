@@ -316,24 +316,61 @@ def _ir_a_formulario(page, log, snap=None):
 
     ctx = page.context
     pags_antes = len(ctx.pages)
-
-    # Click en "Registrar" (el de la tarjeta 'Registro de Contrato de Trabajo
-    # Individual'). Capturar posible pestaña nueva.
-    registrar = page.get_by_role("button", name="Registrar").first
-    try:
-        registrar.wait_for(state="visible", timeout=8000)
-    except PWTimeout:
-        registrar = page.get_by_text("Registrar", exact=True).first
-
     page_form = page
-    try:
-        with ctx.expect_page(timeout=8000) as nueva_info:
-            registrar.click(timeout=10000)
-        page_form = nueva_info.value
-        log("[debug] Se abrió una pestaña nueva con el formulario", "info")
-    except PWTimeout:
-        # No hubo pestaña nueva: navegó en la misma página
-        log("[debug] Registrar no abrió pestaña nueva; misma página", "info")
+
+    def _en_tarjetas():
+        """True si seguimos en la pantalla de tarjetas (no entró al formulario)."""
+        try:
+            return page_form.get_by_text("Registro de Contrato de Trabajo Individual").first.is_visible(timeout=2000)
+        except Exception:
+            return False
+
+    # Estrategias de click sobre "Registrar", verificando que SALGA de las tarjetas
+    estrategias = [
+        ("role=button", lambda: page.get_by_role("button", name="Registrar").first),
+        ("text-exact",  lambda: page.get_by_text("Registrar", exact=True).first),
+        ("link",        lambda: page.get_by_role("link", name="Registrar").first),
+        ("css-button",  lambda: page.locator("button:has-text('Registrar')").first),
+    ]
+
+    clicado = False
+    for nombre, getter in estrategias:
+        try:
+            el = getter()
+            el.wait_for(state="visible", timeout=5000)
+            el.scroll_into_view_if_needed(timeout=3000)
+            el.click(timeout=8000)
+            log(f"[debug] Click 'Registrar' con estrategia: {nombre}", "info")
+            # Verificar que cambió (URL o salió de tarjetas) — hasta 8s
+            cambio = False
+            for _ in range(8):
+                if "registroContratoTrabajo" in page_form.url or not _en_tarjetas():
+                    cambio = True
+                    break
+                time.sleep(1)
+            if cambio:
+                clicado = True
+                log(f"[debug] '{nombre}' funcionó → {page_form.url}", "info")
+                break
+            else:
+                log(f"[debug] '{nombre}' no cambió la pantalla, probando otra...", "warn")
+        except Exception as e:
+            log(f"[debug] estrategia {nombre} falló: {str(e)[:60]}", "warn")
+            continue
+
+    # Último recurso: click por JS sobre el botón cuyo texto es 'Registrar'
+    if not clicado:
+        log("[debug] Probando click por JS sobre 'Registrar'...", "warn")
+        try:
+            page.evaluate("""() => {
+                for (const el of document.querySelectorAll('button, a')) {
+                    if ((el.innerText||'').trim() === 'Registrar') { el.click(); return true; }
+                }
+                return false;
+            }""")
+            time.sleep(3)
+        except Exception:
+            pass
 
     log("[debug] Click en botón: Registrar", "info")
 

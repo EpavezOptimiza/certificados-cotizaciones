@@ -12,20 +12,53 @@ _URL = "https://midt.dirtrab.cl"
 
 def hacer_login(page, run, clave, log):
     log("Abriendo Mi DT...", "info")
-    page.goto(_URL, wait_until="domcontentloaded", timeout=30000)
+    page.goto(_URL, wait_until="networkidle", timeout=45000)
+    log(f"[debug] URL inicial: {page.url}", "info")
 
-    # Click "Iniciar sesión" → redirige a ClaveÚnica
-    page.click("a:has-text('Iniciar sesión'), button:has-text('Iniciar sesión')", timeout=15000)
-    page.wait_for_url("*accounts.claveunica*", timeout=25000)
-    page.wait_for_load_state("domcontentloaded", timeout=20000)
+    # Buscar el botón de login con varios selectores posibles
+    btn_login = page.locator(
+        "a:has-text('Iniciar sesión'), button:has-text('Iniciar sesión'), "
+        "a:has-text('Ingresar'), button:has-text('Ingresar'), "
+        "a:has-text('Login'), a[href*='login'], a[href*='clave']"
+    ).first
+    log(f"[debug] Haciendo click en botón login...", "info")
 
+    # expect_navigation maneja el redirect aunque sea JS-driven
+    try:
+        with page.expect_navigation(wait_until="domcontentloaded", timeout=35000):
+            btn_login.click(timeout=10000)
+    except PWTimeout:
+        # Puede que ya navegó antes de que capturáramos
+        page.wait_for_load_state("domcontentloaded", timeout=10000)
+
+    log(f"[debug] URL tras click: {page.url}", "info")
+
+    # Esperar ClaveÚnica — el dominio real es claveunica.gob.cl
+    if "claveunica" not in page.url.lower():
+        page.wait_for_url("*claveunica*", timeout=30000)
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
+
+    log(f"[debug] URL ClaveÚnica: {page.url}", "info")
     log("Ingresando ClaveÚnica...", "info")
-    page.locator("input[placeholder*='RUN'], input[id*='run'], input[name*='run']").first.fill(run)
-    page.locator("input[type='password']").first.fill(clave)
-    page.locator("button[type='submit'], input[type='submit']").first.click()
 
-    page.wait_for_url(f"*midt.dirtrab*", timeout=30000)
-    page.wait_for_load_state("domcontentloaded", timeout=20000)
+    # Campo RUN — ClaveÚnica usa input type="text" con name/id "run" o "username"
+    run_field = page.locator(
+        "input[name='run'], input[id='run'], input[name='username'], "
+        "input[placeholder*='RUN'], input[placeholder*='run'], input[type='text']"
+    ).first
+    run_field.fill(run, timeout=10000)
+    page.locator("input[type='password']").first.fill(clave)
+
+    with page.expect_navigation(wait_until="domcontentloaded", timeout=35000):
+        page.locator("button[type='submit'], input[type='submit']").first.click()
+
+    log(f"[debug] URL post-login: {page.url}", "info")
+
+    # Esperar redirección de vuelta a Mi DT
+    if "midt.dirtrab" not in page.url.lower():
+        page.wait_for_url("*midt.dirtrab*", timeout=30000)
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
+
     log("Login exitoso", "ok")
 
 

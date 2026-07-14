@@ -337,15 +337,43 @@ def _ir_a_formulario(page, log, snap=None):
 
     log("[debug] Click en botón: Registrar", "info")
 
+    # Esperar a que la URL cambie al formulario del contrato
+    try:
+        page_form.wait_for_url("**registroContratoTrabajo**", timeout=20000)
+    except PWTimeout:
+        pass
     try:
         page_form.wait_for_load_state("networkidle", timeout=30000)
     except PWTimeout:
         pass
-    time.sleep(3)
 
+    # Esperar activamente a que aparezcan campos en ALGÚN frame (hasta 35s)
+    total = 0
+    for _ in range(35):
+        total = 0
+        for fr in page_form.frames:
+            try:
+                total += fr.evaluate(
+                    "() => document.querySelectorAll('input,select,textarea').length"
+                )
+            except Exception:
+                pass
+        if total > 0:
+            break
+        time.sleep(1)
+
+    time.sleep(2)
     log(f"[debug] Pestañas abiertas: {len(ctx.pages)} (antes {pags_antes})", "info")
     log(f"[debug] URL formulario: {page_form.url}", "info")
-    log("Formulario cargado", "info")
+    # Panorama de frames SIEMPRE (para diagnóstico)
+    for fr in page_form.frames:
+        try:
+            n = fr.evaluate("() => document.querySelectorAll('input,select,textarea').length")
+        except Exception:
+            n = -1
+        marca = fr.url[:65] if fr.url else "(sin url)"
+        log(f"[debug] frame {marca} → {n} campos", "info")
+    log(f"Formulario cargado ({total} campos detectados)", "info")
     return page_form
 
 

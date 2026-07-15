@@ -596,6 +596,40 @@ _JS_BOTONES = """() => {
 }"""
 
 
+# JS: lee la COMUNA del trabajador. En el form DT es un mat-select (Angular
+# Material), que _JS_EXTRAER no capta porque no es <input>/<select> nativo.
+_JS_LEER_COMUNA = """() => {
+    const norm = s => (s || '').toLowerCase();
+    const limpiar = s => (s || '').replace(/\\s+/g, ' ').trim();
+    // 1) control cuyo id/formcontrolname mencione 'comuna' Y 'trab' (evita empleador)
+    for (const el of document.querySelectorAll('mat-select, select, input, [formcontrolname]')) {
+        const key = norm((el.id || '') + ' ' + (el.getAttribute('formcontrolname') || ''));
+        if (!(key.includes('comuna') && key.includes('trab'))) continue;
+        if (el.tagName === 'SELECT') {
+            const o = el.options[el.selectedIndex];
+            if (o && limpiar(o.text)) return limpiar(o.text);
+        }
+        const vt = el.querySelector('.mat-select-value-text, .mat-mdc-select-value-text, [class*=select-value]');
+        if (vt && limpiar(vt.innerText)) return limpiar(vt.innerText);
+        if (el.value && limpiar(el.value)) return limpiar(el.value);
+    }
+    // 2) por etiqueta 'comuna' (evitando la del empleador, que suele ir arriba)
+    const labs = [...document.querySelectorAll('label, mat-label')].filter(
+        l => norm(l.innerText).includes('comuna') && !norm(l.innerText).includes('emplea'));
+    for (const lab of labs.reverse()) {   // la del trabajador suele ir más abajo
+        const cont = lab.closest('mat-form-field, .form-group, .field, .row, div');
+        if (!cont) continue;
+        const sel = cont.querySelector('select');
+        if (sel) { const o = sel.options[sel.selectedIndex]; if (o && limpiar(o.text)) return limpiar(o.text); }
+        const vt = cont.querySelector('.mat-select-value-text, .mat-mdc-select-value-text, [class*=select-value]');
+        if (vt && limpiar(vt.innerText)) return limpiar(vt.innerText);
+        const inp = cont.querySelector('input');
+        if (inp && limpiar(inp.value)) return limpiar(inp.value);
+    }
+    return '';
+}"""
+
+
 def _aplanar_json(obj, out, clave=""):
     """Aplana un JSON anidado a {clave_minuscula: valor_str}."""
     if isinstance(obj, dict):
@@ -736,6 +770,28 @@ def _consultar_rut(page, rut, log, primera=False, snap=None):
             calle     = api["calle"]
             numero    = api["numero"]
             comuna    = api["comuna"]
+
+    # 8b. Comuna: resolución independiente (el form la muestra en un mat-select
+    # que _JS_EXTRAER no capta, y la vía API de arriba sólo corre si TODO vino
+    # vacío). Se resuelve aunque el resto de datos ya haya llegado del formulario.
+    if not comuna:
+        # buscar en los datos del form cualquier clave que mencione 'comuna'
+        for k, v in datos.items():
+            kl = k.lower()
+            if "comuna" in kl and "emplea" not in kl and "juri" not in kl and v:
+                comuna = v
+                break
+    if not comuna:
+        try:
+            comuna = (frame.evaluate(_JS_LEER_COMUNA) or "").strip()
+        except Exception:
+            pass
+    if not comuna and respuestas:
+        api = _extraer_de_json(respuestas, log)
+        if api and api.get("comuna"):
+            comuna = api["comuna"]
+    if primera:
+        log(f"  [debug] comuna resuelta: '{comuna}'", "info")
 
     # 9. Diagnóstico completo de un solo disparo (solo primer RUT sin datos)
     if primera and not (nombres or correo or calle):

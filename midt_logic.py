@@ -443,45 +443,90 @@ def _dump_iframe(page, log):
 
 # ── Consulta de un RUT ─────────────────────────────────────────────────────────
 
-def _consultar_rut(page, rut, log):
-    """Rellena el RUT del trabajador y extrae los datos auto-rellenados."""
-    # Detectar el frame que realmente contiene el formulario (main o iframe)
-    frame = _frame_form(page)
+_JS_EXTRAER = """() => {
+    const out = {};
+    for (const el of document.querySelectorAll('input, select, textarea')) {
+        // Buscar etiqueta por varias fuentes (Angular mat-form-field, aria, placeholder, id)
+        let label = (el.getAttribute('aria-label') || '').trim();
+        if (!label && el.id) {
+            const l = document.querySelector('label[for="' + el.id + '"]');
+            if (l) label = l.textContent.trim();
+        }
+        if (!label) {
+            const ff = el.closest('mat-form-field, .form-group, .field');
+            if (ff) {
+                const ml = ff.querySelector('mat-label, label, .label');
+                if (ml) label = ml.textContent.trim();
+            }
+        }
+        if (!label) label = (el.getAttribute('formcontrolname') || el.placeholder || '').trim();
+        const val = el.tagName === 'SELECT'
+            ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].text.trim() : '')
+            : (el.value || '').trim();
+        if (label) out[label] = val;
+    }
+    return out;
+}"""
 
-    # Campo RUT Persona Trabajadora — probar varias estrategias de localización
-    rut_input = None
-    for intento in [
-        lambda: frame.get_by_label("RUT Persona Trabajadora", exact=False),
-        lambda: frame.get_by_placeholder("RUT", exact=False),
-        lambda: frame.locator("input[formcontrolname*='rut' i]"),
-        lambda: frame.locator("input[name*='rut' i]"),
-        lambda: frame.locator("input[id*='rut' i]"),
-        lambda: frame.locator("input[type='text']").first,
+
+def _extraer_datos_frame(frame):
+    """Extrae todos los valores del formulario con sus etiquetas."""
+    try:
+        return frame.evaluate(_JS_EXTRAER) or {}
+    except Exception:
+        return {}
+
+
+def _esperar_datos(frame, max_seg=8):
+    """Espera hasta que algún campo tenga valor (poll cada 0.4s). Más rápido que sleep fijo."""
+    for _ in range(int(max_seg / 0.4)):
+        datos = _extraer_datos_frame(frame)
+        valores = [v for k, v in datos.items() if v and k.lower() not in ('rut', 'run')]
+        if valores:
+            return datos
+        time.sleep(0.4)
+    return _extraer_datos_frame(frame)
+
+
+def _buscar_campo_rut(frame):
+    """Encuentra el primer campo de texto editable del formulario (RUT trabajador)."""
+    for sel in [
+        "input[formcontrolname*='rut' i]",
+        "input[aria-label*='rut' i]",
+        "input[placeholder*='rut' i]",
+        "input[id*='rut' i]",
+        "input[type='text']",
     ]:
         try:
-            cand = intento().first
-            cand.wait_for(state="visible", timeout=4000)
-            rut_input = cand
-            break
+            loc = frame.locator(sel).first
+            loc.wait_for(state="visible", timeout=3000)
+            return loc
         except Exception:
             continue
+    return None
 
+
+def _consultar_rut(page, rut, log):
+    """Rellena el RUT del trabajador y extrae los datos auto-rellenados."""
+    frame = _get_iframe_frame(page, espera=10)
+    if frame is None:
+        frame = _frame_form(page)
+
+    rut_input = _buscar_campo_rut(frame)
     if rut_input is None:
-        raise Exception("No se encontró el campo 'RUT Persona Trabajadora' en el formulario")
+        raise Exception("No se encontró campo RUT en el formulario")
 
     rut_input.scroll_into_view_if_needed(timeout=5000)
-    # Usar teclas reales para triggear la validación Angular del formulario
     _tipo_campo(None, rut_input, rut)
 
-    # Botón buscar (lupa junto al campo RUT)
+    # Botón lupa / buscar
     search_btn = None
-    for sel in [
-        "button[aria-label*='buscar' i]", "button[aria-label*='search' i]",
-        "button.btn-search", "button[type='button'] mat-icon",
-    ]:
+    for sel in ["button[aria-label*='buscar' i]", "button[aria-label*='search' i]",
+                "button.btn-search", "button[type='button']:has(mat-icon)",
+                "button[type='submit']"]:
         try:
             cand = frame.locator(sel).first
-            cand.wait_for(state="visible", timeout=3000)
+            cand.wait_for(state="visible", timeout=2000)
             search_btn = cand
             break
         except Exception:
@@ -489,42 +534,35 @@ def _consultar_rut(page, rut, log):
 
     if search_btn:
         try:
-            search_btn.click(timeout=5000)
+            search_btn.click(timeout=4000)
         except Exception:
             rut_input.press("Enter")
     else:
         rut_input.press("Enter")
 
-    # Esperar que se rellenen los datos (Nombres o Fecha)
-    time.sleep(3)
+    # Espera inteligente: hasta 8s, sale en cuanto hay datos
+    datos = _esperar_datos(frame, max_seg=8)
 
-    def _val(label):
-        try:
-            el = frame.get_by_label(label, exact=False)
-            v = el.input_value(timeout=4000).strip()
-            if not v:
-                # Puede ser un <select> con texto visible
-                v = el.locator("option:checked").text_content(timeout=2000) or ""
-            return v
-        except Exception:
-            return ""
+    # Mapeo flexible: busca la clave que contenga cada término
+    def _buscar(terminos):
+        for t in terminos:
+            t_l = t.lower()
+            for k, v in datos.items():
+                if t_l in k.lower() and v:
+                    return v
+        return ""
 
-    def _select_val(label):
-        try:
-            el = frame.get_by_label(label, exact=False)
-            # Para selects, el valor visible es el option seleccionado
-            v = el.evaluate("e => e.options[e.selectedIndex]?.text || e.value").strip()
-            return v
-        except Exception:
-            return _val(label)
+    nombres   = _buscar(["nombre", "first", "nombres"])
+    apellidos = _buscar(["apellido", "last"])
+    fecha_nac = _buscar(["nacimiento", "fecha", "birth"])
+    correo    = _buscar(["correo", "email", "mail"])
+    calle     = _buscar(["calle", "street", "dirección", "direccion"])
+    numero    = _buscar(["número", "numero", "nro"])
+    comuna    = _buscar(["comuna", "city", "ciudad"])
 
-    nombres   = _val("Nombres")
-    apellidos = _val("Apellidos")
-    fecha_nac = _val("Fecha de nacimiento")
-    correo    = _val("Correo electrónico")
-    calle     = _val("Calle")
-    numero    = _val("Número")
-    comuna    = _select_val("Comuna")
+    # Si no encontró nada con etiquetas, loguear para diagnóstico
+    if not nombres and not correo:
+        log(f"  campos encontrados: {list(datos.keys())[:10]}", "warn")
 
     return {
         "RUT Trabajador": rut,
@@ -534,7 +572,7 @@ def _consultar_rut(page, rut, log):
         "Correo":         correo,
         "Calle":          f"{calle} {numero}".strip(),
         "Comuna":         comuna,
-        "Error":          "" if nombres else "sin datos",
+        "Error":          "" if (nombres or correo or calle) else "sin datos",
     }
 
 

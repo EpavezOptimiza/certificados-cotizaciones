@@ -319,143 +319,62 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
 
 # ── Navegación al formulario ───────────────────────────────────────────────────
 
+_IFRAME_SRC = "front001-registro-electronico-lab.api.dirtrab.cl"
+
+def _get_iframe_frame(page, espera=20):
+    """Devuelve el Frame Python del iframe del formulario DT."""
+    for _ in range(espera):
+        for fr in page.frames:
+            if _IFRAME_SRC in (fr.url or ""):
+                return fr
+        time.sleep(1)
+    return None
+
+
 def _ir_a_formulario(page, log, snap=None):
-    """Va a Registro Electrónico Laboral → 'Registrar'. Devuelve la página del
-    formulario (puede ser una pestaña nueva)."""
-    page.goto(f"{_URL}/empleador/registro-electronico-laboral",
-              wait_until="networkidle", timeout=45000)
+    """Navega al formulario de registro de contrato dentro del iframe DT."""
+    url_destino = f"{_URL}/empleador/registro-electronico-laboral/registroContratoTrabajo"
+    page.goto(url_destino, wait_until="networkidle", timeout=45000)
     time.sleep(2)
-    log(f"[debug] URL registro: {page.url}", "info")
-    if snap:
-        snap("2a_registro")
 
-    ctx = page.context
-    pags_antes = len(ctx.pages)
-    page_form = page
+    log("Esperando iframe del formulario...", "info")
 
-    def _en_tarjetas():
-        """True si seguimos en la pantalla de tarjetas (no entró al formulario)."""
-        try:
-            return page_form.get_by_text("Registro de Contrato de Trabajo Individual").first.is_visible(timeout=2000)
-        except Exception:
-            return False
+    # El formulario está en un iframe cross-origin. Usar frame_locator para interactuar.
+    iframe_loc = page.frame_locator(f"iframe[src*='{_IFRAME_SRC}'], iframe").first
 
-    # Estrategias de click sobre "Registrar", verificando que SALGA de las tarjetas.
-    # El botón real es: <button class="ui blue basic button btn-register">Registrar</button>
-    estrategias = [
-        ("btn-register", lambda: page.locator("button.btn-register").first),
-        ("role=button",  lambda: page.get_by_role("button", name="Registrar").first),
-        ("text-exact",   lambda: page.get_by_text("Registrar", exact=True).first),
-        ("css-button",   lambda: page.locator("button:has-text('Registrar')").first),
-    ]
-
-    clicado = False
-    for nombre, getter in estrategias:
-        try:
-            el = getter()
-            el.wait_for(state="visible", timeout=5000)
-            el.scroll_into_view_if_needed(timeout=3000)
-            el.click(timeout=8000)
-            log(f"[debug] Click 'Registrar' con estrategia: {nombre}", "info")
-            # Verificar que cambió (URL o salió de tarjetas) — hasta 8s
-            cambio = False
-            for _ in range(8):
-                if "registroContratoTrabajo" in page_form.url or not _en_tarjetas():
-                    cambio = True
-                    break
-                time.sleep(1)
-            if cambio:
-                clicado = True
-                log(f"[debug] '{nombre}' funcionó → {page_form.url}", "info")
-                break
-            else:
-                log(f"[debug] '{nombre}' no cambió la pantalla, probando otra...", "warn")
-        except Exception as e:
-            log(f"[debug] estrategia {nombre} falló: {str(e)[:60]}", "warn")
-            continue
-
-    # Último recurso: click por JS sobre el botón .btn-register (o texto 'Registrar')
-    if not clicado:
-        log("[debug] Probando click por JS sobre '.btn-register'...", "warn")
-        try:
-            page.evaluate("""() => {
-                const b = document.querySelector('button.btn-register');
-                if (b) { b.click(); return true; }
-                for (const el of document.querySelectorAll('button, a')) {
-                    if ((el.innerText||'').trim() === 'Registrar') { el.click(); return true; }
-                }
-                return false;
-            }""")
-            time.sleep(3)
-        except Exception:
-            pass
-
-    log("[debug] Click en botón: Registrar", "info")
-
-    # Esperar a que la URL cambie al formulario del contrato
+    # Esperar y clickear "Registrar" dentro del iframe
+    log("Buscando botón Registrar...", "info")
     try:
-        page_form.wait_for_url("**registroContratoTrabajo**", timeout=20000)
-    except PWTimeout:
-        pass
-    try:
-        page_form.wait_for_load_state("networkidle", timeout=30000)
-    except PWTimeout:
-        pass
+        btn = iframe_loc.get_by_role("button", name="Registrar")
+        btn.wait_for(state="visible", timeout=20000)
+        btn.click()
+        log("Click en Registrar", "info")
+    except Exception as e:
+        # Fallback: buscar por texto
+        try:
+            btn = iframe_loc.get_by_text("Registrar", exact=True)
+            btn.wait_for(state="visible", timeout=10000)
+            btn.click()
+            log("Click en Registrar (fallback texto)", "info")
+        except Exception as e2:
+            raise Exception(f"No se pudo clickear 'Registrar' en el iframe: {e} / {e2}")
 
-    def _contar_campos():
-        t = 0
-        for fr in page_form.frames:
+    # Esperar que aparezcan campos del formulario en el iframe (hasta 30s)
+    log("Esperando formulario de RUT...", "info")
+    fr = _get_iframe_frame(page, espera=5)
+    for _ in range(30):
+        if fr:
             try:
-                t += fr.evaluate("() => document.querySelectorAll('input,select,textarea').length")
+                n = fr.evaluate("() => document.querySelectorAll('input,select,textarea').length")
+                if n > 0:
+                    log(f"Formulario cargado ({n} campos)", "ok")
+                    return page
             except Exception:
                 pass
-        return t
+        time.sleep(1)
+        fr = _get_iframe_frame(page, espera=1)
 
-    def _esperar_campos(segundos):
-        for _ in range(segundos):
-            if _contar_campos() > 0:
-                return True
-            time.sleep(1)
-        return False
-
-    # Esperar activamente a que aparezcan campos (hasta 25s)
-    ok = _esperar_campos(25)
-
-    # Fallback 1: si no renderizó, navegar directo a la URL del formulario
-    if not ok:
-        url_form = page_form.url
-        if "registroContratoTrabajo" not in url_form:
-            url_form = f"{_URL}/empleador/registro-electronico-laboral/registroContratoTrabajo"
-        log("[debug] Formulario sin campos; navegando directo a la URL...", "warn")
-        try:
-            page_form.goto(url_form, wait_until="networkidle", timeout=40000)
-        except Exception:
-            pass
-        ok = _esperar_campos(20)
-
-    # Fallback 2: recargar la página del formulario
-    if not ok:
-        log("[debug] Aún sin campos; recargando el formulario...", "warn")
-        try:
-            page_form.reload(wait_until="networkidle", timeout=40000)
-        except Exception:
-            pass
-        ok = _esperar_campos(20)
-
-    total = _contar_campos()
-    time.sleep(2)
-    log(f"[debug] Pestañas abiertas: {len(ctx.pages)} (antes {pags_antes})", "info")
-    log(f"[debug] URL formulario: {page_form.url}", "info")
-    # Panorama de frames SIEMPRE (para diagnóstico)
-    for fr in page_form.frames:
-        try:
-            n = fr.evaluate("() => document.querySelectorAll('input,select,textarea').length")
-        except Exception:
-            n = -1
-        marca = fr.url[:65] if fr.url else "(sin url)"
-        log(f"[debug] frame {marca} → {n} campos", "info")
-    log(f"Formulario cargado ({total} campos detectados)", "info")
-    return page_form
+    raise Exception("El formulario del contrato no cargó campos tras 30 segundos")
 
 
 def _frame_form(page, espera=20, log=None):
@@ -551,19 +470,29 @@ def _consultar_rut(page, rut, log):
         raise Exception("No se encontró el campo 'RUT Persona Trabajadora' en el formulario")
 
     rut_input.scroll_into_view_if_needed(timeout=5000)
-    rut_input.click(timeout=10000)
-    rut_input.fill("")
-    rut_input.fill(rut)
+    # Usar teclas reales para triggear la validación Angular del formulario
+    _tipo_campo(None, rut_input, rut)
 
-    # Botón buscar (el botón azul junto al campo RUT)
-    search_btn = frame.locator(
-        "button[type='button'] svg, button[aria-label*='buscar'], "
-        "button[aria-label*='search'], button.btn-search"
-    ).locator("..").first
-    try:
-        search_btn.click(timeout=5000)
-    except PWTimeout:
-        # Fallback: presionar Enter en el campo
+    # Botón buscar (lupa junto al campo RUT)
+    search_btn = None
+    for sel in [
+        "button[aria-label*='buscar' i]", "button[aria-label*='search' i]",
+        "button.btn-search", "button[type='button'] mat-icon",
+    ]:
+        try:
+            cand = frame.locator(sel).first
+            cand.wait_for(state="visible", timeout=3000)
+            search_btn = cand
+            break
+        except Exception:
+            continue
+
+    if search_btn:
+        try:
+            search_btn.click(timeout=5000)
+        except Exception:
+            rut_input.press("Enter")
+    else:
         rut_input.press("Enter")
 
     # Esperar que se rellenen los datos (Nombres o Fecha)

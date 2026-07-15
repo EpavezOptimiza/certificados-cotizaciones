@@ -790,8 +790,31 @@ def _consultar_rut(page, rut, log, primera=False, snap=None):
         api = _extraer_de_json(respuestas, log)
         if api and api.get("comuna"):
             comuna = api["comuna"]
+
+    # Diagnóstico de comuna (solo primer RUT): mostrar dónde podría estar
     if primera:
         log(f"  [debug] comuna resuelta: '{comuna}'", "info")
+        try:
+            _terms = ("comuna", "region", "direccion", "calle", "ciudad", "localidad")
+            campos_addr = [f"{k}={v}" for k, v in datos.items()
+                           if any(t in k.lower() for t in _terms) and v][:15]
+            log(f"  [debug] campos form dirección: {campos_addr}", "warn")
+        except Exception:
+            pass
+        try:
+            for resp in reversed(respuestas[-15:]):
+                try:
+                    body = resp.json()
+                except Exception:
+                    continue
+                plano = {}
+                _aplanar_json(body, plano)
+                addr = {k: v for k, v in plano.items()
+                        if any(t in k for t in ("comuna", "region", "direccion", "calle", "ciudad"))}
+                if addr:
+                    log(f"  [debug] API {resp.url.split('?')[0][-45:]} → {addr}", "warn")
+        except Exception:
+            pass
 
     # 9. Diagnóstico completo de un solo disparo (solo primer RUT sin datos)
     if primera and not (nombres or correo or calle):

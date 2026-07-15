@@ -359,22 +359,38 @@ def _ir_a_formulario(page, log, snap=None):
         except Exception as e2:
             raise Exception(f"No se pudo clickear 'Registrar' en el iframe: {e} / {e2}")
 
-    # Esperar que aparezcan campos del formulario en el iframe (hasta 30s)
+    # Esperar que los campos del formulario estén HABILITADOS (no solo en DOM)
+    # Angular puede tener 32 campos en DOM pero todos disabled durante inicialización.
     log("Esperando formulario de RUT...", "info")
     fr = _get_iframe_frame(page, espera=5)
     for _ in range(30):
         if fr:
             try:
-                n = fr.evaluate("() => document.querySelectorAll('input,select,textarea').length")
-                if n > 0:
-                    log(f"Formulario cargado ({n} campos)", "ok")
+                enabled_n = fr.evaluate("""() => {
+                    let n = 0;
+                    for (const el of document.querySelectorAll('input, select, textarea')) {
+                        if (!el.disabled && !el.readOnly) n++;
+                    }
+                    return n;
+                }""")
+                if enabled_n > 5:
+                    log(f"Formulario listo ({enabled_n} campos habilitados)", "ok")
+                    # Clickear radio "Cédula de identidad" para activar sección trabajador
+                    try:
+                        iframe_loc = page.frame_locator(f"iframe[src*='{_IFRAME_SRC}'], iframe").first
+                        radios = iframe_loc.locator("input[type='radio']")
+                        if radios.count() > 0:
+                            radios.first.click(force=True)
+                            time.sleep(0.5)
+                    except Exception:
+                        pass
                     return page
             except Exception:
                 pass
         time.sleep(1)
         fr = _get_iframe_frame(page, espera=1)
 
-    raise Exception("El formulario del contrato no cargó campos tras 30 segundos")
+    raise Exception("El formulario del contrato no cargó campos habilitados tras 30 segundos")
 
 
 def _frame_form(page, espera=20, log=None):
@@ -488,43 +504,25 @@ def _esperar_datos(frame, max_seg=8):
     return _extraer_datos_frame(frame)
 
 
-def _activar_seccion_trabajador(frame):
-    """Clickea el radio 'Cédula de identidad' para habilitar el campo #rutTrabajador."""
-    try:
-        radios = frame.locator("input[type='radio']")
-        if radios.count() > 0:
-            radios.first.click(force=True)
-            time.sleep(0.5)
-    except Exception:
-        pass
-
-
 def _buscar_campo_rut(frame):
-    """Espera hasta 15s a que #rutTrabajador esté habilitado (comprueba via JS property).
-    Angular puede setear element.disabled=true sin el atributo HTML, por eso no sirve :not([disabled])."""
-    # Intento 1: esperar que #rutTrabajador se habilite (el radio button lo activa)
-    for _ in range(15):
+    """Localiza #rutTrabajador (ya habilitado porque _ir_a_formulario esperó campos enabled)."""
+    # ID exacto conocido del dump del formulario DT
+    for sel in ["#rutTrabajador", "input[id*='rutTrab' i]"]:
         try:
-            info = frame.evaluate("""() => {
-                const el = document.querySelector('#rutTrabajador');
-                if (!el) return null;
-                return {disabled: el.disabled, readOnly: el.readOnly};
-            }""")
-            if info and not info.get('disabled') and not info.get('readOnly'):
-                return frame.locator("#rutTrabajador").first
+            loc = frame.locator(sel).first
+            loc.wait_for(state="enabled", timeout=8000)
+            return loc
         except Exception:
-            pass
-        time.sleep(1)
+            continue
 
-    # Fallback: buscar cualquier input de texto habilitado con 'rut' en el id, excepto rutEmpleador
+    # Fallback JS: primer input de texto habilitado con 'rut' en el id (excluyendo rutEmpleador)
     try:
         field_id = frame.evaluate("""() => {
             for (const el of document.querySelectorAll('input[type="text"]')) {
                 if (el.disabled || el.readOnly) continue;
                 const id = (el.id || '').toLowerCase();
-                const fcn = (el.getAttribute('formcontrolname') || '').toLowerCase();
-                if (id === 'rutempleador') continue;
-                if (id.includes('rut') || fcn.includes('rut')) return el.id;
+                if (id === 'rutempleador' || id === 'rutrepresentanteempleador') continue;
+                if (id.includes('rut')) return el.id;
             }
             return null;
         }""")
@@ -541,9 +539,6 @@ def _consultar_rut(page, rut, log):
     frame = _get_iframe_frame(page, espera=10)
     if frame is None:
         frame = _frame_form(page)
-
-    # Activar sección trabajador (radio button habilita #rutTrabajador)
-    _activar_seccion_trabajador(frame)
 
     rut_input = _buscar_campo_rut(frame)
     if rut_input is None:

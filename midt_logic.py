@@ -462,10 +462,10 @@ def _dump_iframe(page, log):
 _JS_EXTRAER = """() => {
     const out = {};
     for (const el of document.querySelectorAll('input, select, textarea')) {
-        // Buscar etiqueta por varias fuentes (Angular mat-form-field, aria, placeholder, id)
+        const id = el.id || '';
         let label = (el.getAttribute('aria-label') || '').trim();
-        if (!label && el.id) {
-            const l = document.querySelector('label[for="' + el.id + '"]');
+        if (!label && id) {
+            const l = document.querySelector('label[for="' + id + '"]');
             if (l) label = l.textContent.trim();
         }
         if (!label) {
@@ -479,6 +479,8 @@ _JS_EXTRAER = """() => {
         const val = el.tagName === 'SELECT'
             ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].text.trim() : '')
             : (el.value || '').trim();
+        // Guardar por ID (clave exacta) y por label (fallback)
+        if (id) out[id] = val;
         if (label) out[label] = val;
     }
     return out;
@@ -494,11 +496,13 @@ def _extraer_datos_frame(frame):
 
 
 def _esperar_datos(frame, max_seg=8):
-    """Espera hasta que algún campo tenga valor (poll cada 0.4s). Más rápido que sleep fijo."""
+    """Espera hasta que campos del TRABAJADOR tengan valor (por ID exacto)."""
+    # IDs conocidos del dump del formulario DT
+    _IDS_TRAB = ("nombresTrabajador", "apellidosTrabajador", "emailTrabajador",
+                 "calleTrabajador", "fechaNacimientoTrabajador")
     for _ in range(int(max_seg / 0.4)):
         datos = _extraer_datos_frame(frame)
-        valores = [v for k, v in datos.items() if v and k.lower() not in ('rut', 'run')]
-        if valores:
+        if any(datos.get(k) for k in _IDS_TRAB):
             return datos
         time.sleep(0.4)
     return _extraer_datos_frame(frame)
@@ -580,17 +584,19 @@ def _consultar_rut(page, rut, log):
                     return v
         return ""
 
-    nombres   = _buscar(["nombre", "first", "nombres"])
-    apellidos = _buscar(["apellido", "last"])
-    fecha_nac = _buscar(["nacimiento", "fecha", "birth"])
-    correo    = _buscar(["correo", "email", "mail"])
-    calle     = _buscar(["calle", "street", "dirección", "direccion"])
-    numero    = _buscar(["número", "numero", "nro"])
-    comuna    = _buscar(["comuna", "city", "ciudad"])
+    # Extracción por ID exacto del formulario DT (conocidos del debug dump)
+    nombres   = datos.get("nombresTrabajador", "") or _buscar(["nombres"])
+    apellidos = datos.get("apellidosTrabajador", "") or _buscar(["apellido"])
+    fecha_nac = datos.get("fechaNacimientoTrabajador", "") or _buscar(["nacimiento"])
+    correo    = datos.get("emailTrabajador", "") or _buscar(["correo electrónico"])
+    calle     = datos.get("calleTrabajador", "") or _buscar(["calle trabajador"])
+    numero    = datos.get("numeroTrabajador", "") or _buscar(["número trabajador"])
+    comuna    = datos.get("comunaTrabajador", "") or _buscar(["comunaTrab"])
 
-    # Si no encontró nada con etiquetas, loguear para diagnóstico
+    # Log diagnóstico si no hay datos del trabajador
     if not nombres and not correo:
-        log(f"  campos encontrados: {list(datos.keys())[:10]}", "warn")
+        trab_keys = [k for k in datos if "trabaj" in k.lower() or "trab" in k.lower()]
+        log(f"  sin datos trabajador. IDs trab: {trab_keys}", "warn")
 
     return {
         "RUT Trabajador": rut,

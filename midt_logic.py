@@ -670,7 +670,10 @@ def _extraer_de_json(respuestas, log):
         correo    = _k("mail", "correo", excluir=("empleador",))
         calle     = _k("calle", excluir=("empleador",)) or _k("direccion", excluir=("empleador",))
         numero    = _k("numero", excluir=("telefono", "fono", "empleador", "documento"))
-        comuna    = _k("comuna", excluir=("empleador", "juri"))
+        # La comuna suele venir anidada ("comuna": {"nombre": "..."}), y el
+        # aplanado pierde ese contexto. Se busca recursivamente respetando la
+        # anidación; el _k plano queda sólo como respaldo.
+        comuna    = _buscar_comuna_json(body) or _k("comuna", excluir=("empleador", "juri"))
         fnac      = _k("nacimiento")
 
         if nombres or correo or calle:
@@ -681,6 +684,87 @@ def _extraer_de_json(respuestas, log):
             return {"nombres": nombres, "apellidos": apellidos, "fecha_nac": fnac,
                     "correo": correo, "calle": calle, "numero": numero, "comuna": comuna}
     return None
+
+
+def _valor_comuna(v):
+    """Extrae el texto de una comuna dado un valor: string directo, u objeto
+    anidado como {codigo, nombre} / {descripcion} / {glosa}. Descarta códigos."""
+    if isinstance(v, str):
+        s = v.strip()
+        # descartar códigos numéricos puros (ej. "05801")
+        return s if (s and not s.replace(".", "").replace("-", "").isdigit()) else ""
+    if isinstance(v, dict):
+        for nk in ("nombrecomuna", "nombre_comuna", "nombre", "descripcion",
+                   "glosa", "valor", "nombrecompleto"):
+            for k2, val in v.items():
+                if k2.lower().replace(" ", "") == nk and isinstance(val, str) and val.strip():
+                    return val.strip()
+        # comuna anidada como {"comuna": "X"}
+        for k2, val in v.items():
+            if "comuna" in k2.lower() and isinstance(val, str) and val.strip() \
+                    and not val.strip().isdigit():
+                return val.strip()
+    return ""
+
+
+def _buscar_comuna_json(obj, _prof=0):
+    """Recorre el JSON de la API buscando la comuna del trabajador (clave que
+    contenga 'comuna' a cualquier profundidad), respetando la anidación."""
+    if _prof > 14:
+        return ""
+    if isinstance(obj, dict):
+        # 1) claves 'comuna' directas en este nivel (excluye empleador/jurídica)
+        for k, v in obj.items():
+            kl = k.lower()
+            if "comuna" in kl and "emplea" not in kl and "juri" not in kl and "empresa" not in kl:
+                nombre = _valor_comuna(v)
+                if nombre:
+                    return nombre
+        # 2) descender, saltando ramas del empleador/empresa
+        for k, v in obj.items():
+            kl = k.lower()
+            if "emplea" in kl or "empresa" in kl:
+                continue
+            r = _buscar_comuna_json(v, _prof + 1)
+            if r:
+                return r
+    elif isinstance(obj, list):
+        for v in obj[:40]:
+            r = _buscar_comuna_json(v, _prof + 1)
+            if r:
+                return r
+    return ""
+
+
+def _snippet_direccion(body):
+    """Fragmento JSON del nodo de dirección (para la columna DEBUG)."""
+    import json as _json
+
+    def buscar(o, _p=0):
+        if _p > 12:
+            return None
+        if isinstance(o, dict):
+            ks = " ".join(o.keys()).lower()
+            if "comuna" in ks or "calle" in ks or "direccion" in ks:
+                return o
+            for v in o.values():
+                r = buscar(v, _p + 1)
+                if r:
+                    return r
+        elif isinstance(o, list):
+            for v in o[:40]:
+                r = buscar(v, _p + 1)
+                if r:
+                    return r
+        return None
+
+    node = buscar(body)
+    if node is None:
+        return ""
+    try:
+        return _json.dumps(node, ensure_ascii=False)[:350]
+    except Exception:
+        return str(node)[:350]
 
 
 def _consultar_rut(page, rut, log, primera=False, snap=None):
@@ -790,6 +874,16 @@ def _consultar_rut(page, rut, log, primera=False, snap=None):
         api = _extraer_de_json(respuestas, log)
         if api and api.get("comuna"):
             comuna = api["comuna"]
+    # Buscador recursivo directo sobre el JSON crudo (comuna anidada)
+    if not comuna and respuestas:
+        for resp in reversed(respuestas[-15:]):
+            try:
+                c = _buscar_comuna_json(resp.json())
+            except Exception:
+                c = ""
+            if c:
+                comuna = c
+                break
 
     # Diagnóstico de comuna (solo primer RUT): mostrar dónde podría estar
     if primera:
@@ -836,26 +930,18 @@ def _consultar_rut(page, rut, log, primera=False, snap=None):
         if snap:
             snap("rut_sin_datos")
 
-    # DEBUG temporal: dónde aparece la comuna/dirección (form + API) por fila
+    # DEBUG temporal: nodo de dirección crudo del JSON de la API (para ubicar comuna)
     _dbg = []
-    try:
-        for k, v in datos.items():
-            kl = k.lower()
-            if any(t in kl for t in ("comuna", "region", "direccion", "ciudad", "localidad")) and v:
-                _dbg.append(f"{k}={v}")
-    except Exception:
-        pass
     try:
         for resp in reversed(respuestas[-8:]):
             try:
                 body = resp.json()
             except Exception:
                 continue
-            plano = {}
-            _aplanar_json(body, plano)
-            for k, v in plano.items():
-                if "comuna" in k and v:
-                    _dbg.append(f"api:{k}={v}")
+            snip = _snippet_direccion(body)
+            if snip:
+                _dbg.append(snip)
+                break
     except Exception:
         pass
 

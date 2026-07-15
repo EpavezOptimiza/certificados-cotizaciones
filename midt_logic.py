@@ -495,15 +495,24 @@ def _extraer_datos_frame(frame):
         return {}
 
 
-def _esperar_datos(frame, max_seg=8):
-    """Espera hasta que campos del TRABAJADOR tengan valor (por ID exacto)."""
-    # IDs conocidos del dump del formulario DT
-    _IDS_TRAB = ("nombresTrabajador", "apellidosTrabajador", "emailTrabajador",
-                 "calleTrabajador", "fechaNacimientoTrabajador")
-    for _ in range(int(max_seg / 0.4)):
+_IDS_TRAB = ("nombresTrabajador", "apellidosTrabajador", "emailTrabajador",
+             "calleTrabajador", "fechaNacimientoTrabajador")
+
+
+def _firma_trab(datos):
+    """Tupla con los valores clave del trabajador, para detectar cambios entre RUTs."""
+    return (datos.get("nombresTrabajador", ""), datos.get("emailTrabajador", ""),
+            datos.get("calleTrabajador", ""))
+
+
+def _esperar_datos(frame, max_seg=10, firma_previa=None):
+    """Espera a que los campos del TRABAJADOR tengan valor NUEVO (distinto del RUT anterior)."""
+    fin = time.time() + max_seg
+    while time.time() < fin:
         datos = _extraer_datos_frame(frame)
         if any(datos.get(k) for k in _IDS_TRAB):
-            return datos
+            if firma_previa is None or _firma_trab(datos) != firma_previa:
+                return datos
         time.sleep(0.4)
     return _extraer_datos_frame(frame)
 
@@ -538,65 +547,230 @@ def _buscar_campo_rut(frame):
     return None
 
 
-def _consultar_rut(page, rut, log):
-    """Rellena el RUT del trabajador y extrae los datos auto-rellenados."""
+# JS: asegura que el radio "Cédula de identidad" esté marcado (habilita la sección trabajador)
+_JS_RADIO_CEDULA = """() => {
+    const radios = document.querySelectorAll("input[type=radio]");
+    if (!radios.length) return null;
+    const r = radios[0];
+    const info = {total: radios.length, name: r.name || '', value: r.value || '', checked: r.checked};
+    if (!r.checked) {
+        r.click();
+        r.dispatchEvent(new Event('input',  {bubbles: true}));
+        r.dispatchEvent(new Event('change', {bubbles: true}));
+        info.checked = r.checked;
+    }
+    return info;
+}"""
+
+# JS: busca el botón de búsqueda POR CERCANÍA a #rutTrabajador (sube por los padres),
+# en vez de adivinar selectores. Devuelve descripción de lo clickeado o null.
+_JS_CLICK_LUPA = """() => {
+    const inp = document.querySelector('#rutTrabajador');
+    if (!inp) return null;
+    let node = inp;
+    for (let up = 0; up < 6 && node; up++) {
+        node = node.parentElement;
+        if (!node) break;
+        const btns = node.querySelectorAll(
+            "button, [role=button], mat-icon, [class*='search' i], [class*='lupa' i]");
+        for (const b of btns) {
+            const txt = ((b.innerText || '') + '|' + (b.getAttribute('aria-label') || '') + '|' +
+                         (typeof b.className === 'string' ? b.className : '') + '|' +
+                         (b.getAttribute('title') || '')).toLowerCase();
+            if (txt.includes('buscar') || txt.includes('search') || txt.includes('lupa') ||
+                txt.includes('magnif') ||
+                b.querySelector("[class*='search' i], [class*='lupa' i]")) {
+                b.click();
+                return ('match: ' + b.tagName + ' ' + txt).slice(0, 100);
+            }
+        }
+        // Si el contenedor cercano tiene UN solo botón, ese es (lupa junto al campo)
+        if (btns.length === 1) {
+            btns[0].click();
+            return ('unico: ' + btns[0].tagName + ' ' +
+                    (typeof btns[0].className === 'string' ? btns[0].className : '')).slice(0, 100);
+        }
+    }
+    return null;
+}"""
+
+# JS: vuelca todos los botones del iframe (diagnóstico de un solo disparo)
+_JS_BOTONES = """() => {
+    const out = [];
+    for (const b of document.querySelectorAll("button, [role=button], mat-icon, a")) {
+        let d = b.tagName.toLowerCase();
+        if (b.id) d += '#' + b.id;
+        const cls = (typeof b.className === 'string' ? b.className : '')
+            .trim().split(/\\s+/).slice(0, 3).join('.');
+        if (cls) d += '.' + cls;
+        const t = ((b.innerText || '').trim().replace(/\\s+/g, ' ')).slice(0, 30);
+        const aria = b.getAttribute('aria-label') || '';
+        out.push(d + ' "' + t + '"' + (aria ? ' aria="' + aria + '"' : ''));
+    }
+    return [...new Set(out)].slice(0, 45);
+}"""
+
+
+def _aplanar_json(obj, out, clave=""):
+    """Aplana un JSON anidado a {clave_minuscula: valor_str}."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            _aplanar_json(v, out, k)
+    elif isinstance(obj, list):
+        for v in obj[:25]:
+            _aplanar_json(v, out, clave)
+    elif obj is not None and obj != "":
+        k = clave.lower()
+        if k and k not in out:
+            out[k] = str(obj).strip()
+
+
+def _extraer_de_json(respuestas, log):
+    """Busca datos de persona en las respuestas API capturadas (la más reciente primero).
+    Lee el JSON crudo de la API de DT — no depende de cómo Angular pinte el formulario."""
+    for resp in reversed(respuestas[-15:]):
+        try:
+            body = resp.json()
+        except Exception:
+            continue
+        plano = {}
+        _aplanar_json(body, plano)
+
+        def _k(*terms, excluir=()):
+            for t in terms:
+                for k, v in plano.items():
+                    if t in k and v and not any(x in k for x in excluir):
+                        return v
+            return ""
+
+        nombres   = _k("nombres", excluir=("razon", "empleador", "empresa")) or \
+                    _k("nombre", excluir=("razon", "empleador", "empresa", "usuario"))
+        ap_p      = _k("paterno")
+        ap_m      = _k("materno")
+        apellidos = f"{ap_p} {ap_m}".strip() or _k("apellido")
+        correo    = _k("mail", "correo", excluir=("empleador",))
+        calle     = _k("calle", excluir=("empleador",)) or _k("direccion", excluir=("empleador",))
+        numero    = _k("numero", excluir=("telefono", "fono", "empleador", "documento"))
+        comuna    = _k("comuna", excluir=("empleador", "juri"))
+        fnac      = _k("nacimiento")
+
+        if nombres or correo or calle:
+            try:
+                log(f"  [api] datos desde: ...{resp.url.split('?')[0][-70:]}", "info")
+            except Exception:
+                pass
+            return {"nombres": nombres, "apellidos": apellidos, "fecha_nac": fnac,
+                    "correo": correo, "calle": calle, "numero": numero, "comuna": comuna}
+    return None
+
+
+def _consultar_rut(page, rut, log, primera=False, snap=None):
+    """Rellena el RUT del trabajador, dispara la búsqueda y extrae los datos.
+    Doble vía: campos del formulario + captura directa de la respuesta API."""
     frame = _get_iframe_frame(page, espera=10)
     if frame is None:
         frame = _frame_form(page)
 
+    # 1. Asegurar radio "Cédula de identidad" marcado (habilita la sección trabajador)
+    try:
+        radio_info = frame.evaluate(_JS_RADIO_CEDULA)
+        if primera:
+            log(f"  [debug] radio doc: {radio_info}", "info")
+    except Exception:
+        pass
+
+    # 2. Campo RUT
     rut_input = _buscar_campo_rut(frame)
     if rut_input is None:
         raise Exception("No se encontró campo RUT en el formulario")
-
     rut_input.scroll_into_view_if_needed(timeout=5000)
-    _tipo_campo(None, rut_input, rut)
 
-    # Botón lupa / buscar
-    search_btn = None
-    for sel in ["button[aria-label*='buscar' i]", "button[aria-label*='search' i]",
-                "button.btn-search", "button[type='button']:has(mat-icon)",
-                "button[type='submit']"]:
+    # Firma de los datos actuales (para detectar cambio real entre RUTs consecutivos)
+    firma_previa = _firma_trab(_extraer_datos_frame(frame))
+
+    # 3. Capturar las respuestas API de DT mientras dura la consulta
+    respuestas = []
+
+    def _cap(r):
         try:
-            cand = frame.locator(sel).first
-            cand.wait_for(state="visible", timeout=2000)
-            search_btn = cand
-            break
+            u = r.url
+            if ("dirtrab" in u or "dt.gob" in u) and \
+                    r.request.resource_type in ("xhr", "fetch"):
+                respuestas.append(r)
         except Exception:
-            continue
+            pass
 
-    if search_btn:
+    page.on("response", _cap)
+    try:
+        # 4. Escribir RUT con teclas reales (incluye Tab/blur al final)
+        _tipo_campo(None, rut_input, rut)
+
+        # 5. Disparar búsqueda: lupa junto al campo (por cercanía) y Enter de respaldo
+        lupa = None
         try:
-            search_btn.click(timeout=4000)
+            lupa = frame.evaluate(_JS_CLICK_LUPA)
         except Exception:
-            rut_input.press("Enter")
-    else:
-        rut_input.press("Enter")
+            pass
+        if primera:
+            log(f"  [debug] lupa: {lupa}", "info")
+        if not lupa:
+            try:
+                rut_input.press("Enter")
+            except Exception:
+                pass
 
-    # Espera inteligente: hasta 8s, sale en cuanto hay datos
-    datos = _esperar_datos(frame, max_seg=8)
+        # 6. Esperar datos NUEVOS del trabajador (sale apenas llegan, máx 10s)
+        datos = _esperar_datos(frame, max_seg=10, firma_previa=firma_previa)
+    finally:
+        try:
+            page.remove_listener("response", _cap)
+        except Exception:
+            pass
 
-    # Mapeo flexible: busca la clave que contenga cada término
-    def _buscar(terminos):
-        for t in terminos:
-            t_l = t.lower()
-            for k, v in datos.items():
-                if t_l in k.lower() and v:
-                    return v
-        return ""
+    # Si los campos siguen con los valores del RUT anterior, NO son de esta persona
+    if any(firma_previa) and _firma_trab(datos) == firma_previa:
+        datos = {}
 
-    # Extracción por ID exacto del formulario DT (conocidos del debug dump)
-    nombres   = datos.get("nombresTrabajador", "") or _buscar(["nombres"])
-    apellidos = datos.get("apellidosTrabajador", "") or _buscar(["apellido"])
-    fecha_nac = datos.get("fechaNacimientoTrabajador", "") or _buscar(["nacimiento"])
-    correo    = datos.get("emailTrabajador", "") or _buscar(["correo electrónico"])
-    calle     = datos.get("calleTrabajador", "") or _buscar(["calle trabajador"])
-    numero    = datos.get("numeroTrabajador", "") or _buscar(["número trabajador"])
-    comuna    = datos.get("comunaTrabajador", "") or _buscar(["comunaTrab"])
+    # 7. Extracción por ID exacto del formulario DT
+    nombres   = datos.get("nombresTrabajador", "")
+    apellidos = datos.get("apellidosTrabajador", "")
+    fecha_nac = datos.get("fechaNacimientoTrabajador", "")
+    correo    = datos.get("emailTrabajador", "")
+    calle     = datos.get("calleTrabajador", "")
+    numero    = datos.get("numeroTrabajador", "")
+    comuna    = datos.get("comunaTrabajador", "")
 
-    # Log diagnóstico si no hay datos del trabajador
-    if not nombres and not correo:
-        trab_keys = [k for k in datos if "trabaj" in k.lower() or "trab" in k.lower()]
-        log(f"  sin datos trabajador. IDs trab: {trab_keys}", "warn")
+    # 8. Vía alternativa: leer la respuesta JSON de la API directamente
+    if not (nombres or correo or calle):
+        api = _extraer_de_json(respuestas, log)
+        if api:
+            nombres   = api["nombres"]
+            apellidos = api["apellidos"]
+            fecha_nac = api["fecha_nac"]
+            correo    = api["correo"]
+            calle     = api["calle"]
+            numero    = api["numero"]
+            comuna    = api["comuna"]
+
+    # 9. Diagnóstico completo de un solo disparo (solo primer RUT sin datos)
+    if primera and not (nombres or correo or calle):
+        try:
+            log("  [debug] botones del iframe:", "warn")
+            for b in frame.evaluate(_JS_BOTONES):
+                log(f"    {b}", "warn")
+        except Exception:
+            pass
+        if respuestas:
+            log("  [debug] llamadas API durante la consulta:", "warn")
+            for r in respuestas[-10:]:
+                try:
+                    log(f"    {r.status} {r.url[:95]}", "warn")
+                except Exception:
+                    pass
+        else:
+            log("  [debug] NINGUNA llamada API se disparó — la búsqueda no se está gatillando", "warn")
+        if snap:
+            snap("rut_sin_datos")
 
     return {
         "RUT Trabajador": rut,
@@ -683,6 +857,16 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
                     fh.write(pg.content())
             except Exception:
                 pass
+            # Y el HTML del iframe del formulario (donde vive el DOM que importa)
+            try:
+                for fr in pg.frames:
+                    if _IFRAME_SRC in (fr.url or ""):
+                        ruta_if = _os.path.join(debug_dir, f"midt_{nombre}_iframe.html")
+                        with open(ruta_if, "w", encoding="utf-8") as fh:
+                            fh.write(fr.content())
+                        break
+            except Exception:
+                pass
 
         try:
             hacer_login(page, run, clave, log)
@@ -700,7 +884,7 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
                     continue
                 log(f"[{i}/{len(lista_ruts)}] {rut}...", "info")
                 try:
-                    datos = _consultar_rut(page_form, rut, log)
+                    datos = _consultar_rut(page_form, rut, log, primera=(i == 1), snap=snap)
                     resultados.append(datos)
                     ok = datos.get("Nombres") or datos.get("Calle")
                     log(f"[{i}] {'✓' if ok else '⚠'} {rut} → "

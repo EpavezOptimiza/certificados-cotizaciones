@@ -13,7 +13,7 @@ _URL = "https://midt.dirtrab.cl"
 def _tipo_campo(page, locator, valor):
     """Escribe en un campo simulando teclas reales para activar la validación JS."""
     locator.click()
-    locator.select_all()
+    locator.press("Control+a")
     locator.press("Backspace")
     try:
         locator.press_sequentially(valor, delay=60)

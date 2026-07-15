@@ -10,84 +10,99 @@ _URL = "https://midt.dirtrab.cl"
 
 # ── Login ──────────────────────────────────────────────────────────────────────
 
+def _tipo_campo(page, locator, valor):
+    """Escribe en un campo simulando teclas reales para activar la validación JS."""
+    locator.click()
+    locator.select_all()
+    locator.press("Backspace")
+    try:
+        locator.press_sequentially(valor, delay=60)
+    except AttributeError:
+        # Playwright < 1.38 no tiene press_sequentially
+        locator.type(valor, delay=60)
+    locator.dispatch_event("input")
+    locator.dispatch_event("change")
+    locator.press("Tab")
+
+
 def hacer_login(page, run, clave, log):
     log("Abriendo Mi DT...", "info")
     page.goto(_URL, wait_until="networkidle", timeout=45000)
-    log(f"[debug] URL inicial: {page.url}", "info")
 
-    # Buscar el botón de login con varios selectores posibles
+    # Click en botón de login principal
     btn_login = page.locator(
         "a:has-text('Iniciar sesión'), button:has-text('Iniciar sesión'), "
         "a:has-text('Ingresar'), button:has-text('Ingresar'), "
-        "a:has-text('Login'), a[href*='login'], a[href*='clave']"
+        "a[href*='login'], a[href*='clave']"
     ).first
-    log(f"[debug] Haciendo click en botón login...", "info")
-
-    # expect_navigation maneja el redirect aunque sea JS-driven
     try:
         with page.expect_navigation(wait_until="domcontentloaded", timeout=35000):
             btn_login.click(timeout=10000)
     except PWTimeout:
-        # Puede que ya navegó antes de que capturáramos
         page.wait_for_load_state("domcontentloaded", timeout=10000)
 
-    log(f"[debug] URL tras click: {page.url}", "info")
-
-    # Esperar ClaveÚnica — el dominio real es claveunica.gob.cl
+    # Esperar ClaveÚnica
     if "claveunica" not in page.url.lower():
         page.wait_for_url("*claveunica*", timeout=30000)
         page.wait_for_load_state("domcontentloaded", timeout=20000)
 
-    log(f"[debug] URL ClaveÚnica: {page.url}", "info")
     log("Ingresando ClaveÚnica...", "info")
 
-    # Formulario ClaveÚnica (un solo paso): #uname (RUN) + #pword (clave) + #login-submit
-    run_field = page.locator("#uname, input[name='run']").first
+    # ClaveÚnica puede ser de un paso (RUN+clave juntos) o dos pasos (RUN → Continuar → clave).
+    # Detectamos cuál es verificando si hay campo de contraseña visible al inicio.
+    run_field = page.locator("#uname, input[name='run'], input[type='text']").first
     run_field.wait_for(state="visible", timeout=15000)
-    run_field.fill(run)
 
-    pass_field = page.locator("#pword, input[type='password']").first
-    pass_field.fill(clave)
-
-    # El botón #login-submit arranca con atributo disabled=true; ClaveÚnica lo
-    # habilita solo cuando los campos disparan keyup/blur. page.fill() no dispara
-    # keyup, así que forzamos los eventos para que la validación JS active el botón.
-    page.evaluate("""() => {
-        for (const sel of ['#uname', '#pword']) {
-            const el = document.querySelector(sel);
-            if (!el) continue;
-            el.dispatchEvent(new Event('input', {bubbles:true}));
-            el.dispatchEvent(new Event('change', {bubbles:true}));
-            el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
-            el.dispatchEvent(new Event('blur', {bubbles:true}));
-        }
-    }""")
-
-    ingresar = page.locator("#login-submit, button:has-text('INGRESA')").first
-    log("[debug] Esperando que INGRESA se habilite...", "info")
+    pw_visible = False
     try:
-        ingresar.wait_for(state="visible", timeout=8000)
-        # Esperar hasta que ya no esté deshabilitado
+        pw_loc = page.locator("#pword, input[type='password']").first
+        pw_visible = pw_loc.is_visible()
+    except Exception:
+        pass
+
+    # Escribir RUN con teclas reales (dispara keyup/input requeridos por ClaveÚnica)
+    _tipo_campo(page, run_field, run)
+    time.sleep(0.5)
+
+    if not pw_visible:
+        # Flujo de dos pasos: primero RUN → click "Continuar"
+        try:
+            continuar = page.locator("button:has-text('Continuar'), button:has-text('CONTINUAR')").first
+            continuar.wait_for(state="visible", timeout=8000)
+            continuar.click()
+            page.wait_for_load_state("domcontentloaded", timeout=15000)
+            time.sleep(1)
+        except PWTimeout:
+            pass
+
+    # Escribir contraseña
+    pw_field = page.locator("#pword, input[type='password']").first
+    pw_field.wait_for(state="visible", timeout=15000)
+    _tipo_campo(page, pw_field, clave)
+    time.sleep(0.8)
+
+    # Esperar que el botón INGRESA se habilite (hasta 10s)
+    ingresar = page.locator("#login-submit, button:has-text('INGRESA'), button:has-text('Ingresar')").first
+    try:
         page.wait_for_function(
-            "() => { const b = document.querySelector('#login-submit'); return b && !b.disabled; }",
-            timeout=8000
+            "() => { const b = document.querySelector('#login-submit, button[type=submit]'); "
+            "return b && !b.disabled; }",
+            timeout=10000
         )
     except PWTimeout:
         pass
 
-    log("[debug] Clickeando INGRESA...", "info")
-    with page.expect_navigation(wait_until="domcontentloaded", timeout=35000):
-        try:
+    log("Enviando credenciales...", "info")
+    try:
+        with page.expect_navigation(wait_until="domcontentloaded", timeout=40000):
             ingresar.click(timeout=8000)
-        except PWTimeout:
-            # Fallback: click forzado saltando la comprobación de habilitado
-            ingresar.click(timeout=8000, force=True)
-
-    log(f"[debug] URL post-login: {page.url}", "info")
+    except PWTimeout:
+        ingresar.click(timeout=8000, force=True)
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
 
     # Esperar redirección de vuelta a Mi DT
     if "midt.dirtrab" not in page.url.lower():
-        page.wait_for_url("*midt.dirtrab*", timeout=30000)
+        page.wait_for_url("*midt.dirtrab*", timeout=35000)
         page.wait_for_load_state("domcontentloaded", timeout=20000)
 
     log("Login exitoso", "ok")

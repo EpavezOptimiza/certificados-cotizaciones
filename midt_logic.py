@@ -489,17 +489,18 @@ def _esperar_datos(frame, max_seg=8):
 
 
 def _buscar_campo_rut(frame):
-    """Encuentra el primer campo de texto editable del formulario (RUT trabajador)."""
+    """Encuentra el primer campo de texto HABILITADO para el RUT del trabajador.
+    Usa state='enabled' para saltar campos disabled (p.ej. RUT empleador precargado)."""
     for sel in [
-        "input[formcontrolname*='rut' i]",
-        "input[aria-label*='rut' i]",
-        "input[placeholder*='rut' i]",
-        "input[id*='rut' i]",
-        "input[type='text']",
+        "input[formcontrolname*='rut' i]:not([disabled])",
+        "input[aria-label*='rut' i]:not([disabled])",
+        "input[placeholder*='rut' i]:not([disabled])",
+        "input[id*='rut' i]:not([disabled])",
+        "input[type='text']:not([disabled])",
     ]:
         try:
             loc = frame.locator(sel).first
-            loc.wait_for(state="visible", timeout=3000)
+            loc.wait_for(state="enabled", timeout=3000)
             return loc
         except Exception:
             continue

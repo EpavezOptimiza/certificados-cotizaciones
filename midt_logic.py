@@ -930,21 +930,6 @@ def _consultar_rut(page, rut, log, primera=False, snap=None):
         if snap:
             snap("rut_sin_datos")
 
-    # DEBUG temporal: nodo de dirección crudo del JSON de la API (para ubicar comuna)
-    _dbg = []
-    try:
-        for resp in reversed(respuestas[-8:]):
-            try:
-                body = resp.json()
-            except Exception:
-                continue
-            snip = _snippet_direccion(body)
-            if snip:
-                _dbg.append(snip)
-                break
-    except Exception:
-        pass
-
     return {
         "RUT Trabajador": rut,
         "Nombres":        nombres,
@@ -954,7 +939,6 @@ def _consultar_rut(page, rut, log, primera=False, snap=None):
         "Calle":          f"{calle} {numero}".strip(),
         "Comuna":         comuna,
         "Error":          "" if (nombres or correo or calle) else "sin datos",
-        "DEBUG":          " | ".join(_dbg[:8]),
     }
 
 
@@ -1094,8 +1078,8 @@ def consultar_ruts(run, clave, rut_empresa, lista_ruts, log, debug_dir=None):
 
 # ── Excel ──────────────────────────────────────────────────────────────────────
 
-COLS = ["RUT Trabajador", "Nombres", "Apellidos", "Fecha Nac.", "Correo", "Calle", "Comuna", "Error", "DEBUG"]
-ANCHOS = [16, 22, 22, 14, 30, 30, 18, 20, 70]
+COLS = ["RUT Trabajador", "Nombres", "Apellidos", "Fecha Nac.", "Correo", "Calle", "Comuna", "Error"]
+ANCHOS = [16, 22, 22, 14, 30, 30, 18, 20]
 
 
 def generar_excel(resultados: list) -> bytes:

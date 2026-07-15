@@ -255,36 +255,27 @@ def _click_texto(page, candidatos, log, timeout=15000):
 
 
 def seleccionar_empresa(page, rut_empresa, log, snap=None):
-    """Selecciona perfil EMPLEADOR → Empleador Persona Jurídica → empresa por RUT."""
-    time.sleep(2)  # dejar que /roles renderice
-    if snap:
-        snap("1a_roles_inicial")
-
+    """Selecciona perfil EMPLEADOR → Empleador Persona Jurídica → empresa por RUT.
+    Sin pausas fijas: cada paso espera su condición real y avanza apenas se cumple."""
     # ── Paso 1: click en el perfil EMPLEADOR ───────────────────────────────────
     log("Seleccionando perfil EMPLEADOR...", "info")
     emp = _click_texto(page, ["EMPLEADOR", "Empleador"], log)
     if not emp:
         _dump_pantalla(page, log, "Perfiles disponibles")
         raise Exception("No se encontró el perfil EMPLEADOR en la pantalla de roles")
-    log(f"[debug] Click perfil: {emp}", "info")
 
     # Esperar a que aparezca la pantalla "Indica qué tipo de empleador"
     try:
         page.get_by_text("Persona Jurídica").first.wait_for(state="visible", timeout=20000)
     except PWTimeout:
         pass
-    time.sleep(1)
-    if snap:
-        snap("1b_post_empleador")
-    log(f"[debug] URL tras EMPLEADOR: {page.url}", "info")
-    _dump_pantalla(page, log, "Opciones tras EMPLEADOR")
 
     # ── Paso 2: click en "Empleador Persona Jurídica" ──────────────────────────
     log("Seleccionando Empleador Persona Jurídica...", "info")
     pj = _click_texto(page, ["Empleador Persona Jurídica", "Persona Jurídica"], log)
     if not pj:
+        _dump_pantalla(page, log, "Opciones tras EMPLEADOR")
         raise Exception("No se encontró 'Empleador Persona Jurídica' tras elegir EMPLEADOR")
-    log(f"[debug] Click tipo empleador: {pj}", "info")
 
     # Esperar a que aparezca la lista de empresas (que contenga el RUT)
     rut_sin = rut_empresa.replace(".", "").replace("-", "")
@@ -293,27 +284,22 @@ def seleccionar_empresa(page, rut_empresa, log, snap=None):
         page.get_by_text(rut_sin[:6]).first.wait_for(state="visible", timeout=20000)
     except PWTimeout:
         pass
-    time.sleep(1.5)
-    if snap:
-        snap("1c_post_persona_juridica")
-    log(f"[debug] URL tras Persona Jurídica: {page.url}", "info")
-    _dump_pantalla(page, log, "Empresas tras Persona Jurídica")
 
     # ── Paso 3: click en la empresa por RUT ────────────────────────────────────
     log(f"Seleccionando empresa {rut_empresa}...", "info")
     empresa = _click_texto(page, [rut_sin, rut_con, rut_empresa.replace("-", "")], log)
     if not empresa:
+        _dump_pantalla(page, log, "Empresas tras Persona Jurídica")
         raise Exception(f"No se encontró la empresa {rut_empresa} tras elegir Persona Jurídica")
-    log(f"[debug] Click empresa: {empresa}", "info")
 
-    time.sleep(3)
+    # Esperar el home del empleador (condición real, sin sleep fijo)
     try:
-        page.wait_for_load_state("networkidle", timeout=20000)
+        page.wait_for_url("**/empleador/**", timeout=25000)
     except PWTimeout:
-        pass
-    if snap:
-        snap("1d_post_empresa")
-    log(f"[debug] URL tras seleccionar empresa: {page.url}", "info")
+        try:
+            page.wait_for_load_state("networkidle", timeout=10000)
+        except PWTimeout:
+            pass
     log("Empresa seleccionada", "ok")
 
 
@@ -334,8 +320,7 @@ def _get_iframe_frame(page, espera=20):
 def _ir_a_formulario(page, log, snap=None):
     """Navega al formulario de registro de contrato dentro del iframe DT."""
     url_destino = f"{_URL}/empleador/registro-electronico-laboral/registroContratoTrabajo"
-    page.goto(url_destino, wait_until="networkidle", timeout=45000)
-    time.sleep(2)
+    page.goto(url_destino, wait_until="domcontentloaded", timeout=45000)
 
     log("Esperando iframe del formulario...", "info")
 

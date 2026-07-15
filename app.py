@@ -2421,18 +2421,54 @@ def midt_leer_ruts():
     archivo = request.files.get("excel")
     if not archivo:
         return jsonify({"error": "No se recibió archivo"}), 400
-    _rut_re = _re.compile(r'\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]')
+
+    _rut_re = _re.compile(r'(\d{1,2}\.?\d{3}\.?\d{3})\s*-\s*([\dkK])')
+
+    def _dv(cuerpo: str) -> str:
+        """Dígito verificador chileno (módulo 11)."""
+        s, m = 0, 2
+        for d in reversed(cuerpo):
+            s += int(d) * m
+            m = 2 if m == 7 else m + 1
+        r = 11 - (s % 11)
+        return {10: "K", 11: "0"}.get(r, str(r))
+
     try:
         wb = openpyxl.load_workbook(io.BytesIO(archivo.read()), read_only=True, data_only=True)
         ruts, seen = [], set()
+
+        def _agregar(cuerpo, dv):
+            cuerpo = cuerpo.replace(".", "")
+            rut = f"{cuerpo}-{dv.upper()}"
+            if cuerpo and rut not in seen:
+                seen.add(rut)
+                ruts.append(rut)
+
         for ws in wb.worksheets:
+            # Algunos Excel declaran dimensiones erróneas (menos filas de las reales)
+            # y en modo read_only openpyxl corta ahí. Forzar lectura completa.
+            try:
+                ws.reset_dimensions()
+            except Exception:
+                pass
             for row in ws.iter_rows(values_only=True):
                 for cell in row:
-                    val = str(cell).strip() if cell is not None else ""
+                    if cell is None:
+                        continue
+                    if isinstance(cell, float) and cell.is_integer():
+                        cell = int(cell)
+                    val = str(cell).strip()
                     m = _rut_re.search(val)
-                    if m and m.group(0) not in seen:
-                        seen.add(m.group(0))
-                        ruts.append(m.group(0))
+                    if m:
+                        _agregar(m.group(1), m.group(2))
+                        continue
+                    # Celda que es SOLO un número de 8-9 dígitos (o termina en K):
+                    # RUT sin guión — se acepta únicamente si el DV calza (módulo 11).
+                    solo = val.replace(".", "")
+                    if _re.fullmatch(r'\d{7,8}[\dkK]', solo):
+                        cuerpo, dv = solo[:-1], solo[-1].upper()
+                        if _dv(cuerpo) == dv:
+                            _agregar(cuerpo, dv)
         wb.close()
         return jsonify({"ruts": ruts, "total": len(ruts)})
     except Exception as e:

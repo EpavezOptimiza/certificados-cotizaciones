@@ -190,15 +190,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
 
-    <!-- Capturas de depuración -->
-    <div class="log-card" id="capturas-card" style="margin-top:16px;display:none">
-      <div class="log-header">
-        <span>📸 Capturas de pantalla (depuración)</span>
-        <button onclick="cargarCapturas()" style="padding:5px 12px;font-size:11px;font-weight:600;border:1px solid #1E3A5F;border-radius:6px;background:#eff6ff;color:#1E3A5F;cursor:pointer">🔄 Refrescar</button>
-      </div>
-      <div id="capturas-body" style="padding:16px;display:flex;flex-direction:column;gap:16px"></div>
-    </div>
-
   </div>
 </div>
 
@@ -279,28 +270,7 @@ async function pollLogs(){
     if(data.archivo){
       document.getElementById('btn-excel').classList.add('show');
     }
-    cargarCapturas();
   }
-}
-
-async function cargarCapturas(){
-  try {
-    const res  = await fetch('/api/midt/capturas');
-    const data = await res.json();
-    if(!data.capturas || !data.capturas.length){ return; }
-    const card = document.getElementById('capturas-card');
-    const body = document.getElementById('capturas-body');
-    card.style.display = '';
-    const bust = Date.now();
-    body.innerHTML = data.capturas.map(fn => `
-      <div>
-        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">${fn}</div>
-        <a href="/api/midt/captura/${fn}?t=${bust}" target="_blank">
-          <img src="/api/midt/captura/${fn}?t=${bust}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:8px" loading="lazy">
-        </a>
-      </div>
-    `).join('');
-  } catch(e){ /* silencio */ }
 }
 
 async function descargarExcel(){

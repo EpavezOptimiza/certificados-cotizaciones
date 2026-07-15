@@ -488,22 +488,51 @@ def _esperar_datos(frame, max_seg=8):
     return _extraer_datos_frame(frame)
 
 
+def _activar_seccion_trabajador(frame):
+    """Clickea el radio 'Cédula de identidad' para habilitar el campo #rutTrabajador."""
+    try:
+        radios = frame.locator("input[type='radio']")
+        if radios.count() > 0:
+            radios.first.click(force=True)
+            time.sleep(0.5)
+    except Exception:
+        pass
+
+
 def _buscar_campo_rut(frame):
-    """Encuentra el primer campo de texto HABILITADO para el RUT del trabajador.
-    Usa state='enabled' para saltar campos disabled (p.ej. RUT empleador precargado)."""
-    for sel in [
-        "input[formcontrolname*='rut' i]:not([disabled])",
-        "input[aria-label*='rut' i]:not([disabled])",
-        "input[placeholder*='rut' i]:not([disabled])",
-        "input[id*='rut' i]:not([disabled])",
-        "input[type='text']:not([disabled])",
-    ]:
+    """Espera hasta 15s a que #rutTrabajador esté habilitado (comprueba via JS property).
+    Angular puede setear element.disabled=true sin el atributo HTML, por eso no sirve :not([disabled])."""
+    # Intento 1: esperar que #rutTrabajador se habilite (el radio button lo activa)
+    for _ in range(15):
         try:
-            loc = frame.locator(sel).first
-            loc.wait_for(state="enabled", timeout=3000)
-            return loc
+            info = frame.evaluate("""() => {
+                const el = document.querySelector('#rutTrabajador');
+                if (!el) return null;
+                return {disabled: el.disabled, readOnly: el.readOnly};
+            }""")
+            if info and not info.get('disabled') and not info.get('readOnly'):
+                return frame.locator("#rutTrabajador").first
         except Exception:
-            continue
+            pass
+        time.sleep(1)
+
+    # Fallback: buscar cualquier input de texto habilitado con 'rut' en el id, excepto rutEmpleador
+    try:
+        field_id = frame.evaluate("""() => {
+            for (const el of document.querySelectorAll('input[type="text"]')) {
+                if (el.disabled || el.readOnly) continue;
+                const id = (el.id || '').toLowerCase();
+                const fcn = (el.getAttribute('formcontrolname') || '').toLowerCase();
+                if (id === 'rutempleador') continue;
+                if (id.includes('rut') || fcn.includes('rut')) return el.id;
+            }
+            return null;
+        }""")
+        if field_id:
+            return frame.locator(f"#{field_id}").first
+    except Exception:
+        pass
+
     return None
 
 
@@ -512,6 +541,9 @@ def _consultar_rut(page, rut, log):
     frame = _get_iframe_frame(page, espera=10)
     if frame is None:
         frame = _frame_form(page)
+
+    # Activar sección trabajador (radio button habilita #rutTrabajador)
+    _activar_seccion_trabajador(frame)
 
     rut_input = _buscar_campo_rut(frame)
     if rut_input is None:

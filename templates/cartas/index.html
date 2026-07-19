@@ -1065,6 +1065,18 @@ function verFicha(rut) {
   const esc = s => (s ?? '').toString()
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+  // Columnas de dinero → formato $ pesos (ej: 31020 → $31.020)
+  const esMonto = k => /monto|pactado|pagado|diferencia|inter[eé]s/i.test(k);
+  const fmtValor = (k, v) => {
+    const s = (v ?? '').toString().trim();
+    if (!s) return '';
+    if (esMonto(k)) {
+      const n = Number(s);
+      if (isFinite(n)) return '$' + Math.round(n).toLocaleString('es-CL');
+    }
+    return s;
+  };
+
   document.getElementById('ficha-titulo').textContent = `📋 ${w.nombre} — ${w.rut_trabajador}`;
   const body = document.getElementById('ficha-body');
   const dets = w.detalles || [];
@@ -1080,7 +1092,7 @@ function verFicha(rut) {
       const filas = Object.entries(d).map(([k, v]) => `
         <div class="ficha-row">
           <div class="ficha-k">${esc(k)}</div>
-          <div class="ficha-v">${esc(v) || '—'}</div>
+          <div class="ficha-v">${esc(fmtValor(k, v)) || '—'}</div>
         </div>`).join('');
       return `<div class="ficha-card">
         <div class="ficha-card-head">Registro ${i + 1} de ${dets.length}${per ? ' · Período: ' + esc(per) : ''}</div>

@@ -195,6 +195,15 @@ textarea{resize:vertical;min-height:70px}
 .modal-header{background:var(--nav-bg);color:#fff;padding:18px 22px;font-weight:700;font-size:15px}
 .modal-body{padding:22px;display:flex;flex-direction:column;gap:14px}
 .modal-footer{padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;background:#fafbfc}
+/* Ficha completa del trabajador */
+.worker-ficha{background:none;border:none;font-size:13px;cursor:pointer;opacity:.5;flex-shrink:0;padding:2px 4px;margin-left:auto;transition:.15s}
+.worker-ficha:hover{opacity:1;transform:scale(1.15)}
+.ficha-card{border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+.ficha-card-head{background:#eff6ff;padding:9px 14px;font-weight:700;font-size:12.5px;color:#1e3a5f;border-bottom:1px solid #e2e8f0}
+.ficha-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+.ficha-row{display:flex;gap:8px;padding:6px 14px;border-bottom:1px solid #f8fafc;font-size:12px}
+.ficha-k{color:#64748b;width:170px;flex-shrink:0;font-weight:600}
+.ficha-v{color:#0f172a;word-break:break-word}
 
 /* ── Tabla ── */
 .tabla-estado{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -737,6 +746,17 @@ textarea{resize:vertical;min-height:70px}
 </div>
 
 <!-- Modal credenciales PreviRed -->
+<!-- Ficha completa del trabajador (todos los datos del Excel) -->
+<div class="modal-overlay" id="modal-ficha" onclick="if(event.target===this)cerrarFicha()">
+  <div class="modal" style="width:min(900px,94vw)">
+    <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <span id="ficha-titulo" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📋 Ficha del trabajador</span>
+      <button onclick="cerrarFicha()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1;flex-shrink:0">×</button>
+    </div>
+    <div class="modal-body" id="ficha-body" style="max-height:72vh;overflow-y:auto;gap:16px"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-credenciales">
   <div class="modal">
     <div class="modal-header">🔐 Credenciales PreviRed</div>
@@ -1030,11 +1050,50 @@ function renderSidebar() {
         <div class="worker-sub">${w.rut_trabajador} · ${w.institucion} · ${periodosParaMotivoActivo(w).length} períodos</div>
         ${statusBadge}
       </div>
+      <button class="worker-ficha" title="Ver ficha completa (todos los datos del Excel)"
+              onclick="event.stopPropagation();verFicha('${w.rut_trabajador}')">📋</button>
     </div>`;
   }).join('');
 }
 
 function filtrarWorkers() { renderSidebar(); }
+
+// ── Ficha completa del trabajador (todos los datos del Excel) ──────────────
+function verFicha(rut) {
+  const w = trabajadores.find(x => x.rut_trabajador === rut);
+  if (!w) return;
+  const esc = s => (s ?? '').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  document.getElementById('ficha-titulo').textContent = `📋 ${w.nombre} — ${w.rut_trabajador}`;
+  const body = document.getElementById('ficha-body');
+  const dets = w.detalles || [];
+
+  if (!dets.length) {
+    body.innerHTML = '<div class="alert alert-info">No hay detalle disponible para este trabajador. Vuelve a cargar el Excel para verlo.</div>';
+  } else {
+    body.innerHTML = dets.map((d, i) => {
+      // Título del registro: buscar la columna de período (nombre varía entre hojas)
+      const perKey = Object.keys(d).find(k => k.toLowerCase().includes('regulariz')) ||
+                     Object.keys(d).find(k => /per[ií]odo/.test(k.toLowerCase()));
+      const per = perKey ? d[perKey] : '';
+      const filas = Object.entries(d).map(([k, v]) => `
+        <div class="ficha-row">
+          <div class="ficha-k">${esc(k)}</div>
+          <div class="ficha-v">${esc(v) || '—'}</div>
+        </div>`).join('');
+      return `<div class="ficha-card">
+        <div class="ficha-card-head">Registro ${i + 1} de ${dets.length}${per ? ' · Período: ' + esc(per) : ''}</div>
+        <div class="ficha-grid">${filas}</div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('modal-ficha').classList.add('show');
+}
+
+function cerrarFicha() {
+  document.getElementById('modal-ficha').classList.remove('show');
+}
 
 function toggleAll(cb) {
   // Marca/desmarca SOLO los trabajadores que pasan los filtros actuales

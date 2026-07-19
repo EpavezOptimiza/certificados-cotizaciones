@@ -128,12 +128,28 @@ def parsear_excel(file_bytes):
             except: pass
         return s
 
+    def _fmt_valor(v):
+        """Formatea cualquier celda para la ficha completa (fechas legibles, sin .0)."""
+        if v is None: return ''
+        import datetime as _dt
+        if isinstance(v, (_dt.datetime, _dt.date)):
+            return v.strftime('%d/%m/%Y')
+        if isinstance(v, float) and v.is_integer():
+            return str(int(v))
+        return str(v).strip()
+
     def _parsear_hoja(ws, tipo_hoja='afp'):
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
             return []
         headers = [str(h).lower().strip() if h else '' for h in rows[0]]
         c = lambda nombres, default=-1: _col(headers, nombres, default)
+
+        # Cabeceras originales (tal cual el Excel) para la ficha completa.
+        # Solo columnas con cabecera no vacía (algunas hojas declaran miles de
+        # columnas fantasma sin nombre).
+        headers_orig = [str(h).strip() if h else '' for h in rows[0]]
+        cols_utiles = [i for i, h in enumerate(headers_orig) if h]
 
         iRutEmp  = c(['01_rut emp','rut empresa','rut_empresa'], 0)
         iRazon   = c(['02_razon','razon social','razon_social'], 1)
@@ -158,7 +174,10 @@ def parsear_excel(file_bytes):
             rut_trab = _g(row, iRutTrab)
             if not rut_trab or rut_trab.upper() in ('ND','N/D','','NONE'): continue
             periodo = _fmt_periodo(row[iPeriodo] if iPeriodo < len(row) else None)
+            detalle = {headers_orig[i]: _fmt_valor(row[i]) if i < len(row) else ''
+                       for i in cols_utiles}
             filas.append({
+                'detalle':        detalle,
                 'rut_empresa':    _g(row, iRutEmp),
                 'razon_social':   _g(row, iRazon),
                 'rut_trabajador': rut_trab,
@@ -226,7 +245,11 @@ def agrupar_por_trabajador(datos):
     for d in datos:
         k = d['rut_trabajador']
         if k not in grupos:
-            grupos[k] = {**d, 'periodos': [], 'periodo_motivos': {}, 'periodo_estatus': {}, 'periodo_analisis': {}}
+            grupos[k] = {**d, 'periodos': [], 'periodo_motivos': {}, 'periodo_estatus': {}, 'periodo_analisis': {}, 'detalles': []}
+            grupos[k].pop('detalle', None)
+        # Ficha completa: todas las columnas del Excel de cada fila del trabajador
+        if d.get('detalle'):
+            grupos[k]['detalles'].append(d['detalle'])
         p = d['periodo']
         if p and p not in grupos[k]['periodos']:
             grupos[k]['periodos'].append(p)

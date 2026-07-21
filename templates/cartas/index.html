@@ -2588,7 +2588,7 @@ async function unificarPDF(rut) {
       const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
       if (!nameNorm.includes(rutNorm)) continue;
       if (/carta/i.test(name)) cartaHandle = handle;
-      else if (/mov_?per|movimiento|comprobante/i.test(name)) movHandle = handle;
+      else if (/mov[_\s-]?per|movimiento|comprobante|planilla|previred|^pl[_\s.\-]/i.test(name)) movHandle = handle;
     }
 
     if (!cartaHandle && !movHandle) {

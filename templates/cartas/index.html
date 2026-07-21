@@ -1591,12 +1591,16 @@ function renderPreviRedWorkers() {
       }
       const opsCausa = CAUSAS_PREVIRED.map(c =>
         `<option value="${c}" ${c===causaActual?'selected':''}>${c}</option>`).join('');
+      const esAus = /ausentismo|licencia|subsidio/i.test(causaActual);
       return `<tr>
         <td>${w.nombre}</td>
         <td>${w.rut_trabajador}</td>
         <td>${w.institucion}</td>
-        <td><select onchange="(function(v,r){seleccionados[r].causa=v;var fi=document.getElementById('ft-'+r);if(fi){var dis=/ausentismo|licencia|subsidio/i.test(v);fi.disabled=dis;fi.style.opacity=dis?'0.35':'1';fi.placeholder=dis?'Automático':'';}})(this.value,'${w.rut_trabajador}')" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;width:100%">${opsCausa}</select></td>
-        <td><input type="date" id="ft-${w.rut_trabajador}" value="${fechaTerm}" ${/ausentismo|licencia|subsidio/i.test(causaActual)?'disabled title="No aplica: la fecha se calcula automáticamente para ausentismo" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;opacity:0.35"':'style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px"'} onchange="(function(v,r){var dd=v.split('-').reverse().join('/');seleccionados[r].fecha_termino=v;seleccionados[r].fecha_cese=dd;var el=document.getElementById('f-fecha-cese');if(el)el.value=dd;})(this.value,'${w.rut_trabajador}')"></td>
+        <td><select onchange="(function(v,r){seleccionados[r].causa=v;var dis=/ausentismo|licencia|subsidio/i.test(v);var fi=document.getElementById('ft-'+r);var na=document.getElementById('ft-na-'+r);if(fi)fi.style.display=dis?'none':'inline-block';if(na)na.style.display=dis?'inline':'none';})(this.value,'${w.rut_trabajador}')" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;width:100%">${opsCausa}</select></td>
+        <td>
+          <input type="date" id="ft-${w.rut_trabajador}" value="${fechaTerm}" style="font-size:12px;padding:3px;border:1px solid #e2e8f0;border-radius:4px;display:${esAus?'none':'inline-block'}" onchange="(function(v,r){var dd=v.split('-').reverse().join('/');seleccionados[r].fecha_termino=v;seleccionados[r].fecha_cese=dd;var el=document.getElementById('f-fecha-cese');if(el)el.value=dd;})(this.value,'${w.rut_trabajador}')">
+          <span id="ft-na-${w.rut_trabajador}" title="La fecha se calcula automáticamente para ausentismo" style="font-size:11px;color:#94a3b8;font-style:italic;display:${esAus?'inline':'none'}">Automático</span>
+        </td>
         <td>${(sel.periodos_sel||w.periodos||[]).join(', ')}</td>
       </tr>`;
     }).join('')}</tbody>

@@ -61,8 +61,15 @@ RE_PERIODO_STR   = re.compile(r"^(\d{2})/(\d{4})")
 
 def _normalizar_rut_detectado(rut_raw: str) -> str:
     """Corrige confusiones de OCR/Adobe en un RUT ya con formato XX.XXX.XXX-X:
-    coma en vez de punto, y guion confundido con en-dash/em-dash/punto medio."""
-    return re.sub(r"[-–—·]{1,2}", "-", rut_raw.replace(",", "."))
+    coma en vez de punto, guion confundido con en-dash/em-dash/punto medio, y
+    el caso de AFP Provida donde el separador del dígito verificador es un punto
+    (ej: '13.082.764.0' → '13.082.764-0')."""
+    s = rut_raw.replace(",", ".").strip()
+    # Provida y similares: punto (u otro separador) justo antes del DV final
+    m = re.match(r"^(\d{1,2}\.\d{3}\.\d{3})[-–—·.]{1,2}([\dKk])$", s)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return re.sub(r"[-–—·]{1,2}", "-", s)
 
 def _normalizar_rut_sin_puntos(rut_raw: str) -> str:
     """'76003477-0' → '76.003.477-0', '7003477-0' → '7.003.477-0'"""
@@ -110,8 +117,8 @@ RE_GRUPO_PDF     = re.compile(
     r"^(PLANILLAS COMPLEMENTARIAS|DECL\.?\s*Y NO PAGO\s*AUTOM\.?\s*\(?DNPA\)?|COBRO\s+POR\s+DIFERENCIA|COB\.?\s*POR\s+DIF\.?)\s+"
     r"\d+\s+(\d{2}/\d{4})\s+([\d\.]+)\s+([\d\.]+)\s+", re.IGNORECASE)
 RE_DETALLE_PDF   = re.compile(r"^(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s+.+?\s+([\d\.]+)\s+([\d\.]+)\s*$")
-RUT_RE           = re.compile(r"^\d{1,2}[.,]\d{3}[.,]\d{3}[-–—·]{1,2}[\dKk]$")
-RUT_CON_NOMBRE   = re.compile(r"^(\d{1,2}[.,]\d{3}[.,]\d{3}[-–—·]{1,2}[\dKk])\s+(.+)")
+RUT_RE           = re.compile(r"^\d{1,2}[.,]\d{3}[.,]\d{3}[-–—·.]{1,2}[\dKk]$")
+RUT_CON_NOMBRE   = re.compile(r"^(\d{1,2}[.,]\d{3}[.,]\d{3}[-–—·.]{1,2}[\dKk])\s+(.+)")
 RE_NUD_HDR       = re.compile(r'n[uú]mero\s+\w+(?:\s+de)?\s+deuda[^0-9]*(\d{6,})', re.IGNORECASE)
 RE_RUT_HDR       = re.compile(r"^r\.u\.t\.", re.IGNORECASE)
 RE_RUT_EMP       = re.compile(r"^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$")
@@ -176,6 +183,8 @@ def _es_monto(val) -> bool:
     if isinstance(val, (int, float)): return True
     if isinstance(val, str):
         limpio = val.replace("$","").replace(" ","").replace(",","").strip("'\" ")
+        # Un RUT (ej. Provida '13.082.764.0') no es un monto
+        if RUT_RE.match(limpio): return False
         return bool(limpio) and "/" not in limpio and limpio.replace(".","").isdigit()
     return False
 
@@ -198,7 +207,8 @@ def _norm_estado(estado: str) -> str:
 
 def _norm_origen(b_val: str) -> str:
     u = b_val.upper()
-    if "PLANILLAS" in u:           return "PLANILLAS COMPLEMENTARIAS"
+    # "LANILLAS" cubre el OCR de Provida "0LANILLAS COMPLEMENTARIAS" (P→0)
+    if "PLANILLAS" in u or "LANILLAS" in u: return "PLANILLAS COMPLEMENTARIAS"
     if "COB" in u and "DIF" in u:  return "COB POR DIF"
     return "DNPA"
 
@@ -1027,9 +1037,12 @@ def _parsear_excel(wb, pdf_lookup: dict) -> tuple:
             val = ws.cell(r,c).value
             if not isinstance(val,str): continue
             vl = val.strip().lower()
+            # Saltar bloques largos de texto (ej. el párrafo del certificado que
+            # contiene "ACTUALIZADAS" y ensucia la detección de columnas)
+            if len(vl) > 40: continue
             if "origen" in vl and "deuda" in vl: COL_ORIGEN=c
             elif "adm" in vl and "origen" in vl: COL_ADM=c
-            elif "periodo" in vl: COL_PERIODO=c
+            elif "periodo" in vl or "perlodo" in vl or ("per" in vl and "pago" in vl): COL_PERIODO=c
             elif "nominal" in vl:
                 COL_NOM_GRP=c; COL_NOM_EMP.append(c)
                 if c+1 not in COL_NOM_EMP: COL_NOM_EMP.append(c+1)

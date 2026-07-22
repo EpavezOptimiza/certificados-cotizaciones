@@ -443,6 +443,15 @@ body.dark .pref-label{color:#e2e8f0}
       <!-- ── Columna izquierda: resumen ── -->
       <div style="width:320px;min-width:280px;display:flex;flex-direction:column;gap:12px">
 
+        <!-- Mis clientes (BASE MADRE) -->
+        <div id="home-clientes-card" style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04);display:none">
+          <div style="padding:12px 14px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:13px;font-weight:700;color:#0f172a" id="home-clientes-titulo">👥 Mis clientes</span>
+            <a href="/base_madre" style="font-size:10px;color:var(--accent);text-decoration:none;font-weight:600">Ver base →</a>
+          </div>
+          <div id="home-clientes" style="padding:12px 14px"></div>
+        </div>
+
         <!-- Tareas pendientes -->
         <div style="background:#fff;border:1px solid #e8edf2;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)">
           <div style="padding:12px 14px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">
@@ -1591,8 +1600,44 @@ async function enviarSolicitud(){
 const PRIORIDAD_COLOR={alta:"#dc2626",media:"#d97706",baja:"#94a3b8"};
 const PRIORIDAD_BG={alta:"#fef2f2",media:"#fffbeb",baja:"transparent"};
 
+async function cargarClientesHome(){
+  const card = document.getElementById("home-clientes-card");
+  if(!card) return;
+  const escC = s => (s ?? '').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  try{
+    const r = await fetch("/api/base_madre/resumen");
+    const d = await r.json();
+    if(!d.ok || !d.total){ card.style.display="none"; return; }
+
+    document.getElementById("home-clientes-titulo").textContent =
+      d.alcance === "todos" ? "👥 Clientes (todos)" : "👥 Mis clientes";
+
+    let html = `
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:30px;font-weight:800;color:var(--accent)">${d.total}</span>
+        <span style="font-size:12px;color:#64748b">cliente${d.total===1?'':'s'} asignado${d.total===1?'':'s'}</span>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:6px;font-size:11.5px;color:#64748b;flex-wrap:wrap">
+        ${d.vigentes!=null?`<span>✅ Vigentes: <b style="color:#0f172a">${d.vigentes}</b></span>`:''}
+        ${d.grupos!=null?`<span>🏢 Grupos: <b style="color:#0f172a">${d.grupos}</b></span>`:''}
+      </div>`;
+
+    if(d.por_consultor && d.por_consultor.length){
+      html += `<div style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:8px;display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Por consultor (deuda)</div>` +
+        d.por_consultor.map(c=>`<div style="display:flex;justify-content:space-between;font-size:11.5px">
+          <span style="color:#334155">${escC(c.nombre)}</span><b style="color:var(--accent)">${c.total}</b></div>`).join('') +
+        `</div>`;
+    }
+    document.getElementById("home-clientes").innerHTML = html;
+    card.style.display = "";
+  }catch(e){ card.style.display="none"; }
+}
+
 async function verPrincipal(){
   empresaId=null;
+  cargarClientesHome();
   document.querySelectorAll(".e-node").forEach(n=>n.classList.remove("active"));
   document.getElementById("tabla").style.display="none";
   document.getElementById("sol-view").style.display="none";

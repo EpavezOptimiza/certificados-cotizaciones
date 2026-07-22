@@ -2586,6 +2586,89 @@ def base_madre_page():
     return render_template("base_madre.html")
 
 
+@app.route("/api/base_madre/resumen")
+@api_login_required
+def base_madre_resumen():
+    """Resumen de clientes de BASE MADRE para el usuario conectado.
+
+    Consultores/asistentes (Deuda) e Ingreso ven SUS clientes (match por
+    primer nombre contra la columna CONSULTOR (A) DEUDA / INGRESO).
+    Admin y otros roles ven el total + desglose por consultor.
+    """
+    import unicodedata
+    from base_madre_logic import obtener_clientes
+
+    user = get_current_user()
+    columnas, filas, ts, error = obtener_clientes()
+    if not filas:
+        return jsonify({"ok": False, "error": error or "BASE MADRE sin datos"})
+
+    def _norm(s):
+        s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
+        return s.strip().lower()
+
+    def _col(*terminos):
+        for c in (columnas or []):
+            cn = _norm(c)
+            if all(t in cn for t in terminos):
+                return c
+        return None
+
+    col_deuda   = _col("consultor", "deuda")
+    col_ingreso = _col("consultor", "ingreso")
+    col_estatus = _col("estatus", "cliente") or _col("estatus")
+    col_grupo   = _col("grupo")
+
+    rol = _norm(user.get("rol"))
+    if rol == "ingreso":
+        col_consultor = col_ingreso
+    elif rol in ("consultor", "asistente"):
+        col_consultor = col_deuda
+    else:
+        col_consultor = None  # admin y otros: ven todo
+
+    nombre_user = (user.get("nombre") or "").strip()
+    primer_nombre = _norm(nombre_user.split()[0]) if nombre_user else ""
+
+    def _match(valor):
+        toks = _norm(valor).split()
+        return bool(toks) and toks[0] == primer_nombre
+
+    if col_consultor and primer_nombre:
+        mias = [f for f in filas if _match(f.get(col_consultor, ""))]
+        alcance = "propios"
+    else:
+        mias = filas
+        alcance = "todos"
+
+    vigentes = (sum(1 for f in mias if _norm(f.get(col_estatus, "")).startswith("vigente"))
+                if col_estatus else None)
+    grupos = (len({_norm(f.get(col_grupo, "")) for f in mias if (f.get(col_grupo) or "").strip()})
+              if col_grupo else None)
+
+    resumen = {
+        "ok": True,
+        "alcance": alcance,
+        "total": len(mias),
+        "vigentes": vigentes,
+        "grupos": grupos,
+        "error": error,
+    }
+
+    # Desglose por consultor de deuda (solo para quienes ven todo)
+    if col_consultor is None and col_deuda:
+        conteo = {}
+        for f in filas:
+            nom = _norm(f.get(col_deuda, "")) or "(sin asignar)"
+            if nom in ("n/a", "na", "-"):
+                continue  # clientes sin servicio de deuda
+            conteo[nom] = conteo.get(nom, 0) + 1
+        top = sorted(conteo.items(), key=lambda x: -x[1])[:10]
+        resumen["por_consultor"] = [{"nombre": n.title(), "total": t} for n, t in top]
+
+    return jsonify(resumen)
+
+
 @app.route("/api/base_madre/datos")
 @api_login_required
 def base_madre_datos():

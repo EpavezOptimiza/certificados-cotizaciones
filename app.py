@@ -2576,6 +2576,33 @@ def midt_captura(nombre):
     return send_file(ruta, mimetype="image/png")
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# BASE MADRE (Excel de clientes conectado desde SharePoint)
+# ────────────────────────────────────────────────────────────────────────────
+
+@app.route("/base_madre")
+@login_required
+def base_madre_page():
+    return render_template("base_madre.html")
+
+
+@app.route("/api/base_madre/datos")
+@api_login_required
+def base_madre_datos():
+    from base_madre_logic import obtener_clientes
+    forzar = request.args.get("refrescar") == "1"
+    columnas, filas, ts, error = obtener_clientes(forzar=forzar)
+    import datetime as _dt
+    return jsonify({
+        "ok":             filas is not None,
+        "error":          error,
+        "columnas":       columnas or [],
+        "filas":          filas or [],
+        "total":          len(filas or []),
+        "ultima_lectura": _dt.datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M") if ts else None,
+    })
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

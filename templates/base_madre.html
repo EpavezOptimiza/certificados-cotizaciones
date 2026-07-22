@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BASE MADRE — Clientes</title>
+<script src="/static/theme.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#1E3A5F;--sidebar-bg:#0d1b2e}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#0f172a;min-height:100vh;display:flex;flex-direction:column}
+.topnav{background:var(--sidebar-bg);padding:0 16px;height:50px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-shrink:0}
+.topnav::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:var(--themed-bg-image,none);background-size:var(--themed-bg-size,cover);z-index:0}
+.topnav>*{position:relative;z-index:1}
+.back-btn{width:32px;height:32px;border-radius:6px;background:rgba(255,255,255,.08);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:background .15s}
+.back-btn:hover{background:rgba(255,255,255,.15)}
+.nav-cur{color:#fff;font-weight:600;font-size:13px}
+.main-content{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column}
+.page-header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.page-icon{width:42px;height:42px;background:#dbeafe;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.page-title{font-size:19px;font-weight:700;color:#0f172a;letter-spacing:-.3px}
+.page-sub{font-size:12px;color:#64748b;margin-top:2px}
+.estado-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px;margin-bottom:16px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px}
+.badge-ok{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0}
+.badge-err{background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5}
+.estado-dato{font-size:12px;color:#64748b}
+.estado-dato b{color:#0f172a}
+.btn-refrescar{margin-left:auto;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #1E3A5F;background:#eff6ff;color:#1E3A5F;font-family:inherit;transition:opacity .15s}
+.btn-refrescar:hover:not(:disabled){opacity:.8}
+.btn-refrescar:disabled{opacity:.5;cursor:wait}
+.tabla-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:300px}
+.tabla-header{padding:12px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:12px}
+.tabla-header input{flex:1;max-width:360px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit}
+.tabla-header input:focus{border-color:#1E3A5F;box-shadow:0 0 0 3px rgba(30,58,95,.1)}
+.tabla-count{font-size:12px;color:#64748b}
+.tabla-scroll{overflow:auto;flex:1}
+table{border-collapse:collapse;font-size:12px;white-space:nowrap}
+thead th{position:sticky;top:0;background:#1E3A5F;color:#fff;font-weight:600;padding:8px 12px;text-align:left;font-size:11px;z-index:2;border-right:1px solid rgba(255,255,255,.08)}
+tbody td{padding:6px 12px;border-bottom:1px solid #f1f5f9;border-right:1px solid #f8fafc;color:#334155;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+tbody tr:nth-child(even){background:#f8fafc}
+tbody tr:hover{background:#eff6ff}
+.msg-vacio{padding:40px;text-align:center;color:#94a3b8;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <a class="back-btn" href="/" title="Volver al inicio">←</a>
+  <span class="nav-cur">📊 BASE MADRE — Clientes</span>
+</div>
+
+<div class="main-content">
+  <div class="page-header">
+    <div class="page-icon">📊</div>
+    <div>
+      <div class="page-title">BASE MADRE</div>
+      <div class="page-sub">Excel conectado desde SharePoint — se actualiza solo (cache 10 min)</div>
+    </div>
+  </div>
+
+  <div class="estado-bar">
+    <span class="badge" id="badge-estado">⏳ Conectando…</span>
+    <span class="estado-dato">Clientes: <b id="dato-total">—</b></span>
+    <span class="estado-dato">Última lectura: <b id="dato-lectura">—</b></span>
+    <button class="btn-refrescar" id="btn-refrescar" onclick="cargar(true)">🔄 Refrescar ahora</button>
+  </div>
+
+  <div class="tabla-card">
+    <div class="tabla-header">
+      <input type="text" id="buscar" placeholder="🔍 Buscar por RUT, razón social, grupo, KAM…" oninput="filtrar()">
+      <span class="tabla-count" id="tabla-count"></span>
+    </div>
+    <div class="tabla-scroll" id="tabla-scroll">
+      <div class="msg-vacio">Cargando datos…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let columnas = [];
+let filas = [];
+
+const esc = s => (s ?? '').toString()
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+async function cargar(refrescar = false) {
+  const btn = document.getElementById('btn-refrescar');
+  btn.disabled = true;
+  if (refrescar) btn.textContent = '⏳ Descargando…';
+  try {
+    const res = await fetch('/api/base_madre/datos' + (refrescar ? '?refrescar=1' : ''));
+    const data = await res.json();
+
+    const badge = document.getElementById('badge-estado');
+    if (data.ok && !data.error) {
+      badge.className = 'badge badge-ok';
+      badge.textContent = '✓ Conectado';
+    } else if (data.ok && data.error) {
+      badge.className = 'badge badge-err';
+      badge.textContent = '⚠ Conectado con datos antiguos — ' + data.error;
+    } else {
+      badge.className = 'badge badge-err';
+      badge.textContent = '✗ Sin conexión — ' + (data.error || 'error desconocido');
+    }
+    document.getElementById('dato-total').textContent = data.total || '—';
+    document.getElementById('dato-lectura').textContent = data.ultima_lectura || '—';
+
+    columnas = data.columnas || [];
+    filas = data.filas || [];
+    filtrar();
+  } catch (e) {
+    document.getElementById('badge-estado').className = 'badge badge-err';
+    document.getElementById('badge-estado').textContent = '✗ Error: ' + e;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 Refrescar ahora';
+  }
+}
+
+function filtrar() {
+  const q = document.getElementById('buscar').value.trim().toLowerCase();
+  const visibles = !q ? filas
+    : filas.filter(f => columnas.some(c => (f[c] || '').toLowerCase().includes(q)));
+
+  const cont = document.getElementById('tabla-scroll');
+  document.getElementById('tabla-count').textContent =
+    q ? `${visibles.length} de ${filas.length}` : `${filas.length} clientes`;
+
+  if (!visibles.length) {
+    cont.innerHTML = '<div class="msg-vacio">Sin resultados</div>';
+    return;
+  }
+  const thead = '<thead><tr>' + columnas.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead>';
+  const tbody = '<tbody>' + visibles.map(f =>
+    '<tr>' + columnas.map(c => `<td title="${esc(f[c])}">${esc(f[c])}</td>`).join('') + '</tr>'
+  ).join('') + '</tbody>';
+  cont.innerHTML = `<table>${thead}${tbody}</table>`;
+}
+
+cargar();
+</script>
+</body>
+</html>

@@ -21,13 +21,40 @@ _CACHE = {"filas": None, "columnas": None, "ts": 0, "error": None}
 _LOCK = threading.Lock()
 
 
+def url_guardada():
+    """Enlace del Excel: variable de entorno o, si no existe, la base de datos
+    (tabla app_config — se pega desde la página /base_madre)."""
+    url = os.environ.get("BASE_MADRE_URL", "").strip()
+    if url:
+        return url
+    try:
+        from database import get_conn
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT valor FROM app_config WHERE clave='base_madre_url'").fetchone()
+            return (row["valor"] or "").strip() if row else ""
+    except Exception:
+        return ""
+
+
+def guardar_url(url):
+    """Guarda el enlace en la base de datos y limpia el cache."""
+    from database import get_conn
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO app_config(clave, valor) VALUES('base_madre_url', ?) "
+            "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (url.strip(),))
+    with _LOCK:
+        _CACHE.update({"filas": None, "columnas": None, "ts": 0, "error": None})
+
+
 def _url_descarga():
     """Convierte el share-link de SharePoint al endpoint de descarga directa.
 
     https://<tenant>-my.sharepoint.com/:x:/g/personal/<usuario>/<TOKEN>?e=...
       → https://<tenant>-my.sharepoint.com/personal/<usuario>/_layouts/15/download.aspx?share=<TOKEN>
     """
-    url = os.environ.get("BASE_MADRE_URL", "").strip()
+    url = url_guardada()
     if not url:
         return None
     if "download.aspx" in url:
@@ -47,8 +74,7 @@ def _url_descarga():
 def _descargar():
     url = _url_descarga()
     if not url:
-        raise Exception("Falta configurar la variable BASE_MADRE_URL en Railway "
-                        "(enlace compartido del Excel)")
+        raise Exception("Falta pegar el enlace del Excel (usa el recuadro de configuración)")
     # SharePoint exige conservar cookies entre las redirecciones del enlace anónimo
     cj = http.cookiejar.CookieJar()
     op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))

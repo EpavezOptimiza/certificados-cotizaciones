@@ -66,6 +66,20 @@ tbody tr:hover{background:#eff6ff}
     <button class="btn-refrescar" id="btn-refrescar" onclick="cargar(true)">🔄 Refrescar ahora</button>
   </div>
 
+  <div class="estado-bar" id="config-box" style="display:none;flex-direction:column;align-items:stretch;gap:10px">
+    <div style="font-size:13px;font-weight:700;color:#0f172a">⚙️ Conectar el Excel</div>
+    <div style="font-size:12px;color:#64748b;line-height:1.5">
+      Pega aquí el <b>vínculo compartido</b> de BASE MADRE.xlsx (en OneDrive: abrir el archivo →
+      Compartir → "Cualquier persona con el vínculo puede ver" → Copiar vínculo).
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="config-url" placeholder="https://…sharepoint.com/:x:/g/personal/…"
+             style="flex:1;min-width:260px;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;font-family:inherit">
+      <button class="btn-refrescar" id="btn-guardar-url" style="margin-left:0" onclick="guardarUrl()">💾 Guardar y conectar</button>
+    </div>
+    <div id="config-msg" style="font-size:12px;display:none"></div>
+  </div>
+
   <div class="tabla-card">
     <div class="tabla-header">
       <input type="text" id="buscar" placeholder="🔍 Buscar por RUT, razón social, grupo, KAM…" oninput="filtrar()">
@@ -103,6 +117,10 @@ async function cargar(refrescar = false) {
       badge.className = 'badge badge-err';
       badge.textContent = '✗ Sin conexión — ' + (data.error || 'error desconocido');
     }
+
+    // Recuadro de configuración: visible para el admin cuando falta el enlace o falla la lectura
+    const cfgBox = document.getElementById('config-box');
+    cfgBox.style.display = (data.es_admin && (!data.configurado || !data.ok)) ? 'flex' : 'none';
     document.getElementById('dato-total').textContent = data.total || '—';
     document.getElementById('dato-lectura').textContent = data.ultima_lectura || '—';
 
@@ -115,6 +133,41 @@ async function cargar(refrescar = false) {
   } finally {
     btn.disabled = false;
     btn.textContent = '🔄 Refrescar ahora';
+  }
+}
+
+async function guardarUrl() {
+  const url = document.getElementById('config-url').value.trim();
+  const msg = document.getElementById('config-msg');
+  const btn = document.getElementById('btn-guardar-url');
+  if (!url) { return; }
+  btn.disabled = true;
+  btn.textContent = '⏳ Conectando…';
+  msg.style.display = 'none';
+  try {
+    const res = await fetch('/api/base_madre/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msg.style.color = '#047857';
+      msg.textContent = `✓ Conectado — ${data.total} clientes leídos`;
+      msg.style.display = 'block';
+      cargar();
+    } else {
+      msg.style.color = '#b91c1c';
+      msg.textContent = '✗ ' + (data.error || 'No se pudo guardar');
+      msg.style.display = 'block';
+    }
+  } catch (e) {
+    msg.style.color = '#b91c1c';
+    msg.textContent = '✗ Error: ' + e;
+    msg.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Guardar y conectar';
   }
 }
 

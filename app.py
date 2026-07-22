@@ -2672,18 +2672,39 @@ def base_madre_resumen():
 @app.route("/api/base_madre/datos")
 @api_login_required
 def base_madre_datos():
-    from base_madre_logic import obtener_clientes
+    from base_madre_logic import obtener_clientes, url_guardada
     forzar = request.args.get("refrescar") == "1"
     columnas, filas, ts, error = obtener_clientes(forzar=forzar)
     import datetime as _dt
+    user = get_current_user()
     return jsonify({
         "ok":             filas is not None,
         "error":          error,
+        "configurado":    bool(url_guardada()),
+        "es_admin":       (user or {}).get("rol") == "admin",
         "columnas":       columnas or [],
         "filas":          filas or [],
         "total":          len(filas or []),
         "ultima_lectura": _dt.datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M") if ts else None,
     })
+
+
+@app.route("/api/base_madre/config", methods=["POST"])
+@admin_required
+def base_madre_config():
+    """Guarda el enlace compartido del Excel BASE MADRE (solo admin)."""
+    from base_madre_logic import guardar_url, obtener_clientes
+    d = request.json or {}
+    url = (d.get("url") or "").strip()
+    if not url.lower().startswith("https://") or "sharepoint.com" not in url.lower():
+        return jsonify({"error": "El enlace debe ser el vínculo compartido de SharePoint "
+                                 "(empieza con https:// y contiene sharepoint.com)"}), 400
+    guardar_url(url)
+    # Probar la conexión de inmediato
+    columnas, filas, ts, error = obtener_clientes(forzar=True)
+    if filas is None:
+        return jsonify({"error": f"El enlace se guardó pero la lectura falló: {error}"}), 400
+    return jsonify({"ok": True, "total": len(filas)})
 
 
 if __name__ == "__main__":

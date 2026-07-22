@@ -253,6 +253,12 @@ def init_db():
             )""")
         except: pass
         try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS app_config (
+                clave TEXT PRIMARY KEY,
+                valor TEXT DEFAULT ''
+            )""")
+        except: pass
+        try:
             conn.execute("""CREATE TABLE IF NOT EXISTS destinatarios_correo (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 institucion    TEXT NOT NULL,

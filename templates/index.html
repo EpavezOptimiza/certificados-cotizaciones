@@ -405,8 +405,9 @@ body.dark .pref-label{color:#e2e8f0}
 <div id="main">
   <div id="header">
     <div id="header-left">
-      <h2 id="header-title">🏠 Página principal</h2>
-      <p id="header-meta">Resumen y noticias previsionales</p>
+      {% set _areas = {'admin':'Administración','consultor':'Deuda','asistente':'Deuda','ahorro':'Ahorro','ingreso':'Ingreso','terreno':'Terreno'} %}
+      <h2 id="header-title">👤 {{ user['nombre'] }}</h2>
+      <p id="header-meta">{% if user['rol'] == 'admin' %}Administración{% else %}Área {{ _areas.get(user['rol'], user['rol']|capitalize) }}{% endif %}</p>
     </div>
     <div id="header-right" id="header-right">
       <button class="btn btn-primary admin-ahorro-only" onclick="openModal('modalReporte')" id="btn-reporte" style="display:none">📊 Reporte</button>
@@ -887,6 +888,10 @@ body.dark .pref-label{color:#e2e8f0}
 let grupos=[], empresaId=null, grupoId=null, certData=[], editCertId=null;
 let editEmpId=null, editGrpId=null, editUsrId=null;
 let currentUser=null;
+// Encabezado personalizado (nombre + área) renderizado por el servidor:
+// se captura para restaurarlo al volver a la página principal.
+const HOME_TITLE = document.getElementById("header-title").textContent;
+const HOME_META  = document.getElementById("header-meta").textContent;
 let allEmpresas=[];
 
 const INST_MAP={};
@@ -1598,8 +1603,8 @@ async function verPrincipal(){
   document.getElementById("btn-mas").style.display="none";
   document.getElementById("btn-agregar").style.display="none";
   document.getElementById("btn-mover-gen").style.display="none";
-  document.getElementById("header-title").textContent="🏠 Página principal";
-  document.getElementById("header-meta").textContent="Resumen y noticias previsionales";
+  document.getElementById("header-title").textContent=HOME_TITLE;
+  document.getElementById("header-meta").textContent=HOME_META;
   const navEl=document.getElementById("nav-principal");
   if(navEl) navEl.style.background="rgba(var(--accent-rgb),.18)";
 

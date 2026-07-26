@@ -15,32 +15,77 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .back-btn{width:32px;height:32px;border-radius:6px;background:rgba(255,255,255,.08);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:background .15s}
 .back-btn:hover{background:rgba(255,255,255,.15)}
 .nav-cur{color:#fff;font-weight:600;font-size:13px}
-.main-content{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column}
-.page-header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-.page-icon{width:42px;height:42px;background:#dbeafe;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
-.page-title{font-size:19px;font-weight:700;color:#0f172a;letter-spacing:-.3px}
+.nav-estado{margin-left:auto;display:flex;align-items:center;gap:10px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 11px;border-radius:20px}
+.badge-ok{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.35)}
+.badge-err{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35)}
+.main-content{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:16px}
+
+/* ── Encabezado de página ── */
+.page-header{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.page-icon{width:44px;height:44px;background:linear-gradient(135deg,#1E3A5F,#3b82f6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px;box-shadow:0 4px 12px rgba(30,58,95,.25)}
+.page-title{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.4px}
 .page-sub{font-size:12px;color:#64748b;margin-top:2px}
-.estado-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px;margin-bottom:16px}
-.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px}
-.badge-ok{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0}
-.badge-err{background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5}
-.estado-dato{font-size:12px;color:#64748b}
-.estado-dato b{color:#0f172a}
-.btn-refrescar{margin-left:auto;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #1E3A5F;background:#eff6ff;color:#1E3A5F;font-family:inherit;transition:opacity .15s}
-.btn-refrescar:hover:not(:disabled){opacity:.8}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.btn-refrescar{padding:9px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #1E3A5F;background:#fff;color:#1E3A5F;font-family:inherit;transition:.15s}
+.btn-refrescar:hover:not(:disabled){background:#eff6ff}
 .btn-refrescar:disabled{opacity:.5;cursor:wait}
-.tabla-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:300px}
-.tabla-header{padding:12px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:12px}
-.tabla-header input{flex:1;max-width:360px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit}
-.tabla-header input:focus{border-color:#1E3A5F;box-shadow:0 0 0 3px rgba(30,58,95,.1)}
-.tabla-count{font-size:12px;color:#64748b}
+
+/* ── Indicadores ── */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--stat-color,#1E3A5F)}
+.stat-num{font-size:26px;font-weight:800;color:#0f172a;font-variant-numeric:tabular-nums}
+.stat-label{font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── Controles ── */
+.controls{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.controls input[type=text]{flex:1;min-width:220px;padding:9px 13px;border:1px solid #e2e8f0;border-radius:9px;font-size:13px;outline:none;font-family:inherit}
+.controls input[type=text]:focus{border-color:#1E3A5F;box-shadow:0 0 0 3px rgba(30,58,95,.1)}
+.controls select{padding:9px 10px;border:1px solid #e2e8f0;border-radius:9px;font-size:12px;outline:none;font-family:inherit;background:#fff;color:#334155;max-width:190px}
+.controls select:focus{border-color:#1E3A5F}
+.ctrl-count{font-size:12px;color:#64748b;margin-left:auto;white-space:nowrap}
+.btn-limpiar{padding:8px 12px;border-radius:8px;font-size:11.5px;font-weight:600;cursor:pointer;border:1px solid #e2e8f0;background:#f8fafc;color:#64748b;font-family:inherit;display:none}
+.btn-limpiar:hover{background:#f1f5f9;color:#0f172a}
+
+/* ── Tabla ── */
+.tabla-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:320px}
 .tabla-scroll{overflow:auto;flex:1}
-table{border-collapse:collapse;font-size:12px;white-space:nowrap}
-thead th{position:sticky;top:0;background:#1E3A5F;color:#fff;font-weight:600;padding:8px 12px;text-align:left;font-size:11px;z-index:2;border-right:1px solid rgba(255,255,255,.08)}
-tbody td{padding:6px 12px;border-bottom:1px solid #f1f5f9;border-right:1px solid #f8fafc;color:#334155;max-width:280px;overflow:hidden;text-overflow:ellipsis}
-tbody tr:nth-child(even){background:#f8fafc}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+thead th{position:sticky;top:0;background:#f8fafc;color:#475569;font-weight:700;padding:10px 14px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;z-index:2;border-bottom:2px solid #e2e8f0;white-space:nowrap}
+tbody td{padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#334155;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}
+tbody tr{cursor:pointer;transition:background .1s}
 tbody tr:hover{background:#eff6ff}
-.msg-vacio{padding:40px;text-align:center;color:#94a3b8;font-size:13px}
+.td-razon{font-weight:600;color:#0f172a}
+.td-rut{font-variant-numeric:tabular-nums;color:#64748b}
+.chip{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:12px;white-space:nowrap}
+.chip-vigente{background:#ecfdf5;color:#047857}
+.chip-finalizado{background:#f1f5f9;color:#64748b}
+.chip-suspendido{background:#fffbeb;color:#b45309}
+.chip-otro{background:#eff6ff;color:#1d4ed8}
+.msg-vacio{padding:48px;text-align:center;color:#94a3b8;font-size:13px}
+
+/* ── Ficha lateral (drawer) ── */
+.drawer-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100;display:none;backdrop-filter:blur(2px)}
+.drawer-bg.show{display:block}
+.drawer{position:fixed;top:0;right:-560px;width:min(540px,96vw);height:100vh;background:#fff;z-index:101;box-shadow:-12px 0 40px rgba(0,0,0,.18);display:flex;flex-direction:column;transition:right .25s ease}
+.drawer.show{right:0}
+.drawer-head{background:linear-gradient(135deg,#0d1b2e,#1E3A5F);color:#fff;padding:20px 22px;display:flex;align-items:flex-start;gap:12px}
+.drawer-title{font-size:16px;font-weight:800;line-height:1.3;flex:1}
+.drawer-sub{font-size:12px;color:#93c5fd;margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.drawer-close{background:rgba(255,255,255,.12);border:none;color:#fff;font-size:18px;cursor:pointer;width:32px;height:32px;border-radius:8px;flex-shrink:0;line-height:1}
+.drawer-close:hover{background:rgba(255,255,255,.22)}
+.drawer-body{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:18px}
+.seccion-titulo{font-size:10.5px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.7px;border-bottom:1px solid #f1f5f9;padding-bottom:6px}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+.f-item{min-width:0}
+.f-label{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.f-value{font-size:12.5px;color:#0f172a;font-weight:500;word-break:break-word;line-height:1.4}
+@media(max-width:560px){.field-grid{grid-template-columns:1fr}}
+
+/* ── Config (admin) ── */
+.config-card{background:#fff;border:1px solid #fca5a5;border-radius:12px;padding:16px 18px;display:none;flex-direction:column;gap:10px}
+.config-card input{width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;font-family:inherit}
 </style>
 </head>
 <body>
@@ -48,147 +93,292 @@ tbody tr:hover{background:#eff6ff}
 <div class="topnav">
   <a class="back-btn" href="/" title="Volver al inicio">←</a>
   <span class="nav-cur">📊 BASE MADRE — Clientes</span>
+  <div class="nav-estado">
+    <span class="badge" id="badge-estado">⏳ Conectando…</span>
+  </div>
 </div>
 
 <div class="main-content">
+
   <div class="page-header">
     <div class="page-icon">📊</div>
     <div>
       <div class="page-title">BASE MADRE</div>
-      <div class="page-sub">Excel conectado desde SharePoint — se actualiza solo (cache 10 min)</div>
+      <div class="page-sub">Última lectura: <b id="dato-lectura">—</b> · se actualiza sola cada 10 min</div>
+    </div>
+    <div class="header-right">
+      <button class="btn-refrescar" id="btn-refrescar" onclick="cargar(true)">🔄 Refrescar ahora</button>
     </div>
   </div>
 
-  <div class="estado-bar">
-    <span class="badge" id="badge-estado">⏳ Conectando…</span>
-    <span class="estado-dato">Clientes: <b id="dato-total">—</b></span>
-    <span class="estado-dato">Última lectura: <b id="dato-lectura">—</b></span>
-    <button class="btn-refrescar" id="btn-refrescar" onclick="cargar(true)">🔄 Refrescar ahora</button>
-  </div>
-
-  <div class="estado-bar" id="config-box" style="display:none;flex-direction:column;align-items:stretch;gap:10px">
+  <div class="config-card" id="config-box">
     <div style="font-size:13px;font-weight:700;color:#0f172a">⚙️ Conectar el Excel</div>
     <div style="font-size:12px;color:#64748b;line-height:1.5">
-      Pega aquí el <b>vínculo compartido</b> de BASE MADRE.xlsx (en OneDrive: abrir el archivo →
-      Compartir → "Cualquier persona con el vínculo puede ver" → Copiar vínculo).
+      Pega el <b>vínculo compartido</b> de BASE MADRE.xlsx (OneDrive: abrir archivo → Compartir →
+      "Cualquier persona con el vínculo puede ver" → Copiar vínculo).
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input type="text" id="config-url" placeholder="https://…sharepoint.com/:x:/g/personal/…"
-             style="flex:1;min-width:260px;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;font-family:inherit">
-      <button class="btn-refrescar" id="btn-guardar-url" style="margin-left:0" onclick="guardarUrl()">💾 Guardar y conectar</button>
+      <input type="text" id="config-url" placeholder="https://…sharepoint.com/:x:/g/personal/…" style="flex:1;min-width:260px">
+      <button class="btn-refrescar" id="btn-guardar-url" onclick="guardarUrl()">💾 Guardar y conectar</button>
     </div>
     <div id="config-msg" style="font-size:12px;display:none"></div>
   </div>
 
+  <div class="stats-row" id="stats-row" style="display:none">
+    <div class="stat-card" style="--stat-color:#1E3A5F"><span class="stat-num" id="st-total">—</span><span class="stat-label">Clientes</span></div>
+    <div class="stat-card" style="--stat-color:#10b981"><span class="stat-num" id="st-vigentes">—</span><span class="stat-label">Vigentes</span></div>
+    <div class="stat-card" style="--stat-color:#f59e0b"><span class="stat-num" id="st-grupos">—</span><span class="stat-label">Grupos</span></div>
+    <div class="stat-card" style="--stat-color:#8b5cf6"><span class="stat-num" id="st-kams">—</span><span class="stat-label">KAMs</span></div>
+  </div>
+
+  <div class="controls" id="controls" style="display:none">
+    <input type="text" id="f-buscar" placeholder="🔍 Buscar por RUT, razón social, grupo…" oninput="aplicarFiltros()">
+    <select id="f-estatus" onchange="aplicarFiltros()"><option value="">Estatus: todos</option></select>
+    <select id="f-kam" onchange="aplicarFiltros()"><option value="">KAM: todos</option></select>
+    <select id="f-consultor" onchange="aplicarFiltros()"><option value="">Consultor deuda: todos</option></select>
+    <button class="btn-limpiar" id="btn-limpiar" onclick="limpiarFiltros()">✕ Limpiar filtros</button>
+    <span class="ctrl-count" id="ctrl-count"></span>
+  </div>
+
   <div class="tabla-card">
-    <div class="tabla-header">
-      <input type="text" id="buscar" placeholder="🔍 Buscar por RUT, razón social, grupo, KAM…" oninput="filtrar()">
-      <span class="tabla-count" id="tabla-count"></span>
-    </div>
     <div class="tabla-scroll" id="tabla-scroll">
       <div class="msg-vacio">Cargando datos…</div>
     </div>
   </div>
 </div>
 
+<!-- Ficha del cliente -->
+<div class="drawer-bg" id="drawer-bg" onclick="cerrarFicha()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div style="flex:1;min-width:0">
+      <div class="drawer-title" id="d-titulo">—</div>
+      <div class="drawer-sub" id="d-sub"></div>
+    </div>
+    <button class="drawer-close" onclick="cerrarFicha()">✕</button>
+  </div>
+  <div class="drawer-body" id="d-body"></div>
+</div>
+
 <script>
-let columnas = [];
-let filas = [];
+let columnas = [], filas = [], filtradas = [];
+let COL = {};   // columnas clave detectadas por nombre
 
 const esc = s => (s ?? '').toString()
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const norm = s => (s ?? '').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
+const pretty = h => h.replace(/^\d+[_\s]*/,'').trim();
 
-async function cargar(refrescar = false) {
+function detectarColumnas(){
+  const buscar = (...terms) => columnas.find(c => terms.every(t => norm(c).includes(t))) || null;
+  COL = {
+    rut:         buscar('rut') ,
+    grupo:       buscar('grupo') === buscar('nombre grupo') ? buscar('grupo') : (columnas.find(c=>norm(c)==='2 grupo') || buscar('grupo')),
+    kam:         buscar('kam'),
+    consDeuda:   buscar('consultor','deuda'),
+    consIngreso: buscar('consultor','ingreso'),
+    razon:       buscar('razon','social'),
+    rubro:       buscar('rubro'),
+    estatus:     buscar('estatus','cliente') || buscar('estatus'),
+    dotacion:    buscar('dotacion'),
+  };
+}
+
+function chipEstatus(v){
+  const n = norm(v);
+  if(!n) return '';
+  let cls = 'chip-otro';
+  if(n.includes('vigente')) cls = 'chip-vigente';
+  else if(n.includes('finaliz') || n.includes('termin')) cls = 'chip-finalizado';
+  else if(n.includes('suspend') || n.includes('pausa')) cls = 'chip-suspendido';
+  return `<span class="chip ${cls}">${esc(v)}</span>`;
+}
+
+async function cargar(refrescar = false){
   const btn = document.getElementById('btn-refrescar');
   btn.disabled = true;
   if (refrescar) btn.textContent = '⏳ Descargando…';
-  try {
+  try{
     const res = await fetch('/api/base_madre/datos' + (refrescar ? '?refrescar=1' : ''));
     const data = await res.json();
-
-    const badge = document.getElementById('badge-estado');
-    if (data.ok && !data.error) {
-      badge.className = 'badge badge-ok';
-      badge.textContent = '✓ Conectado';
-    } else if (data.ok && data.error) {
-      badge.className = 'badge badge-err';
-      badge.textContent = '⚠ Conectado con datos antiguos — ' + data.error;
-    } else {
-      badge.className = 'badge badge-err';
-      badge.textContent = '✗ Sin conexión — ' + (data.error || 'error desconocido');
-    }
-
-    // Recuadro de configuración: visible para el admin cuando falta el enlace o falla la lectura
-    const cfgBox = document.getElementById('config-box');
-    cfgBox.style.display = (data.es_admin && (!data.configurado || !data.ok)) ? 'flex' : 'none';
-    document.getElementById('dato-total').textContent = data.total || '—';
-    document.getElementById('dato-lectura').textContent = data.ultima_lectura || '—';
-
-    columnas = data.columnas || [];
-    filas = data.filas || [];
-    filtrar();
-  } catch (e) {
-    document.getElementById('badge-estado').className = 'badge badge-err';
-    document.getElementById('badge-estado').textContent = '✗ Error: ' + e;
-  } finally {
+    aplicarDatos(data);
+  }catch(e){
+    setBadge('err', '✗ Error: ' + e);
+  }finally{
     btn.disabled = false;
     btn.textContent = '🔄 Refrescar ahora';
   }
 }
 
-async function guardarUrl() {
+function setBadge(tipo, texto){
+  const b = document.getElementById('badge-estado');
+  b.className = 'badge ' + (tipo === 'ok' ? 'badge-ok' : 'badge-err');
+  b.textContent = texto;
+}
+
+function aplicarDatos(data){
+  if (data.ok && !data.error)      setBadge('ok', '✓ Conectado');
+  else if (data.ok && data.error)  setBadge('err', '⚠ Datos antiguos — ' + data.error);
+  else                             setBadge('err', '✗ Sin conexión — ' + (data.error || 'error'));
+
+  document.getElementById('dato-lectura').textContent = data.ultima_lectura || '—';
+  document.getElementById('config-box').style.display =
+    (data.es_admin && (!data.configurado || !data.ok)) ? 'flex' : 'none';
+
+  columnas = data.columnas || [];
+  filas    = data.filas || [];
+  if (!filas.length){
+    document.getElementById('tabla-scroll').innerHTML =
+      '<div class="msg-vacio">Sin datos — conecta el Excel para ver la base</div>';
+    return;
+  }
+  detectarColumnas();
+  poblarStats();
+  poblarSelects();
+  document.getElementById('stats-row').style.display = '';
+  document.getElementById('controls').style.display = '';
+  aplicarFiltros();
+}
+
+function poblarStats(){
+  const g = new Set(), k = new Set();
+  let vig = 0;
+  for (const f of filas){
+    if (COL.grupo   && (f[COL.grupo]||'').trim())  g.add(norm(f[COL.grupo]));
+    if (COL.kam     && (f[COL.kam]||'').trim())    k.add(norm(f[COL.kam]));
+    if (COL.estatus && norm(f[COL.estatus]).includes('vigente')) vig++;
+  }
+  document.getElementById('st-total').textContent    = filas.length;
+  document.getElementById('st-vigentes').textContent = COL.estatus ? vig : '—';
+  document.getElementById('st-grupos').textContent   = COL.grupo ? g.size : '—';
+  document.getElementById('st-kams').textContent     = COL.kam ? k.size : '—';
+}
+
+function poblarSelects(){
+  const llenar = (id, col, prefijo) => {
+    const sel = document.getElementById(id);
+    const previo = sel.value;
+    const vals = [...new Set(filas.map(f => (col ? (f[col]||'') : '')).map(v=>v.trim()).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'es'));
+    sel.innerHTML = `<option value="">${prefijo}: todos</option>` +
+      vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    if (vals.includes(previo)) sel.value = previo;
+  };
+  llenar('f-estatus',   COL.estatus,   'Estatus');
+  llenar('f-kam',       COL.kam,       'KAM');
+  llenar('f-consultor', COL.consDeuda, 'Consultor deuda');
+}
+
+function aplicarFiltros(){
+  const q  = norm(document.getElementById('f-buscar').value);
+  const fe = document.getElementById('f-estatus').value;
+  const fk = document.getElementById('f-kam').value;
+  const fc = document.getElementById('f-consultor').value;
+
+  filtradas = filas.filter(f => {
+    if (fe && (f[COL.estatus]||'').trim() !== fe) return false;
+    if (fk && (f[COL.kam]||'').trim() !== fk) return false;
+    if (fc && (f[COL.consDeuda]||'').trim() !== fc) return false;
+    if (q && !columnas.some(c => norm(f[c]).includes(q))) return false;
+    return true;
+  });
+
+  document.getElementById('btn-limpiar').style.display = (q||fe||fk||fc) ? '' : 'none';
+  document.getElementById('ctrl-count').textContent =
+    (q||fe||fk||fc) ? `${filtradas.length} de ${filas.length}` : `${filas.length} clientes`;
+  renderTabla();
+}
+
+function limpiarFiltros(){
+  document.getElementById('f-buscar').value = '';
+  ['f-estatus','f-kam','f-consultor'].forEach(id => document.getElementById(id).value = '');
+  aplicarFiltros();
+}
+
+function renderTabla(){
+  const cont = document.getElementById('tabla-scroll');
+  if (!filtradas.length){
+    cont.innerHTML = '<div class="msg-vacio">Sin resultados con los filtros actuales</div>';
+    return;
+  }
+  const cab = ['RUT','Razón Social','Grupo','KAM','Cons. Deuda','Cons. Ingreso','Rubro','Estatus'];
+  const thead = '<thead><tr>' + cab.map(c=>`<th>${c}</th>`).join('') + '</tr></thead>';
+  const tbody = '<tbody>' + filtradas.map((f, i) => `
+    <tr onclick="abrirFicha(${i})">
+      <td class="td-rut">${esc(f[COL.rut])}</td>
+      <td class="td-razon">${esc(f[COL.razon])}</td>
+      <td>${esc(f[COL.grupo])}</td>
+      <td>${esc(f[COL.kam])}</td>
+      <td>${esc(f[COL.consDeuda])}</td>
+      <td>${esc(f[COL.consIngreso])}</td>
+      <td>${esc(f[COL.rubro])}</td>
+      <td>${chipEstatus(f[COL.estatus])}</td>
+    </tr>`).join('') + '</tbody>';
+  cont.innerHTML = `<table>${thead}${tbody}</table>`;
+}
+
+// ── Ficha completa del cliente ──────────────────────────────────────────────
+const CAMPOS_PRINCIPALES = () => [COL.rut, COL.razon, COL.grupo, COL.kam,
+  COL.consDeuda, COL.consIngreso, COL.rubro, COL.estatus, COL.dotacion].filter(Boolean);
+
+function abrirFicha(idx){
+  const f = filtradas[idx];
+  if (!f) return;
+  document.getElementById('d-titulo').textContent = f[COL.razon] || '(sin razón social)';
+  document.getElementById('d-sub').innerHTML =
+    `<span>${esc(f[COL.rut] || '')}</span>` + (COL.estatus ? chipEstatus(f[COL.estatus]) : '');
+
+  const principales = CAMPOS_PRINCIPALES();
+  const item = c => `
+    <div class="f-item">
+      <div class="f-label">${esc(pretty(c))}</div>
+      <div class="f-value">${esc(f[c]) || '—'}</div>
+    </div>`;
+
+  const resto = columnas.filter(c => !principales.includes(c) && (f[c]||'').trim());
+  let html = `<div><div class="seccion-titulo">Datos principales</div>
+    <div class="field-grid" style="margin-top:10px">${principales.map(item).join('')}</div></div>`;
+  if (resto.length){
+    html += `<div><div class="seccion-titulo">Toda la información (${resto.length} campos)</div>
+      <div class="field-grid" style="margin-top:10px">${resto.map(item).join('')}</div></div>`;
+  }
+  document.getElementById('d-body').innerHTML = html;
+  document.getElementById('drawer-bg').classList.add('show');
+  document.getElementById('drawer').classList.add('show');
+}
+
+function cerrarFicha(){
+  document.getElementById('drawer-bg').classList.remove('show');
+  document.getElementById('drawer').classList.remove('show');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarFicha(); });
+
+// ── Config (admin) ──────────────────────────────────────────────────────────
+async function guardarUrl(){
   const url = document.getElementById('config-url').value.trim();
   const msg = document.getElementById('config-msg');
   const btn = document.getElementById('btn-guardar-url');
-  if (!url) { return; }
-  btn.disabled = true;
-  btn.textContent = '⏳ Conectando…';
-  msg.style.display = 'none';
-  try {
+  if (!url) return;
+  btn.disabled = true; btn.textContent = '⏳ Conectando…'; msg.style.display = 'none';
+  try{
     const res = await fetch('/api/base_madre/config', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url})
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})
     });
     const data = await res.json();
-    if (data.ok) {
+    msg.style.display = 'block';
+    if (data.ok){
       msg.style.color = '#047857';
       msg.textContent = `✓ Conectado — ${data.total} clientes leídos`;
-      msg.style.display = 'block';
       cargar();
     } else {
       msg.style.color = '#b91c1c';
       msg.textContent = '✗ ' + (data.error || 'No se pudo guardar');
-      msg.style.display = 'block';
     }
-  } catch (e) {
-    msg.style.color = '#b91c1c';
-    msg.textContent = '✗ Error: ' + e;
-    msg.style.display = 'block';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '💾 Guardar y conectar';
+  }catch(e){
+    msg.style.display = 'block'; msg.style.color = '#b91c1c'; msg.textContent = '✗ Error: ' + e;
+  }finally{
+    btn.disabled = false; btn.textContent = '💾 Guardar y conectar';
   }
-}
-
-function filtrar() {
-  const q = document.getElementById('buscar').value.trim().toLowerCase();
-  const visibles = !q ? filas
-    : filas.filter(f => columnas.some(c => (f[c] || '').toLowerCase().includes(q)));
-
-  const cont = document.getElementById('tabla-scroll');
-  document.getElementById('tabla-count').textContent =
-    q ? `${visibles.length} de ${filas.length}` : `${filas.length} clientes`;
-
-  if (!visibles.length) {
-    cont.innerHTML = '<div class="msg-vacio">Sin resultados</div>';
-    return;
-  }
-  const thead = '<thead><tr>' + columnas.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead>';
-  const tbody = '<tbody>' + visibles.map(f =>
-    '<tr>' + columnas.map(c => `<td title="${esc(f[c])}">${esc(f[c])}</td>`).join('') + '</tr>'
-  ).join('') + '</tbody>';
-  cont.innerHTML = `<table>${thead}${tbody}</table>`;
 }
 
 cargar();

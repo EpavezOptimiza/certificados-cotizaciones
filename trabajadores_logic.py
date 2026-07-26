@@ -17,21 +17,108 @@ import unicodedata
 from playwright.sync_api import sync_playwright
 
 from previred_logic import (
-    hacer_login, ir_a_planillas_pagadas, obtener_nominas, esta_en_login,
-    MESES_NOMBRE, _select_anio, _click_texto, URL_LOGIN,
+    hacer_login, esta_en_login, MESES_NOMBRE, _select_anio, URL_LOGIN,
 )
+
+
+# ── Navegación rápida (sin esperas fijas) ──────────────────────────────────────
+
+def _poll(page, js, max_seg=8.0, paso=0.25):
+    """Espera hasta que una condición JS sea verdadera. Devuelve True/False."""
+    fin = time.time() + max_seg
+    while time.time() < fin:
+        try:
+            if page.evaluate(js):
+                return True
+        except Exception:
+            pass
+        time.sleep(paso)
+    return False
+
+
+# Click en un ítem de menú buscando en TODOS los tags a la vez (el _click_texto
+# de previred_logic prueba tag por tag con timeouts de 15s: ~20s perdidos por paso)
+_JS_CLICK_MENU = """(t) => {
+    const objetivo = t.toLowerCase();
+    const els = document.querySelectorAll('a, span, li, button, td, div');
+    let mejor = null;
+    for (const el of els) {
+        if (el.offsetParent === null) continue;
+        const txt = (el.innerText || '').trim().toLowerCase();
+        if (!txt) continue;
+        if (txt === objetivo) { el.click(); return true; }
+        if (txt.includes(objetivo) && txt.length <= objetivo.length + 20) {
+            if (!mejor || txt.length < (mejor.innerText || '').trim().length) mejor = el;
+        }
+    }
+    if (mejor) { mejor.click(); return true; }
+    return false;
+}"""
+
+_JS_HAY_MES = "() => !!document.querySelector('#mesR0')"
+
+
+def _ir_a_planillas_rapido(page, log):
+    """Menú Remuneraciones → Imprimir Documentos → Planillas Pagadas.
+    Usa clicks JS y polling: ~5s en vez de ~25s."""
+    if page.evaluate(_JS_HAY_MES):
+        return True
+    for intento in range(2):
+        for etiqueta, siguiente in (
+            ("Remuneraciones",     "imprimir documentos"),
+            ("Imprimir Documentos", "planillas pagadas"),
+            ("Planillas Pagadas",   None),
+        ):
+            try:
+                page.evaluate(_JS_CLICK_MENU, etiqueta)
+            except Exception:
+                pass
+            if siguiente:
+                # Esperar a que aparezca el siguiente nivel del menú
+                _poll(page, "(() => { const t = '%s';"
+                            " return Array.from(document.querySelectorAll('a,span,li,button,td,div'))"
+                            " .some(e => e.offsetParent !== null &&"
+                            " (e.innerText||'').trim().toLowerCase().includes(t)); })" % siguiente,
+                      max_seg=4)
+            else:
+                if _poll(page, _JS_HAY_MES, max_seg=12):
+                    return True
+        if intento == 0:
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=6000)
+            except Exception:
+                pass
+    return page.evaluate(_JS_HAY_MES)
+
+
+def _nominas_rapido(page, mes, anio):
+    """Nóminas del período, con polling en vez de sleeps fijos."""
+    page.wait_for_selector("#mesR0", timeout=12000)
+    page.select_option("#mesR0", str(mes).zfill(2))
+    _select_anio(page, anio)
+    # El combo se repuebla por AJAX: esperar a que tenga opciones reales
+    _poll(page, """() => {
+        const sel = document.getElementById('combo_nominas');
+        if (!sel) return false;
+        return Array.from(sel.options).some(o => o.value &&
+            !o.text.toLowerCase().includes('seleccione'));
+    }""", max_seg=5)
+    try:
+        return page.evaluate("""() => {
+            const sel = document.getElementById('combo_nominas');
+            if (!sel) return [];
+            return Array.from(sel.options)
+                .filter(o => o.value && !o.text.toLowerCase().includes('seleccione'))
+                .map(o => o.text.trim());
+        }""") or []
+    except Exception:
+        return []
 
 
 def _menu_empresas_visible(page, espera=6):
     """True si el menú de empresas (li#empresa) está disponible en pantalla."""
-    for _ in range(espera):
-        try:
-            if page.locator("li#empresa").count() > 0:
-                return True
-        except Exception:
-            pass
-        time.sleep(1)
-    return False
+    return _poll(page, "() => !!document.querySelector('li#empresa')",
+                 max_seg=float(espera), paso=0.25)
 
 
 def _volver_al_inicio(page, estado, usuario, clave, log):
@@ -41,7 +128,7 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
     en orden: (1) link Inicio/logo dentro de la página, (2) volver atrás en
     el historial, (3) URL guardada, (4) re-login como último recurso.
     """
-    if _menu_empresas_visible(page, espera=1):
+    if _menu_empresas_visible(page, espera=0.5):
         return
 
     # 1. Link de inicio dentro del portal
@@ -59,34 +146,28 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
             }
             return false;
         }""")
-        if clickeado:
-            try:
-                page.wait_for_load_state("domcontentloaded", timeout=10000)
-            except Exception:
-                pass
-            if _menu_empresas_visible(page, espera=6):
-                return
+        if clickeado and _menu_empresas_visible(page, espera=5):
+            return
     except Exception:
         pass
 
     # 2. Volver atrás en el historial hasta encontrar el menú
-    for _ in range(4):
+    for _ in range(3):
         try:
-            page.go_back(wait_until="domcontentloaded", timeout=12000)
+            page.go_back(wait_until="domcontentloaded", timeout=8000)
         except Exception:
             break
         if esta_en_login(page):
             break
-        if _menu_empresas_visible(page, espera=3):
+        if _menu_empresas_visible(page, espera=2):
             return
 
     # 3. URL guardada del portal
     home = estado.get("home")
     if home:
         try:
-            page.goto(home, wait_until="domcontentloaded", timeout=25000)
-            time.sleep(1.5)
-            if not esta_en_login(page) and _menu_empresas_visible(page, espera=5):
+            page.goto(home, wait_until="domcontentloaded", timeout=20000)
+            if not esta_en_login(page) and _menu_empresas_visible(page, espera=4):
                 return
         except Exception:
             pass
@@ -137,21 +218,13 @@ def _ids_empresa(page, rut, log):
 
     page.wait_for_selector("li#empresa", timeout=20000)
     page.click("li#empresa")
-    try:
-        page.wait_for_load_state("domcontentloaded", timeout=15000)
-    except Exception:
-        pass
 
     # Esperar a que cargue CUALQUIER empresa (la lista es asíncrona)
-    total = 0
-    for _ in range(15):
-        try:
-            total = page.evaluate("() => document.querySelectorAll('[id^=\"empresa#\"]').length")
-        except Exception:
-            total = 0
-        if total:
-            break
-        time.sleep(1)
+    _poll(page, "() => document.querySelectorAll('[id^=\"empresa#\"]').length > 0", max_seg=12)
+    try:
+        total = page.evaluate("() => document.querySelectorAll('[id^=\"empresa#\"]').length")
+    except Exception:
+        total = 0
 
     def _ids():
         try:
@@ -262,10 +335,13 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     de accidentes (Mutual/ISL). Si no existe el tipo, usa 'Todas'."""
     page.wait_for_selector("#mesR0", timeout=15000)
     page.select_option("#mesR0", str(mes).zfill(2))
-    time.sleep(1)
     _select_anio(page, anio)
-    time.sleep(1)
     page.wait_for_selector("#combo_nominas", timeout=15000)
+    _poll(page, """() => {
+        const sel = document.getElementById('combo_nominas');
+        return sel && Array.from(sel.options).some(o => o.value &&
+            !o.text.toLowerCase().includes('seleccione'));
+    }""", max_seg=5)
     opciones = page.evaluate("""() => {
         var sel = document.getElementById('combo_nominas');
         return Array.from(sel.options).map(o => o.text.trim());
@@ -275,7 +351,6 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     if not objetivo:
         return False
     page.select_option("#combo_nominas", label=objetivo)
-    time.sleep(1)
 
     # Tipo de institución: buscar Mutual/ISL; si no, 'Todas'
     try:
@@ -295,12 +370,11 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
         if elegido:
             page.select_option("#combo_tipo_institucion", label=elegido)
             log(f"  Tipo institución: {elegido.strip()}", "info")
-        time.sleep(2)
         try:
-            page.wait_for_function("""() => {
-                var sel = document.getElementById('combo_instituciones');
+            _poll(page, """() => {
+                const sel = document.getElementById('combo_instituciones');
                 return sel && sel.options.length >= 1;
-            }""", timeout=8000)
+            }""", max_seg=6)
             inst = page.evaluate("""() => {
                 var sel = document.getElementById('combo_instituciones');
                 return Array.from(sel.options).map(o => o.text);
@@ -309,9 +383,8 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
                 page.select_option("#combo_instituciones", label="Todas las Instituciones")
         except Exception:
             pass
-        time.sleep(1)
     except Exception:
-        time.sleep(1)
+        pass
 
     # Cerrar dialogs flotantes y buscar
     try:
@@ -320,11 +393,15 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
                 var btn = d.querySelector('button'); if (btn) btn.click();
             });
         }""")
-        time.sleep(1)
     except Exception:
         pass
     page.evaluate("() => document.getElementById('buscar').click()")
-    time.sleep(3)
+    # Esperar el resultado: tabla con datos o aviso de 'sin planillas'
+    _poll(page, """() => {
+        const b = (document.body.innerText || '').toLowerCase();
+        if (b.includes('timbradas')) return true;
+        return document.querySelectorAll('img[src*="planillas.gif"]').length > 0;
+    }""", max_seg=10)
 
     try:
         cuerpo = page.inner_text("body")
@@ -446,9 +523,16 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
             hacer_login(page, usuario, clave, log)
             estado = {"home": page.url}   # URL real del portal tras el login
 
+            t0_global = time.time()
             for i, cli in enumerate(clientes, 1):
                 rut, razon = cli["rut"], cli.get("razon", "")
-                log(f"[{i}/{len(clientes)}] {razon or rut}...", "info")
+                t0 = time.time()
+                if i > 1:
+                    prom = (time.time() - t0_global) / (i - 1)
+                    resta = int(prom * (len(clientes) - i + 1) / 60)
+                    log(f"[{i}/{len(clientes)}] {razon or rut}... (~{resta} min restantes)", "info")
+                else:
+                    log(f"[{i}/{len(clientes)}] {razon or rut}...", "info")
                 try:
                     # Entre empresas hay que volver al inicio del portal:
                     # dentro de Planillas Pagadas no existe el menú li#empresa
@@ -475,10 +559,14 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                         etiqueta = btn_id.split("#")[2] if btn_id.count("#") >= 2 else str(k)
                         try:
                             page.click(f'[id="{btn_id}"]')
-                            page.wait_for_load_state("domcontentloaded", timeout=15000)
-                            time.sleep(2)
-                            ir_a_planillas_pagadas(page, log)
-                            nominas = obtener_nominas(page, mes, anio)
+                            try:
+                                page.wait_for_load_state("domcontentloaded", timeout=10000)
+                            except Exception:
+                                pass
+                            if not _ir_a_planillas_rapido(page, log):
+                                log(f"  Sucursal {etiqueta}: no se llegó a Planillas Pagadas", "warn")
+                                continue
+                            nominas = _nominas_rapido(page, mes, anio)
                         except Exception as e_suc:
                             log(f"  Sucursal {etiqueta}: {type(e_suc).__name__}", "warn")
                             continue
@@ -535,8 +623,9 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                                 organismo_usado = organismo
 
                             try:
-                                _click_texto(page, "Nueva búsqueda", timeout=4000)
-                                time.sleep(2)
+                                page.evaluate(_JS_CLICK_MENU, "Nueva búsqueda")
+                                _poll(page, "() => !!document.querySelector('#combo_nominas')",
+                                      max_seg=5)
                             except Exception:
                                 pass
 

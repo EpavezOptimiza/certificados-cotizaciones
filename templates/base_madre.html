@@ -181,7 +181,19 @@ function detectarColumnas(){
     rubro:       buscar('rubro'),
     estatus:     buscar('estatus','cliente') || buscar('estatus'),
     dotacion:    buscar('dotacion'),
+    feeDeuda:    buscar('fee','deuda'),
+    fees:        columnas.filter(c => norm(c).includes('fee')),
   };
+}
+
+// Formatea un FEE: 0.25 → "25%", 0 → "0%", "No aplica" queda igual
+function fmtFee(v){
+  const s = (v ?? '').toString().trim();
+  if (!s) return '';
+  const n = Number(s.replace(',', '.'));
+  if (!isFinite(n)) return s;
+  const pct = n <= 1.5 ? n * 100 : n;
+  return (Math.round(pct * 10) / 10) + '%';
 }
 
 function chipEstatus(v){
@@ -301,7 +313,7 @@ function renderTabla(){
     cont.innerHTML = '<div class="msg-vacio">Sin resultados con los filtros actuales</div>';
     return;
   }
-  const cab = ['RUT','Razón Social','Grupo','KAM','Cons. Deuda','Cons. Ingreso','Rubro','Estatus'];
+  const cab = ['RUT','Razón Social','Grupo','KAM','Cons. Deuda','Cons. Ingreso','Rubro','FEE Deuda','Estatus'];
   const thead = '<thead><tr>' + cab.map(c=>`<th>${c}</th>`).join('') + '</tr></thead>';
   const tbody = '<tbody>' + filtradas.map((f, i) => `
     <tr onclick="abrirFicha(${i})">
@@ -312,6 +324,7 @@ function renderTabla(){
       <td>${esc(f[COL.consDeuda])}</td>
       <td>${esc(f[COL.consIngreso])}</td>
       <td>${esc(f[COL.rubro])}</td>
+      <td style="font-weight:700;color:#1E3A5F">${esc(fmtFee(f[COL.feeDeuda]))}</td>
       <td>${chipEstatus(f[COL.estatus])}</td>
     </tr>`).join('') + '</tbody>';
   cont.innerHTML = `<table>${thead}${tbody}</table>`;
@@ -335,9 +348,22 @@ function abrirFicha(idx){
       <div class="f-value">${esc(f[c]) || '—'}</div>
     </div>`;
 
-  const resto = columnas.filter(c => !principales.includes(c) && (f[c]||'').trim());
+  const fees = COL.fees || [];
+  const resto = columnas.filter(c => !principales.includes(c) && !fees.includes(c) && (f[c]||'').trim());
+
   let html = `<div><div class="seccion-titulo">Datos principales</div>
     <div class="field-grid" style="margin-top:10px">${principales.map(item).join('')}</div></div>`;
+
+  if (fees.length){
+    const itemFee = c => `
+      <div class="f-item">
+        <div class="f-label">${esc(pretty(c))}</div>
+        <div class="f-value" style="font-weight:800;color:#1E3A5F;font-size:15px">${esc(fmtFee(f[c])) || '—'}</div>
+      </div>`;
+    html += `<div><div class="seccion-titulo">💰 Tarifas (FEE)</div>
+      <div class="field-grid" style="margin-top:10px">${fees.map(itemFee).join('')}</div></div>`;
+  }
+
   if (resto.length){
     html += `<div><div class="seccion-titulo">Toda la información (${resto.length} campos)</div>
       <div class="field-grid" style="margin-top:10px">${resto.map(item).join('')}</div></div>`;

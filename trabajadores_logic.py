@@ -22,28 +22,111 @@ from previred_logic import (
 )
 
 
+def _menu_empresas_visible(page, espera=6):
+    """True si el menú de empresas (li#empresa) está disponible en pantalla."""
+    for _ in range(espera):
+        try:
+            if page.locator("li#empresa").count() > 0:
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
+
+
 def _volver_al_inicio(page, estado, usuario, clave, log):
-    """Vuelve al home del portal (donde vive el menú de empresas li#empresa).
-    Usa la URL real del portal capturada tras el login — volver a login.jsp
-    deslogueaba la sesión y dejaba la lista de empresas vacía.
-    Solo re-loguea si la sesión efectivamente murió."""
-    home = estado.get("home") or URL_LOGIN
+    """Vuelve a donde está el menú de empresas (li#empresa).
+
+    El portal es por sesión: navegar por URL desloguea. Por eso se intenta,
+    en orden: (1) link Inicio/logo dentro de la página, (2) volver atrás en
+    el historial, (3) URL guardada, (4) re-login como último recurso.
+    """
+    if _menu_empresas_visible(page, espera=1):
+        return
+
+    # 1. Link de inicio dentro del portal
     try:
-        page.goto(home, wait_until="domcontentloaded", timeout=30000)
-        time.sleep(2)
+        clickeado = page.evaluate("""() => {
+            const cands = Array.from(document.querySelectorAll('a, li, span, img'));
+            for (const el of cands) {
+                if (el.offsetParent === null) continue;
+                const t = ((el.innerText || '') + ' ' + (el.getAttribute('title') || '') + ' ' +
+                           (el.getAttribute('alt') || '') + ' ' + (el.id || '')).toLowerCase();
+                if (/\\binicio\\b|\\bhome\\b|portada|mis empresas|cambiar empresa/.test(t)) {
+                    el.click();
+                    return true;
+                }
+            }
+            return false;
+        }""")
+        if clickeado:
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass
+            if _menu_empresas_visible(page, espera=6):
+                return
     except Exception:
         pass
-    if esta_en_login(page):
-        log("  Sesión caída — re-login...", "warn")
-        hacer_login(page, usuario, clave, log)
-        estado["home"] = page.url
-        return
-    try:
-        page.wait_for_selector("li#empresa", timeout=10000)
-    except Exception:
-        # El home guardado no sirve: re-login y recapturar
-        hacer_login(page, usuario, clave, log)
-        estado["home"] = page.url
+
+    # 2. Volver atrás en el historial hasta encontrar el menú
+    for _ in range(4):
+        try:
+            page.go_back(wait_until="domcontentloaded", timeout=12000)
+        except Exception:
+            break
+        if esta_en_login(page):
+            break
+        if _menu_empresas_visible(page, espera=3):
+            return
+
+    # 3. URL guardada del portal
+    home = estado.get("home")
+    if home:
+        try:
+            page.goto(home, wait_until="domcontentloaded", timeout=25000)
+            time.sleep(1.5)
+            if not esta_en_login(page) and _menu_empresas_visible(page, espera=5):
+                return
+        except Exception:
+            pass
+
+    # 4. Último recurso: re-login
+    log("  Reabriendo sesión...", "warn")
+    hacer_login(page, usuario, clave, log)
+    estado["home"] = page.url
+
+
+# Lee el N° de trabajadores directamente de la tabla de resultados (sin PDF).
+# Devuelve {n, fila, cabeceras} para poder diagnosticar si no lo encuentra.
+_JS_TABLA_TRABAJADORES = """(orgKeys) => {
+    const norm = s => (s || '').toString().normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '').trim().toLowerCase();
+    const out = {n: null, fila: '', cabeceras: []};
+    for (const tabla of document.querySelectorAll('table')) {
+        const filas = Array.from(tabla.querySelectorAll('tr'));
+        if (filas.length < 2) continue;
+        const heads = Array.from(filas[0].querySelectorAll('th, td')).map(c => norm(c.innerText));
+        let idx = heads.findIndex(h => h.includes('trabajador') || h.includes('afiliado') ||
+                                       h.includes('cotizante'));
+        if (idx < 0) continue;
+        if (!out.cabeceras.length) out.cabeceras = heads.filter(Boolean).slice(0, 12);
+        for (const fila of filas.slice(1)) {
+            const celdas = Array.from(fila.querySelectorAll('td'));
+            if (celdas.length <= idx) continue;
+            const texto = norm(fila.innerText);
+            const esOrg = orgKeys.some(k => texto.includes(norm(k)));
+            if (!esOrg) continue;
+            const val = (celdas[idx].innerText || '').replace(/[^0-9]/g, '');
+            if (val) {
+                out.n = parseInt(val, 10);
+                out.fila = fila.innerText.replace(/\\s+/g, ' ').trim().slice(0, 120);
+                return out;
+            }
+        }
+    }
+    return out;
+}"""
 
 
 def _ids_empresa(page, rut, log):
@@ -276,10 +359,34 @@ def _descargar_pdf_organismo(page, carpeta_temp, log):
         return None, None
 
     log(f"  Organismo detectado: {nombre_org}", "info")
+
+    # Abrir el modal de impresión: primero click nativo (más fiable que JS),
+    # luego JS, y como respaldo el botón de planilla masiva.
+    modal_ok = False
     try:
-        page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{idx_org}].click()")
-        page.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
+        icono = page.locator('img[src*="planillas.gif"]').nth(idx_org)
+        icono.scroll_into_view_if_needed(timeout=4000)
+        icono.click(timeout=6000)
+        page.wait_for_selector("#aceptar_modal", state="visible", timeout=12000)
+        modal_ok = True
     except Exception:
+        pass
+    if not modal_ok:
+        try:
+            page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{idx_org}].click()")
+            page.wait_for_selector("#aceptar_modal", state="visible", timeout=12000)
+            modal_ok = True
+        except Exception:
+            pass
+    if not modal_ok:
+        try:
+            page.click("button[id^='planillas_masivas']", timeout=5000)
+            page.wait_for_selector("#aceptar_modal", state="visible", timeout=10000)
+            modal_ok = True
+            log("  (usando planilla masiva de la empresa)", "info")
+        except Exception:
+            pass
+    if not modal_ok:
         log("  Modal de impresión no apareció", "warn")
         return None, nombre_org
 
@@ -385,23 +492,48 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                         for nombre_nomina in nominas:
                             if not _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
                                 continue
-                            ruta_pdf, organismo = _descargar_pdf_organismo(page, carpeta_temp, log)
-                            if not ruta_pdf:
-                                continue
-                            con_planilla = True
-                            n = extraer_n_trabajadores(ruta_pdf)
-                            # Eliminar el PDF de inmediato — solo queda el dato
+
+                            # 1º intento: leer el N° directamente de la tabla de
+                            # resultados (sin descargar nada)
+                            n, organismo = None, ""
                             try:
-                                os.remove(ruta_pdf)
+                                res = page.evaluate(_JS_TABLA_TRABAJADORES, list(_ORGANISMOS))
                             except Exception:
-                                pass
+                                res = None
+                            if res and res.get("n"):
+                                n = res["n"]
+                                con_planilla = True
+                                organismo = "organismo (tabla)"
+                                log(f"  ✓ Sucursal {etiqueta} · {n} trabajadores (desde la tabla)", "ok")
+                                if not estado.get("tabla_ok"):
+                                    estado["tabla_ok"] = True
+                                    log(f"    fila: {res.get('fila','')}", "info")
+
+                            # 2º intento: descargar el PDF del organismo y leerlo
+                            if n is None:
+                                ruta_pdf, organismo = _descargar_pdf_organismo(page, carpeta_temp, log)
+                                if ruta_pdf:
+                                    con_planilla = True
+                                    n = extraer_n_trabajadores(ruta_pdf)
+                                    # Eliminar el PDF de inmediato — solo queda el dato
+                                    try:
+                                        os.remove(ruta_pdf)
+                                    except Exception:
+                                        pass
+                                    if n is not None:
+                                        log(f"  ✓ Sucursal {etiqueta} · {organismo}: {n} trabajadores", "ok")
+                                    else:
+                                        log("  PDF leído pero no se encontró el N° de trabajadores", "warn")
+                                        if res and res.get("cabeceras") and not estado.get("diag_tabla"):
+                                            estado["diag_tabla"] = True
+                                            log(f"    columnas de la tabla: {res['cabeceras']}", "warn")
+
                             if n is not None:
                                 n_total = (n_total or 0) + n
                                 organismo_usado = organismo or organismo_usado
-                                log(f"  ✓ Sucursal {etiqueta} · {organismo}: {n} trabajadores", "ok")
-                            else:
-                                organismo_usado = organismo or organismo_usado
-                                log("  PDF leído pero no se encontró el N° de trabajadores", "warn")
+                            elif organismo:
+                                organismo_usado = organismo
+
                             try:
                                 _click_texto(page, "Nueva búsqueda", timeout=4000)
                                 time.sleep(2)

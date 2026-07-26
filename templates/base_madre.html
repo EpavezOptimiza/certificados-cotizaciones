@@ -107,8 +107,19 @@ tbody tr:hover{background:#eff6ff}
       <div class="page-sub">Última lectura: <b id="dato-lectura">—</b> · se actualiza sola cada 10 min</div>
     </div>
     <div class="header-right">
+      <button class="btn-refrescar" id="btn-trab" onclick="actualizarTrabajadores()">👷 Actualizar N° de trabajadores</button>
       <button class="btn-refrescar" id="btn-refrescar" onclick="cargar(true)">🔄 Refrescar ahora</button>
     </div>
+  </div>
+
+  <!-- Progreso actualización N° de trabajadores -->
+  <div class="tabla-card" id="trab-card" style="display:none;flex:none;min-height:0;max-height:340px">
+    <div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:700;color:#0f172a">👷 Actualización N° de trabajadores</span>
+      <span style="font-size:11.5px;color:#64748b" id="trab-info"></span>
+      <a id="trab-excel" href="/api/trabajadores/excel" style="margin-left:auto;font-size:11.5px;font-weight:700;color:#1E3A5F;text-decoration:none;border:1px solid #1E3A5F;border-radius:7px;padding:5px 12px;display:none">⬇ Descargar Excel</a>
+    </div>
+    <div id="trab-log" style="overflow-y:auto;padding:8px 14px;font-size:11.5px;line-height:1.8;font-family:ui-monospace,Consolas,monospace;color:#334155"></div>
   </div>
 
   <div class="config-card" id="config-box">
@@ -313,9 +324,14 @@ function renderTabla(){
     cont.innerHTML = '<div class="msg-vacio">Sin resultados con los filtros actuales</div>';
     return;
   }
-  const cab = ['RUT','Razón Social','Grupo','KAM','Cons. Deuda','Cons. Ingreso','Rubro','FEE Deuda','Estatus'];
+  const perTrab = window.__TRAB_PERIODO ? ` (${window.__TRAB_PERIODO})` : '';
+  const cab = ['RUT','Razón Social','Grupo','KAM','Cons. Deuda','Cons. Ingreso','Rubro','FEE Deuda',`N° Trab.${perTrab}`,'Estatus'];
   const thead = '<thead><tr>' + cab.map(c=>`<th>${c}</th>`).join('') + '</tr></thead>';
-  const tbody = '<tbody>' + filtradas.map((f, i) => `
+  const tbody = '<tbody>' + filtradas.map((f, i) => {
+    const tr = TRAB[rutNorm(f[COL.rut])];
+    const nT = (tr && tr.n_trabajadores != null) ? tr.n_trabajadores : '';
+    const tit = tr ? `${tr.organismo || ''} ${tr.estado || ''}`.trim() : '';
+    return `
     <tr onclick="abrirFicha(${i})">
       <td class="td-rut">${esc(f[COL.rut])}</td>
       <td class="td-razon">${esc(f[COL.razon])}</td>
@@ -325,8 +341,10 @@ function renderTabla(){
       <td>${esc(f[COL.consIngreso])}</td>
       <td>${esc(f[COL.rubro])}</td>
       <td style="font-weight:700;color:#1E3A5F">${esc(fmtFee(f[COL.feeDeuda]))}</td>
+      <td style="font-weight:800" title="${esc(tit)}">${nT !== '' ? esc(nT) : '—'}</td>
       <td>${chipEstatus(f[COL.estatus])}</td>
-    </tr>`).join('') + '</tbody>';
+    </tr>`;
+  }).join('') + '</tbody>';
   cont.innerHTML = `<table>${thead}${tbody}</table>`;
 }
 
@@ -379,6 +397,78 @@ function cerrarFicha(){
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarFicha(); });
 
+// ── N° de trabajadores (planilla organismo vía PreviRed) ───────────────────
+let TRAB = {};
+let __trabTid = null, __trabSince = 0, __trabPoll = null;
+const rutNorm = r => (r ?? '').toString().replace(/\./g,'').replace(/\s/g,'').toUpperCase();
+
+async function cargarTrabajadores(){
+  try{
+    const res = await fetch('/api/trabajadores/resultados');
+    const d = await res.json();
+    TRAB = {};
+    (d.resultados || []).forEach(x => { TRAB[rutNorm(x.rut_empresa)] = x; });
+    window.__TRAB_PERIODO = d.periodo || '';
+    if (filas.length) renderTabla();
+  }catch(e){ /* sin resultados aún */ }
+}
+
+async function actualizarTrabajadores(){
+  const btn = document.getElementById('btn-trab');
+  btn.disabled = true;
+  btn.textContent = '⏳ Iniciando…';
+  try{
+    const res = await fetch('/api/trabajadores/actualizar', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await res.json();
+    if (d.error){
+      alert(d.error);
+      btn.disabled = false; btn.textContent = '👷 Actualizar N° de trabajadores';
+      return;
+    }
+    document.getElementById('trab-card').style.display = 'flex';
+    document.getElementById('trab-log').innerHTML = '';
+    document.getElementById('trab-excel').style.display = 'none';
+    document.getElementById('trab-info').textContent =
+      `Período ${d.periodo} · ${d.a_procesar} por procesar · ${d.ya_listas} ya listas · ${d.sin_credenciales} sin credenciales`;
+    __trabTid = d.task_id; __trabSince = 0;
+    clearInterval(__trabPoll);
+    __trabPoll = setInterval(pollTrab, 2500);
+    btn.textContent = '⏳ Procesando…';
+  }catch(e){
+    alert('Error: ' + e);
+    btn.disabled = false; btn.textContent = '👷 Actualizar N° de trabajadores';
+  }
+}
+
+async function pollTrab(){
+  if (!__trabTid) return;
+  try{
+    const res = await fetch(`/api/trabajadores/tarea/${__trabTid}?since=${__trabSince}`);
+    const d = await res.json();
+    const cont = document.getElementById('trab-log');
+    (d.logs || []).forEach(l => {
+      const color = l.tipo === 'ok' ? '#047857' : l.tipo === 'err' ? '#b91c1c'
+                  : l.tipo === 'warn' ? '#b45309' : '#334155';
+      cont.insertAdjacentHTML('beforeend',
+        `<div style="color:${color}"><span style="color:#94a3b8">${l.t}</span> ${l.msg
+          .replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`);
+    });
+    __trabSince += (d.logs || []).length;
+    cont.scrollTop = cont.scrollHeight;
+    if (d.done){
+      clearInterval(__trabPoll);
+      const btn = document.getElementById('btn-trab');
+      btn.disabled = false; btn.textContent = '👷 Actualizar N° de trabajadores';
+      const ex = document.getElementById('trab-excel');
+      ex.href = '/api/trabajadores/excel' + (window.__TRAB_PERIODO ? '' : '');
+      ex.style.display = '';
+      cargarTrabajadores();
+    }
+  }catch(e){ /* siguiente poll */ }
+}
+
 // ── Config (admin) ──────────────────────────────────────────────────────────
 async function guardarUrl(){
   const url = document.getElementById('config-url').value.trim();
@@ -408,6 +498,7 @@ async function guardarUrl(){
 }
 
 cargar();
+cargarTrabajadores();
 </script>
 </body>
 </html>

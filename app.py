@@ -2707,6 +2707,175 @@ def base_madre_config():
     return jsonify({"ok": True, "total": len(filas)})
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# Actualización N° de trabajadores (planilla del organismo — PreviRed)
+# ────────────────────────────────────────────────────────────────────────────
+
+_trab_tareas: dict = {}
+_trab_corriendo = {"activo": False}
+
+
+def _trab_log(tid, msg, tipo="info"):
+    import datetime as _dt
+    if tid in _trab_tareas:
+        _trab_tareas[tid]["logs"].append({
+            "msg": msg, "tipo": tipo, "t": _dt.datetime.now().strftime("%H:%M:%S")})
+
+
+@app.route("/api/trabajadores/actualizar", methods=["POST"])
+@api_login_required
+def trabajadores_actualizar():
+    import threading, uuid, tempfile, shutil
+    import datetime as _dt
+    if _trab_corriendo["activo"]:
+        return jsonify({"error": "Ya hay una actualización en curso — espera a que termine"}), 409
+
+    d = request.json or {}
+    hoy = _dt.date.today()
+    if d.get("periodo"):
+        try:
+            anio, mes = map(int, d["periodo"].split("-"))
+        except Exception:
+            return jsonify({"error": "Período inválido (formato AAAA-MM)"}), 400
+    else:
+        mes, anio = (hoy.month - 1, hoy.year) if hoy.month > 1 else (12, hoy.year - 1)
+    periodo = f"{anio}-{str(mes).zfill(2)}"
+
+    from base_madre_logic import obtener_clientes
+    from trabajadores_logic import extraer_clientes_previred
+    columnas, filas, ts, error = obtener_clientes()
+    if not filas:
+        return jsonify({"error": f"BASE MADRE no disponible: {error or 'sin datos'}"}), 400
+    con_cred, sin_cred = extraer_clientes_previred(columnas, filas)
+    if not con_cred:
+        return jsonify({"error": "Ninguna empresa vigente tiene credenciales PreviRed en BASE MADRE"}), 400
+
+    # No repetir empresas que ya quedaron OK en este período (salvo forzar)
+    with get_conn() as conn:
+        ya_ok = {r["rut_empresa"] for r in conn.execute(
+            "SELECT rut_empresa FROM trabajadores_periodo WHERE periodo=? AND estado='ok'",
+            (periodo,)).fetchall()}
+    pendientes = con_cred if d.get("forzar") else [c for c in con_cred if c["rut"] not in ya_ok]
+
+    tid = uuid.uuid4().hex[:12]
+    _trab_tareas[tid] = {"logs": [], "done": False, "error": False}
+
+    def guardar(rut, razon, organismo, n, estado):
+        import datetime as _dt2
+        with get_conn() as conn:
+            conn.execute("""INSERT INTO trabajadores_periodo
+                (rut_empresa, razon_social, periodo, organismo, n_trabajadores, estado, actualizado)
+                VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(rut_empresa, periodo) DO UPDATE SET
+                    razon_social=excluded.razon_social, organismo=excluded.organismo,
+                    n_trabajadores=excluded.n_trabajadores, estado=excluded.estado,
+                    actualizado=excluded.actualizado""",
+                (rut, razon, periodo, organismo or "", n, estado,
+                 _dt2.datetime.now().strftime("%d/%m/%Y %H:%M")))
+
+    def run_task():
+        _trab_corriendo["activo"] = True
+        carpeta_temp = tempfile.mkdtemp(prefix="trab_")
+        try:
+            for s in sin_cred:
+                guardar(s["rut"], s["razon"], "", None, "sin_credenciales")
+            if ya_ok and not d.get("forzar"):
+                _trab_log(tid, f"{len(ya_ok)} empresa(s) ya estaban OK en {periodo} — se omiten", "info")
+            from trabajadores_logic import actualizar_trabajadores
+            actualizar_trabajadores(
+                pendientes, mes, anio, carpeta_temp,
+                log=lambda m, t="info": _trab_log(tid, m, t),
+                guardar=guardar)
+            _trab_log(tid, f"Finalizado — {len(pendientes)} procesadas, "
+                           f"{len(sin_cred)} sin credenciales PreviRed", "ok")
+        except Exception as e:
+            import traceback
+            _trab_log(tid, f"Error fatal: {e}", "err")
+            _trab_log(tid, traceback.format_exc()[:400], "err")
+            _trab_tareas[tid]["error"] = True
+        finally:
+            shutil.rmtree(carpeta_temp, ignore_errors=True)
+            _trab_tareas[tid]["done"] = True
+            _trab_corriendo["activo"] = False
+
+    threading.Thread(target=run_task, daemon=True).start()
+    return jsonify({"ok": True, "task_id": tid, "periodo": periodo,
+                    "a_procesar": len(pendientes),
+                    "ya_listas": len(con_cred) - len(pendientes),
+                    "sin_credenciales": len(sin_cred)})
+
+
+@app.route("/api/trabajadores/tarea/<tid>")
+@api_login_required
+def trabajadores_tarea(tid):
+    t = _trab_tareas.get(tid)
+    if not t:
+        return jsonify({"error": "Tarea no encontrada", "logs": [], "done": True}), 404
+    since = int(request.args.get("since", 0))
+    return jsonify({"logs": t["logs"][since:], "done": t["done"], "error": t["error"]})
+
+
+@app.route("/api/trabajadores/resultados")
+@api_login_required
+def trabajadores_resultados():
+    periodo = request.args.get("periodo", "")
+    with get_conn() as conn:
+        if not periodo:
+            row = conn.execute("SELECT MAX(periodo) AS p FROM trabajadores_periodo").fetchone()
+            periodo = (row["p"] if row else "") or ""
+        rows = conn.execute(
+            "SELECT * FROM trabajadores_periodo WHERE periodo=? ORDER BY razon_social",
+            (periodo,)).fetchall()
+    return jsonify({"periodo": periodo, "resultados": [dict(r) for r in rows]})
+
+
+@app.route("/api/trabajadores/excel")
+@api_login_required
+def trabajadores_excel():
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    periodo = request.args.get("periodo", "")
+    with get_conn() as conn:
+        if not periodo:
+            row = conn.execute("SELECT MAX(periodo) AS p FROM trabajadores_periodo").fetchone()
+            periodo = (row["p"] if row else "") or ""
+        rows = conn.execute(
+            "SELECT * FROM trabajadores_periodo WHERE periodo=? ORDER BY razon_social",
+            (periodo,)).fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Trabajadores {periodo}"
+    cols = ["RUT Empresa", "Razón Social", "Período", "Organismo", "N° Trabajadores", "Estado", "Actualizado"]
+    fill = PatternFill("solid", start_color="1E3A5F")
+    for j, c in enumerate(cols, 1):
+        cel = ws.cell(row=1, column=j, value=c)
+        cel.font = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+        cel.fill = fill
+        cel.alignment = Alignment(horizontal="center")
+    for i, r in enumerate(rows, 2):
+        ws.cell(row=i, column=1, value=r["rut_empresa"])
+        ws.cell(row=i, column=2, value=r["razon_social"])
+        ws.cell(row=i, column=3, value=r["periodo"])
+        ws.cell(row=i, column=4, value=r["organismo"])
+        ws.cell(row=i, column=5, value=r["n_trabajadores"])
+        ws.cell(row=i, column=6, value=r["estado"])
+        ws.cell(row=i, column=7, value=r["actualizado"])
+        for j in range(1, 8):
+            ws.cell(row=i, column=j).font = Font(name="Arial", size=9)
+    for j, ancho in enumerate([15, 42, 10, 26, 16, 22, 16], 1):
+        from openpyxl.utils import get_column_letter
+        ws.column_dimensions[get_column_letter(j)].width = ancho
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True,
+                     download_name=f"n_trabajadores_{periodo}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

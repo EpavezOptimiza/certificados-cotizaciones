@@ -259,6 +259,20 @@ def init_db():
             )""")
         except: pass
         try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS trabajadores_periodo (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                rut_empresa    TEXT NOT NULL,
+                razon_social   TEXT DEFAULT '',
+                periodo        TEXT NOT NULL,
+                organismo      TEXT DEFAULT '',
+                n_trabajadores INTEGER,
+                pdf            TEXT DEFAULT '',
+                estado         TEXT DEFAULT '',
+                actualizado    TEXT NOT NULL,
+                UNIQUE(rut_empresa, periodo)
+            )""")
+        except: pass
+        try:
             conn.execute("""CREATE TABLE IF NOT EXISTS destinatarios_correo (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 institucion    TEXT NOT NULL,

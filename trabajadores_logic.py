@@ -369,7 +369,6 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
             elegido = next((t for t in tipos if "todas" in _norm(t) or "todos" in _norm(t)), None)
         if elegido:
             page.select_option("#combo_tipo_institucion", label=elegido)
-            log(f"  Tipo institución: {elegido.strip()}", "info")
         try:
             _poll(page, """() => {
                 const sel = document.getElementById('combo_instituciones');
@@ -437,44 +436,6 @@ def _descargar_pdf_organismo(page, carpeta_temp, log):
 
     log(f"  Organismo detectado: {nombre_org}", "info")
 
-    # Abrir el modal de impresión: primero click nativo (más fiable que JS),
-    # luego JS, y como respaldo el botón de planilla masiva.
-    modal_ok = False
-    try:
-        icono = page.locator('img[src*="planillas.gif"]').nth(idx_org)
-        icono.scroll_into_view_if_needed(timeout=4000)
-        icono.click(timeout=6000)
-        page.wait_for_selector("#aceptar_modal", state="visible", timeout=12000)
-        modal_ok = True
-    except Exception:
-        pass
-    if not modal_ok:
-        try:
-            page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{idx_org}].click()")
-            page.wait_for_selector("#aceptar_modal", state="visible", timeout=12000)
-            modal_ok = True
-        except Exception:
-            pass
-    if not modal_ok:
-        try:
-            page.click("button[id^='planillas_masivas']", timeout=5000)
-            page.wait_for_selector("#aceptar_modal", state="visible", timeout=10000)
-            modal_ok = True
-            log("  (usando planilla masiva de la empresa)", "info")
-        except Exception:
-            pass
-    if not modal_ok:
-        log("  Modal de impresión no apareció", "warn")
-        return None, nombre_org
-
-    try:
-        radio = page.locator("input[type='radio'][value*='total']").first
-        if radio.count() > 0 and not radio.is_checked():
-            radio.click()
-        page.wait_for_timeout(500)
-    except Exception:
-        pass
-
     ruta = os.path.join(carpeta_temp, "planilla_organismo.pdf")
     try:
         if os.path.exists(ruta):
@@ -482,22 +443,125 @@ def _descargar_pdf_organismo(page, carpeta_temp, log):
     except Exception:
         pass
 
+    # El ícono puede: (a) descargar directo, (b) abrir un modal de impresión,
+    # (c) abrir una pestaña con el PDF. Se escuchan las 3 vías a la vez.
+    descargas, popups = [], []
+    _on_dl = lambda d: descargas.append(d)
+    _on_pg = lambda p: popups.append(p)
+    page.on("download", _on_dl)
+    page.context.on("page", _on_pg)
+
+    def _modal_visible():
+        try:
+            return page.locator("#aceptar_modal").is_visible()
+        except Exception:
+            return False
+
     try:
-        with page.expect_download(timeout=25000) as dl_info:
-            page.click("#aceptar_modal")
-        dl_info.value.save_as(ruta)
-    except Exception as e:
-        log(f"  Descarga falló: {e.__class__.__name__}", "warn")
+        try:
+            icono = page.locator('img[src*="planillas.gif"]').nth(idx_org)
+            icono.scroll_into_view_if_needed(timeout=3000)
+            icono.click(timeout=6000)
+        except Exception:
+            try:
+                page.evaluate(
+                    f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{idx_org}].click()")
+            except Exception:
+                log("  No se pudo clickear el ícono de la planilla", "warn")
+                return None, nombre_org
+
+        # Esperar: descarga directa, modal o pestaña nueva
+        fin = time.time() + 8
+        while time.time() < fin and not descargas and not popups and not _modal_visible():
+            time.sleep(0.3)
+
+        # (b) Modal → marcar "total empresa" y aceptar
+        if not descargas and _modal_visible():
+            try:
+                radio = page.locator("input[type='radio'][value*='total']").first
+                if radio.count() > 0 and not radio.is_checked():
+                    radio.click()
+            except Exception:
+                pass
+            try:
+                page.click("#aceptar_modal", timeout=5000)
+            except Exception:
+                pass
+            fin = time.time() + 20
+            while time.time() < fin and not descargas and not popups:
+                time.sleep(0.3)
+
+        # (a) Descarga capturada
+        if descargas:
+            try:
+                descargas[0].save_as(ruta)
+                return ruta, nombre_org
+            except Exception as e:
+                log(f"  No se pudo guardar la descarga: {e.__class__.__name__}", "warn")
+
+        # (c) Pestaña nueva con el PDF: bajarlo con la sesión actual
+        if popups:
+            pop = popups[0]
+            try:
+                pop.wait_for_load_state("domcontentloaded", timeout=8000)
+            except Exception:
+                pass
+            url_pdf = ""
+            try:
+                url_pdf = pop.url or ""
+            except Exception:
+                pass
+            try:
+                pop.close()
+            except Exception:
+                pass
+            if url_pdf and "about:blank" not in url_pdf:
+                try:
+                    resp = page.context.request.get(url_pdf, timeout=25000)
+                    data = resp.body()
+                    if data[:4] == b"%PDF":
+                        with open(ruta, "wb") as fh:
+                            fh.write(data)
+                        return ruta, nombre_org
+                except Exception:
+                    pass
+
+        log("  La planilla no se pudo descargar (sin modal, sin archivo)", "warn")
         return None, nombre_org
     finally:
+        for obj, evento, fn in ((page, "download", _on_dl), (page.context, "page", _on_pg)):
+            try:
+                obj.remove_listener(evento, fn)
+            except Exception:
+                pass
         try:
             cerrar = page.locator("button:has-text('Cerrar')").first
-            if cerrar.is_visible():
+            if cerrar.count() and cerrar.is_visible():
                 cerrar.click()
         except Exception:
             pass
 
-    return ruta, nombre_org
+
+# Diagnóstico de un solo disparo: qué hay realmente en la pantalla de resultados
+_JS_DIAG_RESULTADOS = """() => {
+    const out = {tablas: [], iconos: 0, modal: false, botones: []};
+    out.iconos = document.querySelectorAll('img[src*="planillas.gif"]').length;
+    out.modal = !!document.querySelector('#aceptar_modal');
+    for (const t of Array.from(document.querySelectorAll('table')).slice(0, 6)) {
+        const filas = Array.from(t.querySelectorAll('tr'));
+        if (filas.length < 2) continue;
+        const cab = Array.from(filas[0].querySelectorAll('th, td'))
+            .map(c => (c.innerText || '').replace(/\\s+/g, ' ').trim()).filter(Boolean);
+        const ej = Array.from(filas[1].querySelectorAll('td'))
+            .map(c => (c.innerText || '').replace(/\\s+/g, ' ').trim());
+        if (cab.length) out.tablas.push({cabeceras: cab.slice(0, 12), ejemplo: ej.slice(0, 12)});
+    }
+    out.botones = Array.from(document.querySelectorAll('button, input[type=button], input[type=submit]'))
+        .filter(b => b.offsetParent !== null)
+        .map(b => (b.id || '') + ':' + ((b.innerText || b.value || '').trim().slice(0, 25)))
+        .slice(0, 10);
+    return out;
+}"""
 
 
 def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, log, guardar):
@@ -588,6 +652,20 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                                 res = page.evaluate(_JS_TABLA_TRABAJADORES, list(_ORGANISMOS))
                             except Exception:
                                 res = None
+
+                            # Diagnóstico de un solo disparo: qué muestra realmente
+                            # la pantalla de resultados (para afinar la extracción)
+                            if not (res and res.get("n")) and not estado.get("diag_pantalla"):
+                                estado["diag_pantalla"] = True
+                                try:
+                                    dg = page.evaluate(_JS_DIAG_RESULTADOS)
+                                    log(f"  [diag] iconos={dg['iconos']} modal={dg['modal']} "
+                                        f"botones={dg['botones']}", "warn")
+                                    for tb in dg["tablas"]:
+                                        log(f"  [diag] tabla: {tb['cabeceras']}", "warn")
+                                        log(f"  [diag]   ej.: {tb['ejemplo']}", "warn")
+                                except Exception:
+                                    pass
                             if res and res.get("n"):
                                 n = res["n"]
                                 con_planilla = True

@@ -17,28 +17,101 @@ import unicodedata
 from playwright.sync_api import sync_playwright
 
 from previred_logic import (
-    hacer_login, ir_a_empresa, ir_a_planillas_pagadas,
-    obtener_nominas, esta_en_login, MESES_NOMBRE, _select_anio, _click_texto,
-    URL_LOGIN,
+    hacer_login, ir_a_planillas_pagadas, obtener_nominas, esta_en_login,
+    MESES_NOMBRE, _select_anio, _click_texto, URL_LOGIN,
 )
 
 
-def _volver_al_inicio(page, usuario, clave, log):
+def _volver_al_inicio(page, estado, usuario, clave, log):
     """Vuelve al home del portal (donde vive el menú de empresas li#empresa).
-    Necesario entre empresa y empresa: dentro de Planillas Pagadas ese menú
-    no está visible. Si la sesión murió, re-loguea."""
+    Usa la URL real del portal capturada tras el login — volver a login.jsp
+    deslogueaba la sesión y dejaba la lista de empresas vacía.
+    Solo re-loguea si la sesión efectivamente murió."""
+    home = estado.get("home") or URL_LOGIN
     try:
-        page.goto(URL_LOGIN, wait_until="domcontentloaded", timeout=30000)
+        page.goto(home, wait_until="domcontentloaded", timeout=30000)
         time.sleep(2)
     except Exception:
         pass
     if esta_en_login(page):
+        log("  Sesión caída — re-login...", "warn")
         hacer_login(page, usuario, clave, log)
-    else:
+        estado["home"] = page.url
+        return
+    try:
+        page.wait_for_selector("li#empresa", timeout=10000)
+    except Exception:
+        # El home guardado no sirve: re-login y recapturar
+        hacer_login(page, usuario, clave, log)
+        estado["home"] = page.url
+
+
+def _ids_empresa(page, rut, log):
+    """Abre el menú de empresas y devuelve los ids de botón para ese RUT.
+    Si no aparece, intenta filtrar por RUT y entrega diagnóstico real."""
+    rut_num = rut.replace(".", "").split("-")[0]
+    patron = f"empresa#{rut_num}#"
+
+    page.wait_for_selector("li#empresa", timeout=20000)
+    page.click("li#empresa")
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=15000)
+    except Exception:
+        pass
+
+    # Esperar a que cargue CUALQUIER empresa (la lista es asíncrona)
+    total = 0
+    for _ in range(15):
         try:
-            page.wait_for_selector("li#empresa", timeout=10000)
+            total = page.evaluate("() => document.querySelectorAll('[id^=\"empresa#\"]').length")
         except Exception:
+            total = 0
+        if total:
+            break
+        time.sleep(1)
+
+    def _ids():
+        try:
+            return page.evaluate(
+                "(p) => Array.from(document.querySelectorAll('[id^=\"' + p + '\"]')).map(e => e.id)",
+                patron)
+        except Exception:
+            return []
+
+    ids = _ids()
+    if ids:
+        return ids
+
+    # No está a la vista: probar el buscador del listado (si existe)
+    try:
+        escrito = page.evaluate("""(rutNum) => {
+            var inputs = Array.from(document.querySelectorAll('input[type=text], input:not([type])'))
+                .filter(function(el){ return el.offsetParent !== null; });
+            if (!inputs.length) return false;
+            var inp = inputs[0];
+            inp.focus(); inp.value = rutNum;
+            inp.dispatchEvent(new Event('input',  {bubbles:true}));
+            inp.dispatchEvent(new Event('keyup',  {bubbles:true}));
+            inp.dispatchEvent(new Event('change', {bubbles:true}));
+            return true;
+        }""", rut_num)
+        if escrito:
             time.sleep(2)
+            ids = _ids()
+            if ids:
+                log("  (empresa encontrada usando el buscador del listado)", "info")
+                return ids
+    except Exception:
+        pass
+
+    # Diagnóstico: qué hay realmente en pantalla
+    try:
+        muestra = page.evaluate(
+            "() => Array.from(document.querySelectorAll('[id^=\"empresa#\"]')).slice(0,5).map(e => e.id)")
+    except Exception:
+        muestra = []
+    log(f"  RUT no está en la cuenta PreviRed (empresas visibles: {total}; ej: {muestra})", "warn")
+    return []
 
 # Palabras que identifican al organismo de accidentes en Previred
 _ORGANISMOS = ("MUTUAL", "ACHS", "ASOCIACION CHILENA", "ASOCIACIÓN CHILENA",
@@ -264,7 +337,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
         page.set_default_navigation_timeout(45000)
         try:
             hacer_login(page, usuario, clave, log)
-            procesadas = 0
+            estado = {"home": page.url}   # URL real del portal tras el login
 
             for i, cli in enumerate(clientes, 1):
                 rut, razon = cli["rut"], cli.get("razon", "")
@@ -273,54 +346,78 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                     # Entre empresas hay que volver al inicio del portal:
                     # dentro de Planillas Pagadas no existe el menú li#empresa
                     if i > 1:
-                        _volver_al_inicio(page, usuario, clave, log)
+                        _volver_al_inicio(page, estado, usuario, clave, log)
 
-                    ir_a_empresa(page, rut, log, razon)
-                    ir_a_planillas_pagadas(page, log)
-
-                    nominas = obtener_nominas(page, mes, anio)
-                    if not nominas:
-                        log("  Sin nóminas en el período", "warn")
-                        guardar(rut, razon, "", None, "sin_planilla")
-                        procesadas += 1
+                    ids = _ids_empresa(page, rut, log)
+                    if not ids:
+                        guardar(rut, razon, "", None, "no_esta_en_previred")
                         continue
 
-                    n_total, organismo_usado, con_planilla = None, "", False
-                    for nombre_nomina in nominas:
-                        if not _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
-                            continue
-                        ruta_pdf, organismo = _descargar_pdf_organismo(page, carpeta_temp, log)
-                        if not ruta_pdf:
-                            continue
-                        con_planilla = True
-                        n = extraer_n_trabajadores(ruta_pdf)
-                        # Eliminar el PDF de inmediato — solo nos quedamos con el dato
+                    # Una empresa puede tener varias sucursales (#00, #11, #12...).
+                    # Se revisan todas y se suman los trabajadores de cada una.
+                    if len(ids) > 1:
+                        log(f"  {len(ids)} sucursales en PreviRed — se revisan todas", "info")
+
+                    n_total, organismo_usado, con_planilla, con_nomina = None, "", False, False
+
+                    for k, btn_id in enumerate(ids):
+                        if k > 0:
+                            _volver_al_inicio(page, estado, usuario, clave, log)
+                            if not _ids_empresa(page, rut, log):
+                                break
+                        etiqueta = btn_id.split("#")[2] if btn_id.count("#") >= 2 else str(k)
                         try:
-                            os.remove(ruta_pdf)
-                        except Exception:
-                            pass
-                        if n is not None:
-                            n_total = (n_total or 0) + n
-                            organismo_usado = organismo or organismo_usado
-                            log(f"  ✓ {organismo}: {n} trabajadores", "ok")
-                        else:
-                            organismo_usado = organismo or organismo_usado
-                            log("  PDF leído pero no se encontró el N° de trabajadores", "warn")
-                        # Volver a búsqueda para la siguiente nómina
-                        try:
-                            _click_texto(page, "Nueva búsqueda", timeout=4000)
+                            page.click(f'[id="{btn_id}"]')
+                            page.wait_for_load_state("domcontentloaded", timeout=15000)
                             time.sleep(2)
-                        except Exception:
-                            pass
+                            ir_a_planillas_pagadas(page, log)
+                            nominas = obtener_nominas(page, mes, anio)
+                        except Exception as e_suc:
+                            log(f"  Sucursal {etiqueta}: {type(e_suc).__name__}", "warn")
+                            continue
+
+                        if not nominas:
+                            if len(ids) > 1:
+                                log(f"  Sucursal {etiqueta}: sin nóminas", "info")
+                            continue
+                        con_nomina = True
+
+                        for nombre_nomina in nominas:
+                            if not _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
+                                continue
+                            ruta_pdf, organismo = _descargar_pdf_organismo(page, carpeta_temp, log)
+                            if not ruta_pdf:
+                                continue
+                            con_planilla = True
+                            n = extraer_n_trabajadores(ruta_pdf)
+                            # Eliminar el PDF de inmediato — solo queda el dato
+                            try:
+                                os.remove(ruta_pdf)
+                            except Exception:
+                                pass
+                            if n is not None:
+                                n_total = (n_total or 0) + n
+                                organismo_usado = organismo or organismo_usado
+                                log(f"  ✓ Sucursal {etiqueta} · {organismo}: {n} trabajadores", "ok")
+                            else:
+                                organismo_usado = organismo or organismo_usado
+                                log("  PDF leído pero no se encontró el N° de trabajadores", "warn")
+                            try:
+                                _click_texto(page, "Nueva búsqueda", timeout=4000)
+                                time.sleep(2)
+                            except Exception:
+                                pass
 
                     if n_total is not None:
                         guardar(rut, razon, organismo_usado, n_total, "ok")
                         log(f"  TOTAL {rut}: {n_total} trabajadores ({organismo_usado})", "ok")
                     elif con_planilla:
                         guardar(rut, razon, organismo_usado, None, "sin_dato_en_pdf")
-                    else:
+                    elif con_nomina:
                         guardar(rut, razon, "", None, "sin_planilla_organismo")
-                    procesadas += 1
+                    else:
+                        log("  Sin nóminas en el período", "warn")
+                        guardar(rut, razon, "", None, "sin_planilla")
 
                 except Exception as e:
                     msg = f"{type(e).__name__}: {str(e)[:120]}"
@@ -328,7 +425,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                     guardar(rut, razon, "", None, f"error: {msg}")
                     # Recuperar la navegación para la siguiente empresa
                     try:
-                        _volver_al_inicio(page, usuario, clave, log)
+                        _volver_al_inicio(page, estado, usuario, clave, log)
                     except Exception:
                         pass
         finally:

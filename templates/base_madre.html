@@ -442,8 +442,10 @@ async function actualizarTrabajadores(){
   }
 }
 
+let __trabBusy = false;
 async function pollTrab(){
-  if (!__trabTid) return;
+  if (!__trabTid || __trabBusy) return;
+  __trabBusy = true;
   try{
     const res = await fetch(`/api/trabajadores/tarea/${__trabTid}?since=${__trabSince}`);
     const d = await res.json();
@@ -467,6 +469,7 @@ async function pollTrab(){
       cargarTrabajadores();
     }
   }catch(e){ /* siguiente poll */ }
+  finally{ __trabBusy = false; }
 }
 
 // ── Config (admin) ──────────────────────────────────────────────────────────

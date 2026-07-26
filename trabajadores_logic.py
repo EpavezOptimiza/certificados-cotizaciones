@@ -19,7 +19,26 @@ from playwright.sync_api import sync_playwright
 from previred_logic import (
     hacer_login, ir_a_empresa, ir_a_planillas_pagadas,
     obtener_nominas, esta_en_login, MESES_NOMBRE, _select_anio, _click_texto,
+    URL_LOGIN,
 )
+
+
+def _volver_al_inicio(page, usuario, clave, log):
+    """Vuelve al home del portal (donde vive el menú de empresas li#empresa).
+    Necesario entre empresa y empresa: dentro de Planillas Pagadas ese menú
+    no está visible. Si la sesión murió, re-loguea."""
+    try:
+        page.goto(URL_LOGIN, wait_until="domcontentloaded", timeout=30000)
+        time.sleep(2)
+    except Exception:
+        pass
+    if esta_en_login(page):
+        hacer_login(page, usuario, clave, log)
+    else:
+        try:
+            page.wait_for_selector("li#empresa", timeout=10000)
+        except Exception:
+            time.sleep(2)
 
 # Palabras que identifican al organismo de accidentes en Previred
 _ORGANISMOS = ("MUTUAL", "ACHS", "ASOCIACION CHILENA", "ASOCIACIÓN CHILENA",
@@ -251,13 +270,10 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                 rut, razon = cli["rut"], cli.get("razon", "")
                 log(f"[{i}/{len(clientes)}] {razon or rut}...", "info")
                 try:
-                    # Mantener la sesión sana: re-login si expiró o cada 8 empresas
-                    if esta_en_login(page):
-                        log("  Sesión expirada — re-login...", "warn")
-                        hacer_login(page, usuario, clave, log)
-                    elif procesadas and procesadas % 8 == 0:
-                        log("  Re-login preventivo...", "info")
-                        hacer_login(page, usuario, clave, log)
+                    # Entre empresas hay que volver al inicio del portal:
+                    # dentro de Planillas Pagadas no existe el menú li#empresa
+                    if i > 1:
+                        _volver_al_inicio(page, usuario, clave, log)
 
                     ir_a_empresa(page, rut, log, razon)
                     ir_a_planillas_pagadas(page, log)
@@ -310,10 +326,9 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                     msg = f"{type(e).__name__}: {str(e)[:120]}"
                     log(f"  Error: {msg}", "err")
                     guardar(rut, razon, "", None, f"error: {msg}")
-                    # Recuperar la sesión para la siguiente empresa
+                    # Recuperar la navegación para la siguiente empresa
                     try:
-                        if esta_en_login(page):
-                            hacer_login(page, usuario, clave, log)
+                        _volver_al_inicio(page, usuario, clave, log)
                     except Exception:
                         pass
         finally:

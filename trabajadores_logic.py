@@ -18,7 +18,7 @@ from playwright.sync_api import sync_playwright
 
 from previred_logic import (
     hacer_login, ir_a_empresa, ir_a_planillas_pagadas,
-    obtener_nominas, MESES_NOMBRE, _select_anio, _click_texto,
+    obtener_nominas, esta_en_login, MESES_NOMBRE, _select_anio, _click_texto,
 )
 
 # Palabras que identifican al organismo de accidentes en Previred
@@ -31,8 +31,9 @@ def _norm(s):
     return s.strip().lower()
 
 
-def extraer_clientes_previred(columnas, filas):
-    """Desde BASE MADRE: empresas vigentes → (con_credenciales, sin_credenciales)."""
+def extraer_vigentes(columnas, filas):
+    """Desde BASE MADRE: todas las empresas VIGENTES → [{rut, razon}].
+    Se entra a todas con la misma cuenta maestra de PreviRed."""
     def col(*terms):
         for c in (columnas or []):
             cn = _norm(c)
@@ -42,23 +43,17 @@ def extraer_clientes_previred(columnas, filas):
 
     c_rut, c_razon = col("rut"), col("razon", "social")
     c_est          = col("estatus", "cliente") or col("estatus")
-    c_usr, c_pwd   = col("usuario", "previred"), col("clave", "previred")
 
-    con, sin = [], []
+    out, vistos = [], set()
     for f in (filas or []):
         if "vigente" not in _norm(f.get(c_est, "")):
             continue
-        rut   = (f.get(c_rut) or "").strip()
-        razon = (f.get(c_razon) or "").strip()
-        usr   = (f.get(c_usr) or "").strip() if c_usr else ""
-        pwd   = (f.get(c_pwd) or "").strip() if c_pwd else ""
-        if not rut:
+        rut = (f.get(c_rut) or "").strip()
+        if not rut or rut in vistos:
             continue
-        if usr and pwd and _norm(usr) not in ("pendiente", "n/a", "na", "-"):
-            con.append({"rut": rut, "razon": razon, "usuario": usr, "clave": pwd})
-        else:
-            sin.append({"rut": rut, "razon": razon})
-    return con, sin
+        vistos.add(rut)
+        out.append({"rut": rut, "razon": (f.get(c_razon) or "").strip()})
+    return out
 
 
 def extraer_n_trabajadores(ruta_pdf):
@@ -229,13 +224,14 @@ def _descargar_pdf_organismo(page, carpeta_temp, log):
     return ruta, nombre_org
 
 
-def actualizar_trabajadores(clientes, mes, anio, carpeta_temp, log, guardar):
-    """Proceso principal. `clientes`: [{rut, razon, usuario, clave}].
+def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, log, guardar):
+    """Proceso principal con la CUENTA MAESTRA de PreviRed: un solo login y
+    se recorren todas las empresas vigentes. `clientes`: [{rut, razon}].
     `guardar(rut, razon, organismo, n, estado)` persiste cada resultado.
     El PDF se elimina apenas se extrae el dato (no se acumula espacio)."""
     os.makedirs(carpeta_temp, exist_ok=True)
     periodo_txt = f"{MESES_NOMBRE.get(mes, mes)} {anio}"
-    log(f"Período a consultar: {periodo_txt} — {len(clientes)} empresa(s)", "info")
+    log(f"Período a consultar: {periodo_txt} — {len(clientes)} empresa(s) vigentes", "info")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(
@@ -243,16 +239,26 @@ def actualizar_trabajadores(clientes, mes, anio, carpeta_temp, log, guardar):
             args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
             downloads_path=carpeta_temp,
         )
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.set_default_timeout(45000)
+        page.set_default_navigation_timeout(45000)
         try:
+            hacer_login(page, usuario, clave, log)
+            procesadas = 0
+
             for i, cli in enumerate(clientes, 1):
                 rut, razon = cli["rut"], cli.get("razon", "")
                 log(f"[{i}/{len(clientes)}] {razon or rut}...", "info")
-                context = browser.new_context(accept_downloads=True)
-                page = context.new_page()
-                page.set_default_timeout(45000)
-                page.set_default_navigation_timeout(45000)
                 try:
-                    hacer_login(page, cli["usuario"], cli["clave"], log)
+                    # Mantener la sesión sana: re-login si expiró o cada 8 empresas
+                    if esta_en_login(page):
+                        log("  Sesión expirada — re-login...", "warn")
+                        hacer_login(page, usuario, clave, log)
+                    elif procesadas and procesadas % 8 == 0:
+                        log("  Re-login preventivo...", "info")
+                        hacer_login(page, usuario, clave, log)
+
                     ir_a_empresa(page, rut, log, razon)
                     ir_a_planillas_pagadas(page, log)
 
@@ -260,6 +266,7 @@ def actualizar_trabajadores(clientes, mes, anio, carpeta_temp, log, guardar):
                     if not nominas:
                         log("  Sin nóminas en el período", "warn")
                         guardar(rut, razon, "", None, "sin_planilla")
+                        procesadas += 1
                         continue
 
                     n_total, organismo_usado, con_planilla = None, "", False
@@ -297,17 +304,23 @@ def actualizar_trabajadores(clientes, mes, anio, carpeta_temp, log, guardar):
                         guardar(rut, razon, organismo_usado, None, "sin_dato_en_pdf")
                     else:
                         guardar(rut, razon, "", None, "sin_planilla_organismo")
+                    procesadas += 1
 
                 except Exception as e:
                     msg = f"{type(e).__name__}: {str(e)[:120]}"
                     log(f"  Error: {msg}", "err")
                     guardar(rut, razon, "", None, f"error: {msg}")
-                finally:
+                    # Recuperar la sesión para la siguiente empresa
                     try:
-                        context.close()
+                        if esta_en_login(page):
+                            hacer_login(page, usuario, clave, log)
                     except Exception:
                         pass
         finally:
+            try:
+                context.close()
+            except Exception:
+                pass
             browser.close()
 
     log("Proceso terminado", "ok")

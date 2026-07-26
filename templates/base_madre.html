@@ -431,7 +431,7 @@ async function actualizarTrabajadores(){
     document.getElementById('trab-log').innerHTML = '';
     document.getElementById('trab-excel').style.display = 'none';
     document.getElementById('trab-info').textContent =
-      `Período ${d.periodo} · ${d.a_procesar} por procesar · ${d.ya_listas} ya listas · ${d.sin_credenciales} sin credenciales`;
+      `Período ${d.periodo} · ${d.a_procesar} por procesar · ${d.ya_listas} ya listas de antes`;
     __trabTid = d.task_id; __trabSince = 0;
     clearInterval(__trabPoll);
     __trabPoll = setInterval(pollTrab, 2500);

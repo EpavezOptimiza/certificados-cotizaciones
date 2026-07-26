@@ -2741,21 +2741,29 @@ def trabajadores_actualizar():
         mes, anio = (hoy.month - 1, hoy.year) if hoy.month > 1 else (12, hoy.year - 1)
     periodo = f"{anio}-{str(mes).zfill(2)}"
 
+    # Cuenta maestra PreviRed (la misma del módulo Previred)
+    cfg = _get_previred_config()
+    usuario = (cfg.get("rut") or "").strip()
+    clave   = (cfg.get("pass") or "").strip()
+    if not usuario or not clave:
+        return jsonify({"error": "Faltan las credenciales PreviRed — "
+                                 "configúralas primero en el módulo Previred"}), 400
+
     from base_madre_logic import obtener_clientes
-    from trabajadores_logic import extraer_clientes_previred
+    from trabajadores_logic import extraer_vigentes
     columnas, filas, ts, error = obtener_clientes()
     if not filas:
         return jsonify({"error": f"BASE MADRE no disponible: {error or 'sin datos'}"}), 400
-    con_cred, sin_cred = extraer_clientes_previred(columnas, filas)
-    if not con_cred:
-        return jsonify({"error": "Ninguna empresa vigente tiene credenciales PreviRed en BASE MADRE"}), 400
+    vigentes = extraer_vigentes(columnas, filas)
+    if not vigentes:
+        return jsonify({"error": "No hay empresas vigentes en BASE MADRE"}), 400
 
     # No repetir empresas que ya quedaron OK en este período (salvo forzar)
     with get_conn() as conn:
         ya_ok = {r["rut_empresa"] for r in conn.execute(
             "SELECT rut_empresa FROM trabajadores_periodo WHERE periodo=? AND estado='ok'",
             (periodo,)).fetchall()}
-    pendientes = con_cred if d.get("forzar") else [c for c in con_cred if c["rut"] not in ya_ok]
+    pendientes = vigentes if d.get("forzar") else [c for c in vigentes if c["rut"] not in ya_ok]
 
     tid = uuid.uuid4().hex[:12]
     _trab_tareas[tid] = {"logs": [], "done": False, "error": False}
@@ -2777,17 +2785,14 @@ def trabajadores_actualizar():
         _trab_corriendo["activo"] = True
         carpeta_temp = tempfile.mkdtemp(prefix="trab_")
         try:
-            for s in sin_cred:
-                guardar(s["rut"], s["razon"], "", None, "sin_credenciales")
             if ya_ok and not d.get("forzar"):
                 _trab_log(tid, f"{len(ya_ok)} empresa(s) ya estaban OK en {periodo} — se omiten", "info")
             from trabajadores_logic import actualizar_trabajadores
             actualizar_trabajadores(
-                pendientes, mes, anio, carpeta_temp,
+                usuario, clave, pendientes, mes, anio, carpeta_temp,
                 log=lambda m, t="info": _trab_log(tid, m, t),
                 guardar=guardar)
-            _trab_log(tid, f"Finalizado — {len(pendientes)} procesadas, "
-                           f"{len(sin_cred)} sin credenciales PreviRed", "ok")
+            _trab_log(tid, f"Finalizado — {len(pendientes)} empresa(s) procesadas", "ok")
         except Exception as e:
             import traceback
             _trab_log(tid, f"Error fatal: {e}", "err")
@@ -2801,8 +2806,7 @@ def trabajadores_actualizar():
     threading.Thread(target=run_task, daemon=True).start()
     return jsonify({"ok": True, "task_id": tid, "periodo": periodo,
                     "a_procesar": len(pendientes),
-                    "ya_listas": len(con_cred) - len(pendientes),
-                    "sin_credenciales": len(sin_cred)})
+                    "ya_listas": len(vigentes) - len(pendientes)})
 
 
 @app.route("/api/trabajadores/tarea/<tid>")

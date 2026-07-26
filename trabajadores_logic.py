@@ -304,29 +304,86 @@ def extraer_vigentes(columnas, filas):
     return out
 
 
+# Etiquetas del dato en la planilla. En las planillas de mutual/ISL el
+# encabezado es "N° de Afiliados Informados" y el valor va en la CELDA DE ABAJO.
+_ETIQUETAS_N = (
+    "afiliados informados", "trabajadores informados",
+    "n de afiliados", "numero de afiliados", "total de afiliados", "total afiliados",
+    "n de trabajadores", "numero de trabajadores", "total de trabajadores",
+    "total trabajadores", "cantidad de trabajadores", "cantidad de afiliados",
+)
+
+
+def _es_etiqueta(txt):
+    t = _norm(txt).replace("°", "").replace("º", "").replace(".", "")
+    return any(e in t for e in _ETIQUETAS_N)
+
+
+def _num(txt):
+    """Convierte '48', '1.234' → int; None si no es un número limpio."""
+    s = re.sub(r"[^\d]", "", (txt or ""))
+    if not s or len(s) > 6:
+        return None
+    try:
+        return int(s)
+    except Exception:
+        return None
+
+
 def extraer_n_trabajadores(ruta_pdf):
-    """Busca el N° de trabajadores en el PDF de la planilla (varios formatos)."""
+    """N° de trabajadores de la planilla: busca 'N° de Afiliados Informados'
+    y toma el valor de la celda de abajo (o de la derecha, o de la línea
+    siguiente según cómo se extraiga el PDF)."""
     import pdfplumber
     try:
         with pdfplumber.open(ruta_pdf) as pdf:
-            texto = "\n".join((p.extract_text() or "") for p in pdf.pages[:4])
+            paginas = pdf.pages[:3]
+
+            # 1) Por tablas: la etiqueta y el valor están en celdas distintas
+            for pag in paginas:
+                try:
+                    tablas = pag.extract_tables() or []
+                except Exception:
+                    tablas = []
+                for tabla in tablas:
+                    for i, fila in enumerate(tabla or []):
+                        for j, celda in enumerate(fila or []):
+                            if not celda or not _es_etiqueta(celda):
+                                continue
+                            # a) celda de abajo (caso de la planilla mutual)
+                            if i + 1 < len(tabla):
+                                abajo = (tabla[i + 1] or [])
+                                if j < len(abajo):
+                                    n = _num(abajo[j])
+                                    if n is not None:
+                                        return n
+                            # b) celda a la derecha
+                            if j + 1 < len(fila):
+                                n = _num(fila[j + 1])
+                                if n is not None:
+                                    return n
+                            # c) número dentro de la misma celda
+                            n = _num(re.sub(r"(?i).*informados", "", celda))
+                            if n is not None:
+                                return n
+
+            # 2) Por texto: etiqueta en una línea, valor en la línea siguiente
+            texto = "\n".join((p.extract_text() or "") for p in paginas)
+        lineas = [l.strip() for l in texto.split("\n")]
+        for idx, linea in enumerate(lineas):
+            if not _es_etiqueta(linea):
+                continue
+            # número en la misma línea, después de la etiqueta
+            m = re.search(r"informados\D{0,15}(\d{1,6})", _norm(linea))
+            if m:
+                return int(m.group(1))
+            # número al inicio de alguna de las líneas siguientes
+            for sig in lineas[idx + 1: idx + 4]:
+                m2 = re.match(r"^(\d{1,6})\b", sig.replace(".", ""))
+                if m2:
+                    return int(m2.group(1))
     except Exception:
         return None
-    t = _norm(texto)
-    patrones = [
-        r'n[°º]?\s*(?:total\s*)?(?:de\s*)?trabajadores(?:\s*(?:del|en\s*el)\s*periodo)?\s*[:\.]?\s*(\d{1,6})',
-        r'total\s+(?:de\s+)?trabajadores\s*[:\.]?\s*(\d{1,6})',
-        r'cantidad\s+(?:de\s+)?trabajadores\s*[:\.]?\s*(\d{1,6})',
-        r'trabajadores\s+informados\s*[:\.]?\s*(\d{1,6})',
-        r'trabajadores\s*[:\.]\s*(\d{1,6})',
-    ]
-    for pat in patrones:
-        m = re.search(pat, t)
-        if m:
-            try:
-                return int(m.group(1))
-            except Exception:
-                pass
     return None
 
 

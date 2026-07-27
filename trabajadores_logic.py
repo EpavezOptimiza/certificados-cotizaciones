@@ -91,6 +91,30 @@ def _ir_a_planillas_rapido(page, log):
     return page.evaluate(_JS_HAY_MES)
 
 
+def _hay_nominas_cargadas(page):
+    return _poll(page, """() => {
+        const sel = document.getElementById('combo_nominas');
+        return !!sel && Array.from(sel.options).some(o => o.value &&
+            !o.text.toLowerCase().includes('seleccione'));
+    }""", max_seg=6)
+
+
+def _reset_busqueda(page, log):
+    """Vuelve al formulario de búsqueda dejando el combo de nóminas utilizable.
+    Sin esto, la 2ª nómina en adelante no se encontraba y se saltaba en silencio."""
+    try:
+        page.evaluate(_JS_CLICK_MENU, "Nueva búsqueda")
+    except Exception:
+        pass
+    if _poll(page, "() => !!document.querySelector('#combo_nominas')", max_seg=5):
+        return True
+    # Respaldo: rehacer el camino del menú hasta Planillas Pagadas
+    try:
+        return _ir_a_planillas_rapido(page, log)
+    except Exception:
+        return False
+
+
 def _nominas_rapido(page, mes, anio):
     """Nóminas del período, con polling en vez de sleeps fijos."""
     page.wait_for_selector("#mesR0", timeout=12000)
@@ -394,11 +418,7 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     page.select_option("#mesR0", str(mes).zfill(2))
     _select_anio(page, anio)
     page.wait_for_selector("#combo_nominas", timeout=15000)
-    _poll(page, """() => {
-        const sel = document.getElementById('combo_nominas');
-        return sel && Array.from(sel.options).some(o => o.value &&
-            !o.text.toLowerCase().includes('seleccione'));
-    }""", max_seg=5)
+    _hay_nominas_cargadas(page)
     opciones = page.evaluate("""() => {
         var sel = document.getElementById('combo_nominas');
         return Array.from(sel.options).map(o => o.text.trim());
@@ -406,6 +426,16 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     objetivo = next((o for o in opciones if o == nombre_nomina.strip()), None) or \
                next((o for o in opciones if nombre_nomina.strip() in o), None)
     if not objetivo:
+        # Segundo intento: el combo pudo no haber terminado de recargarse
+        _hay_nominas_cargadas(page)
+        opciones = page.evaluate("""() => {
+            var sel = document.getElementById('combo_nominas');
+            return Array.from(sel.options).map(o => o.text.trim());
+        }""")
+        objetivo = next((o for o in opciones if o == nombre_nomina.strip()), None) or \
+                   next((o for o in opciones if nombre_nomina.strip() in o), None)
+    if not objetivo:
+        log(f"    (nómina no está en el combo: {opciones[:6]})", "warn")
         return False
     page.select_option("#combo_nominas", label=objetivo)
 
@@ -468,30 +498,32 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     return True
 
 
-def _descargar_pdf_organismo(page, carpeta_temp, log):
-    """En los resultados, ubica el ícono de planilla del organismo de accidentes,
-    descarga SOLO ese PDF y devuelve (ruta_pdf, nombre_organismo) o (None, None)."""
-    ids_info = page.evaluate("""() => {
-        return Array.from(document.querySelectorAll('img[src*="planillas.gif"]'))
-            .map(img => img.id || '');
-    }""")
+def _iconos_organismo(page, log):
+    """Todos los íconos de planilla que corresponden al organismo de accidentes.
+    Devuelve [(indice, nombre)] — puede haber más de uno por búsqueda."""
+    try:
+        ids_info = page.evaluate("""() => {
+            return Array.from(document.querySelectorAll('img[src*="planillas.gif"]'))
+                .map(img => img.id || '');
+        }""")
+    except Exception:
+        return []
     if not ids_info:
-        return None, None
-
-    idx_org, nombre_org = None, None
+        return []
+    out = []
     for i, img_id in enumerate(ids_info):
         nombre_inst = img_id.split('#')[-1] if '#' in img_id else img_id
         n = _norm(nombre_inst).upper()
         if any(_norm(k).upper() in n for k in _ORGANISMOS):
-            idx_org, nombre_org = i, nombre_inst.strip()
-            break
-    if idx_org is None:
-        # Diagnóstico: qué instituciones había
+            out.append((i, nombre_inst.strip()))
+    if not out:
         insts = [i.split('#')[-1] for i in ids_info if i]
-        log(f"  Sin organismo de accidentes entre: {insts}", "warn")
-        return None, None
+        log(f"    sin organismo de accidentes entre: {insts}", "warn")
+    return out
 
-    log(f"  Organismo detectado: {nombre_org}", "info")
+
+def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log):
+    """Descarga el PDF del ícono indicado. Devuelve (ruta_pdf, nombre_organismo)."""
 
     ruta = os.path.join(carpeta_temp, "planilla_organismo.pdf")
     try:
@@ -698,71 +730,53 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                             continue
                         con_nomina = True
 
-                        for nombre_nomina in nominas:
-                            if not _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
+                        log(f"  Sucursal {etiqueta}: {len(nominas)} nómina(s) — se procesan todas",
+                            "info")
+
+                        for idx_nom, nombre_nomina in enumerate(nominas, 1):
+                            marca = f"  [{idx_nom}/{len(nominas)}] {nombre_nomina}"
+                            try:
+                                hay = _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log)
+                            except Exception as e_bus:
+                                log(f"{marca}: error al buscar ({type(e_bus).__name__})", "warn")
+                                _reset_busqueda(page, log)
+                                continue
+                            if not hay:
+                                log(f"{marca}: sin planillas timbradas", "warn")
+                                _reset_busqueda(page, log)
                                 continue
 
-                            # 1º intento: leer el N° directamente de la tabla de
-                            # resultados (sin descargar nada)
-                            n, organismo = None, ""
-                            try:
-                                res = page.evaluate(_JS_TABLA_TRABAJADORES, list(_ORGANISMOS))
-                            except Exception:
-                                res = None
+                            # Puede haber MÁS DE UN ícono de organismo por búsqueda:
+                            # se descargan y suman todos.
+                            iconos = _iconos_organismo(page, log)
+                            if not iconos:
+                                log(f"{marca}: sin planilla de mutual/ISL", "warn")
+                                _reset_busqueda(page, log)
+                                continue
 
-                            # Diagnóstico de un solo disparo: qué muestra realmente
-                            # la pantalla de resultados (para afinar la extracción)
-                            if not (res and res.get("n")) and not estado.get("diag_pantalla"):
-                                estado["diag_pantalla"] = True
+                            for idx_ic, nombre_org in iconos:
+                                ruta_pdf, organismo = _descargar_pdf_organismo(
+                                    page, idx_ic, nombre_org, carpeta_temp, log)
+                                if not ruta_pdf:
+                                    log(f"{marca}: no se pudo descargar {nombre_org}", "warn")
+                                    continue
+                                con_planilla = True
+                                n = extraer_n_trabajadores(ruta_pdf)
+                                # Eliminar el PDF de inmediato — solo queda el dato
                                 try:
-                                    dg = page.evaluate(_JS_DIAG_RESULTADOS)
-                                    log(f"  [diag] iconos={dg['iconos']} modal={dg['modal']} "
-                                        f"botones={dg['botones']}", "warn")
-                                    for tb in dg["tablas"]:
-                                        log(f"  [diag] tabla: {tb['cabeceras']}", "warn")
-                                        log(f"  [diag]   ej.: {tb['ejemplo']}", "warn")
+                                    os.remove(ruta_pdf)
                                 except Exception:
                                     pass
-                            if res and res.get("n"):
-                                n = res["n"]
-                                con_planilla = True
-                                organismo = "organismo (tabla)"
-                                log(f"  ✓ Sucursal {etiqueta} · {n} trabajadores (desde la tabla)", "ok")
-                                if not estado.get("tabla_ok"):
-                                    estado["tabla_ok"] = True
-                                    log(f"    fila: {res.get('fila','')}", "info")
+                                if n is not None:
+                                    n_total = (n_total or 0) + n
+                                    organismo_usado = organismo or organismo_usado
+                                    log(f"{marca} · {organismo}: {n} afiliados "
+                                        f"(acumulado {n_total})", "ok")
+                                else:
+                                    organismo_usado = organismo or organismo_usado
+                                    log(f"{marca}: PDF sin 'N° de Afiliados Informados'", "warn")
 
-                            # 2º intento: descargar el PDF del organismo y leerlo
-                            if n is None:
-                                ruta_pdf, organismo = _descargar_pdf_organismo(page, carpeta_temp, log)
-                                if ruta_pdf:
-                                    con_planilla = True
-                                    n = extraer_n_trabajadores(ruta_pdf)
-                                    # Eliminar el PDF de inmediato — solo queda el dato
-                                    try:
-                                        os.remove(ruta_pdf)
-                                    except Exception:
-                                        pass
-                                    if n is not None:
-                                        log(f"  ✓ Sucursal {etiqueta} · {organismo}: {n} trabajadores", "ok")
-                                    else:
-                                        log("  PDF leído pero no se encontró el N° de trabajadores", "warn")
-                                        if res and res.get("cabeceras") and not estado.get("diag_tabla"):
-                                            estado["diag_tabla"] = True
-                                            log(f"    columnas de la tabla: {res['cabeceras']}", "warn")
-
-                            if n is not None:
-                                n_total = (n_total or 0) + n
-                                organismo_usado = organismo or organismo_usado
-                            elif organismo:
-                                organismo_usado = organismo
-
-                            try:
-                                page.evaluate(_JS_CLICK_MENU, "Nueva búsqueda")
-                                _poll(page, "() => !!document.querySelector('#combo_nominas')",
-                                      max_seg=5)
-                            except Exception:
-                                pass
+                            _reset_busqueda(page, log)
 
                     if n_total is not None:
                         guardar(rut, razon, organismo_usado, n_total, "ok")

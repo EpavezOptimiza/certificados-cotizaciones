@@ -148,6 +148,45 @@ def _menu_empresas_visible(page, espera=6):
                  max_seg=float(espera), paso=0.25)
 
 
+# Click en el enlace "Inicio" del encabezado (icono_inicio.gif) — tras el login
+# el portal puede quedar DENTRO de la última empresa usada, donde no existe
+# el menú li#empresa para cambiar de empresa.
+_JS_CLICK_INICIO = """() => {
+    for (const el of document.querySelectorAll('a, img, span, li, td')) {
+        if (el.offsetParent === null) continue;
+        const t = ((el.innerText || '') + ' ' + (el.getAttribute('src') || '') + ' ' +
+                   (el.getAttribute('alt') || '') + ' ' + (el.getAttribute('title') || '') + ' ' +
+                   (el.getAttribute('href') || '')).toLowerCase();
+        if (t.includes('icono_inicio') || (el.innerText || '').trim().toLowerCase() === 'inicio') {
+            el.click();
+            return true;
+        }
+    }
+    return false;
+}"""
+
+
+def _asegurar_menu_empresas(page, usuario, clave, log):
+    """Deja la página donde existe el menú de empresas. Devuelve True/False."""
+    if _menu_empresas_visible(page, espera=1):
+        return True
+    for intento in range(2):
+        try:
+            page.evaluate(_JS_CLICK_INICIO)
+        except Exception:
+            pass
+        if _menu_empresas_visible(page, espera=6):
+            return True
+        if intento == 0:
+            # La sesión pudo caerse: reabrir y volver a intentar con "Inicio"
+            try:
+                if esta_en_login(page):
+                    hacer_login(page, usuario, clave, log)
+            except Exception:
+                pass
+    return False
+
+
 def _volver_al_inicio(page, estado, usuario, clave, log):
     """Vuelve a donde está el menú de empresas (li#empresa).
 
@@ -199,10 +238,12 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
         except Exception:
             pass
 
-    # 4. Último recurso: re-login
+    # 4. Último recurso: re-login (y volver al listado con "Inicio")
     log("  Reabriendo sesión...", "warn")
     hacer_login(page, usuario, clave, log)
     estado["home"] = page.url
+    # Tras el login el portal puede quedar dentro de la última empresa usada
+    _asegurar_menu_empresas(page, usuario, clave, log)
 
 
 # Lee el N° de trabajadores directamente de la tabla de resultados (sin PDF).
@@ -237,13 +278,16 @@ _JS_TABLA_TRABAJADORES = """(orgKeys) => {
 }"""
 
 
-def _ids_empresa(page, rut, log):
+def _ids_empresa(page, rut, log, usuario=None, clave=None):
     """Abre el menú de empresas y devuelve los ids de botón para ese RUT.
     Si no aparece, intenta filtrar por RUT y entrega diagnóstico real."""
     rut_num = rut.replace(".", "").split("-")[0]
     patron = f"empresa#{rut_num}#"
 
-    page.wait_for_selector("li#empresa", timeout=20000)
+    if not _menu_empresas_visible(page, espera=2):
+        if not _asegurar_menu_empresas(page, usuario, clave, log):
+            log("  No se pudo abrir el listado de empresas del portal", "warn")
+            return []
     page.click("li#empresa")
 
     # Esperar a que cargue CUALQUIER empresa (la lista es asíncrona)
@@ -814,7 +858,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                     if i > 1:
                         _volver_al_inicio(page, estado, usuario, clave, log)
 
-                    ids = _ids_empresa(page, rut, log)
+                    ids = _ids_empresa(page, rut, log, usuario, clave)
                     if not ids:
                         guardar(rut, razon, "", None, "no_esta_en_previred")
                         continue
@@ -829,7 +873,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                     for k, btn_id in enumerate(ids):
                         if k > 0:
                             _volver_al_inicio(page, estado, usuario, clave, log)
-                            if not _ids_empresa(page, rut, log):
+                            if not _ids_empresa(page, rut, log, usuario, clave):
                                 break
                         etiqueta = btn_id.split("#")[2] if btn_id.count("#") >= 2 else str(k)
                         try:

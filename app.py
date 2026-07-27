@@ -2758,12 +2758,23 @@ def trabajadores_actualizar():
     if not vigentes:
         return jsonify({"error": "No hay empresas vigentes en BASE MADRE"}), 400
 
-    # No repetir empresas que ya quedaron OK en este período (salvo forzar)
-    with get_conn() as conn:
-        ya_ok = {r["rut_empresa"] for r in conn.execute(
-            "SELECT rut_empresa FROM trabajadores_periodo WHERE periodo=? AND estado='ok'",
-            (periodo,)).fetchall()}
-    pendientes = vigentes if d.get("forzar") else [c for c in vigentes if c["rut"] not in ya_ok]
+    # Modo prueba: una sola empresa (siempre recalcula)
+    rut_filtro = (d.get("rut") or "").strip()
+    if rut_filtro:
+        _rn = lambda r: (r or "").replace(".", "").replace(" ", "").upper()
+        objetivo = _rn(rut_filtro)
+        vigentes = [c for c in vigentes if _rn(c["rut"]) == objetivo]
+        if not vigentes:
+            return jsonify({"error": f"El RUT {rut_filtro} no está entre las "
+                                     f"empresas vigentes de BASE MADRE"}), 400
+        pendientes, ya_ok = vigentes, set()
+    else:
+        # No repetir empresas que ya quedaron OK en este período (salvo forzar)
+        with get_conn() as conn:
+            ya_ok = {r["rut_empresa"] for r in conn.execute(
+                "SELECT rut_empresa FROM trabajadores_periodo WHERE periodo=? AND estado='ok'",
+                (periodo,)).fetchall()}
+        pendientes = vigentes if d.get("forzar") else [c for c in vigentes if c["rut"] not in ya_ok]
 
     tid = uuid.uuid4().hex[:12]
     _trab_tareas[tid] = {"logs": [], "done": False, "error": False}

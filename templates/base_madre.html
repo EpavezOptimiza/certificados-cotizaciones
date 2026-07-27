@@ -107,6 +107,7 @@ tbody tr:hover{background:#eff6ff}
       <div class="page-sub">Última lectura: <b id="dato-lectura">—</b> · se actualiza sola cada 10 min</div>
     </div>
     <div class="header-right">
+      <button class="btn-refrescar" id="btn-trab-uno" onclick="probarUnaEmpresa()" title="Procesar una sola empresa (prueba)">🔍 Probar 1 empresa</button>
       <button class="btn-refrescar" id="btn-trab" onclick="actualizarTrabajadores()">👷 Actualizar N° de trabajadores</button>
       <button class="btn-refrescar" id="btn-refrescar" onclick="cargar(true)">🔄 Refrescar ahora</button>
     </div>
@@ -400,6 +401,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarFicha(
 // ── N° de trabajadores (planilla organismo vía PreviRed) ───────────────────
 let TRAB = {};
 let __trabTid = null, __trabSince = 0, __trabPoll = null;
+let __trabBtn = null, __trabBtnTexto = '';
 const rutNorm = r => (r ?? '').toString().replace(/\./g,'').replace(/\s/g,'').toUpperCase();
 
 async function cargarTrabajadores(){
@@ -413,32 +415,41 @@ async function cargarTrabajadores(){
   }catch(e){ /* sin resultados aún */ }
 }
 
-async function actualizarTrabajadores(){
-  const btn = document.getElementById('btn-trab');
+function probarUnaEmpresa(){
+  const rut = prompt('RUT de la empresa a procesar (ej: 76196547-6):', '76196547-6');
+  if (rut && rut.trim()) actualizarTrabajadores(rut.trim());
+}
+
+async function actualizarTrabajadores(rutUnico){
+  const btn = document.getElementById(rutUnico ? 'btn-trab-uno' : 'btn-trab');
+  const textoOriginal = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Iniciando…';
   try{
     const res = await fetch('/api/trabajadores/actualizar', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(rutUnico ? {rut: rutUnico} : {})
     });
     const d = await res.json();
     if (d.error){
       alert(d.error);
-      btn.disabled = false; btn.textContent = '👷 Actualizar N° de trabajadores';
+      btn.disabled = false; btn.textContent = textoOriginal;
       return;
     }
+    __trabBtn = btn; __trabBtnTexto = textoOriginal;
     document.getElementById('trab-card').style.display = 'flex';
     document.getElementById('trab-log').innerHTML = '';
     document.getElementById('trab-excel').style.display = 'none';
-    document.getElementById('trab-info').textContent =
-      `Período ${d.periodo} · ${d.a_procesar} por procesar · ${d.ya_listas} ya listas de antes`;
+    document.getElementById('trab-info').textContent = rutUnico
+      ? `Prueba · Período ${d.periodo} · empresa ${rutUnico}`
+      : `Período ${d.periodo} · ${d.a_procesar} por procesar · ${d.ya_listas} ya listas de antes`;
     __trabTid = d.task_id; __trabSince = 0;
     clearInterval(__trabPoll);
     __trabPoll = setInterval(pollTrab, 2500);
     btn.textContent = '⏳ Procesando…';
   }catch(e){
     alert('Error: ' + e);
-    btn.disabled = false; btn.textContent = '👷 Actualizar N° de trabajadores';
+    btn.disabled = false; btn.textContent = textoOriginal;
   }
 }
 
@@ -461,8 +472,9 @@ async function pollTrab(){
     cont.scrollTop = cont.scrollHeight;
     if (d.done){
       clearInterval(__trabPoll);
-      const btn = document.getElementById('btn-trab');
-      btn.disabled = false; btn.textContent = '👷 Actualizar N° de trabajadores';
+      const btn = __trabBtn || document.getElementById('btn-trab');
+      btn.disabled = false;
+      btn.textContent = __trabBtnTexto || '👷 Actualizar N° de trabajadores';
       const ex = document.getElementById('trab-excel');
       ex.href = '/api/trabajadores/excel' + (window.__TRAB_PERIODO ? '' : '');
       ex.style.display = '';

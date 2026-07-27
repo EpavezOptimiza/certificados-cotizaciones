@@ -482,19 +482,35 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     except Exception:
         pass
     page.evaluate("() => document.getElementById('buscar').click()")
-    # Esperar el resultado: tabla con datos o aviso de 'sin planillas'
-    _poll(page, """() => {
-        const b = (document.body.innerText || '').toLowerCase();
-        if (b.includes('timbradas')) return true;
-        return document.querySelectorAll('img[src*="planillas.gif"]').length > 0;
-    }""", max_seg=10)
 
-    try:
-        cuerpo = page.inner_text("body")
-        if "no est" in cuerpo.lower() and "timbradas" in cuerpo.lower():
-            return False
-    except Exception:
-        pass
+    # Esperar el resultado real. OJO: la página SIEMPRE tiene el enlace
+    # "Fecha Planillas Timbradas", así que no sirve como señal de "sin datos".
+    # Señal de resultados cargados: aparecen los botones Nueva Búsqueda /
+    # Descargar Planillas Masivas, o los íconos de institución.
+    estado_res = ""
+    fin = time.time() + 12
+    while time.time() < fin:
+        try:
+            estado_res = page.evaluate("""() => {
+                const t = (document.body.innerText || '').toLowerCase();
+                if (document.querySelectorAll('img[src*="planillas.gif"]').length) return 'ok';
+                if (t.includes('nueva busqueda') || t.includes('nueva búsqueda') ||
+                    t.includes('descargar planillas masivas')) return 'ok';
+                if (t.includes('no existen planillas') || t.includes('no se encontraron') ||
+                    t.includes('no hay planillas') ||
+                    t.includes('no se registran') || t.includes('sin resultados')) return 'vacio';
+                return '';
+            }""")
+        except Exception:
+            estado_res = ""
+        if estado_res:
+            break
+        time.sleep(0.3)
+
+    if estado_res == "vacio":
+        return False
+    if not estado_res:
+        return False
     return True
 
 
@@ -522,8 +538,41 @@ def _iconos_organismo(page, log):
     return out
 
 
-def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log):
-    """Descarga el PDF del ícono indicado. Devuelve (ruta_pdf, nombre_organismo)."""
+# Tras expandir el ⊕, la fila muestra una subtabla con la columna "Ver Planillas"
+# y un ícono de PDF: ESE es el que descarga. Devuelve los candidatos a clickear.
+_JS_ICONOS_DESCARGA = """() => {
+    const out = [];
+    const els = document.querySelectorAll('img, a');
+    for (let i = 0; i < els.length; i++) {
+        const el = els[i];
+        if (el.offsetParent === null) continue;
+        const src = (el.getAttribute('src') || '').toLowerCase();
+        const txt = ((el.getAttribute('alt') || '') + ' ' + (el.getAttribute('title') || '') + ' ' +
+                     (el.getAttribute('onclick') || '') + ' ' + (el.id || '') + ' ' +
+                     (el.className || '')).toLowerCase();
+        if (src.includes('planillas.gif')) continue;          // ese es el expansor ⊕
+        if (src.includes('pdf') || src.includes('acrobat') || src.includes('imprimir') ||
+            txt.includes('pdf') || txt.includes('ver planilla') || txt.includes('imprimir') ||
+            txt.includes('descarga')) {
+            out.push({idx: i, desc: (el.tagName + ' ' + (src || txt)).slice(0, 60)});
+        }
+    }
+    return out;
+}"""
+
+# Diagnóstico: qué apareció tras expandir la fila
+_JS_DIAG_EXPANDIDO = """() => {
+    return Array.from(document.querySelectorAll('img, a'))
+        .filter(e => e.offsetParent !== null)
+        .slice(0, 40)
+        .map(e => (e.tagName + '|' + (e.getAttribute('src') || '') + '|' +
+                   (e.id || '') + '|' + (e.innerText || '').trim()).slice(0, 70));
+}"""
+
+
+def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log, estado=None):
+    """Expande la fila del organismo (⊕) y descarga el PDF de 'Ver Planillas'.
+    Devuelve (ruta_pdf, nombre_organismo)."""
 
     ruta = os.path.join(carpeta_temp, "planilla_organismo.pdf")
     try:
@@ -532,8 +581,6 @@ def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log):
     except Exception:
         pass
 
-    # El ícono puede: (a) descargar directo, (b) abrir un modal de impresión,
-    # (c) abrir una pestaña con el PDF. Se escuchan las 3 vías a la vez.
     descargas, popups = [], []
     _on_dl = lambda d: descargas.append(d)
     _on_pg = lambda p: popups.append(p)
@@ -547,6 +594,7 @@ def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log):
             return False
 
     try:
+        # 1. Expandir la fila del organismo (el ⊕ no descarga: despliega)
         try:
             icono = page.locator('img[src*="planillas.gif"]').nth(idx_org)
             icono.scroll_into_view_if_needed(timeout=3000)
@@ -556,11 +604,48 @@ def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log):
                 page.evaluate(
                     f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{idx_org}].click()")
             except Exception:
-                log("  No se pudo clickear el ícono de la planilla", "warn")
+                log("    no se pudo expandir la fila de la institución", "warn")
                 return None, nombre_org
 
-        # Esperar: descarga directa, modal o pestaña nueva
+        # 2. Esperar a que aparezca el ícono de descarga de la subtabla
+        cands = []
         fin = time.time() + 8
+        while time.time() < fin and not descargas and not popups and not _modal_visible():
+            try:
+                cands = page.evaluate(_JS_ICONOS_DESCARGA)
+            except Exception:
+                cands = []
+            if cands:
+                break
+            time.sleep(0.3)
+
+        # 3. Clickear el ícono PDF de "Ver Planillas"
+        if cands and not descargas and not popups:
+            for c in cands[:3]:
+                try:
+                    page.evaluate(
+                        "(i) => { const e = document.querySelectorAll('img, a')[i]; if (e) e.click(); }",
+                        c["idx"])
+                except Exception:
+                    continue
+                esp = time.time() + 6
+                while time.time() < esp and not descargas and not popups and not _modal_visible():
+                    time.sleep(0.3)
+                if descargas or popups or _modal_visible():
+                    break
+
+        # 4. Si aún nada, volcar diagnóstico una sola vez
+        if not descargas and not popups and not _modal_visible():
+            if estado is not None and not estado.get("diag_expandido"):
+                estado["diag_expandido"] = True
+                try:
+                    log("    [diag] elementos tras expandir:", "warn")
+                    for d in page.evaluate(_JS_DIAG_EXPANDIDO):
+                        log(f"      {d}", "warn")
+                except Exception:
+                    pass
+
+        fin = time.time() + 4
         while time.time() < fin and not descargas and not popups and not _modal_visible():
             time.sleep(0.3)
 
@@ -756,7 +841,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
 
                             for idx_ic, nombre_org in iconos:
                                 ruta_pdf, organismo = _descargar_pdf_organismo(
-                                    page, idx_ic, nombre_org, carpeta_temp, log)
+                                    page, idx_ic, nombre_org, carpeta_temp, log, estado)
                                 if not ruta_pdf:
                                     log(f"{marca}: no se pudo descargar {nombre_org}", "warn")
                                     continue

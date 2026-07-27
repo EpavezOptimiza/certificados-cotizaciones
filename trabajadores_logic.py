@@ -493,48 +493,70 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
         try:
             estado_res = page.evaluate("""() => {
                 const t = (document.body.innerText || '').toLowerCase();
+                // Los íconos de institución son la señal definitiva
                 if (document.querySelectorAll('img[src*="planillas.gif"]').length) return 'ok';
-                if (t.includes('nueva busqueda') || t.includes('nueva búsqueda') ||
-                    t.includes('descargar planillas masivas')) return 'ok';
                 if (t.includes('no existen planillas') || t.includes('no se encontraron') ||
                     t.includes('no hay planillas') ||
                     t.includes('no se registran') || t.includes('sin resultados')) return 'vacio';
+                // Botones de resultado: hay respuesta, pero puede faltar pintar el listado
+                if (t.includes('nueva busqueda') || t.includes('nueva búsqueda') ||
+                    t.includes('descargar planillas masivas')) return 'parcial';
                 return '';
             }""")
         except Exception:
             estado_res = ""
-        if estado_res:
+        # 'parcial' no corta la espera: se sigue esperando el listado de instituciones
+        if estado_res in ("ok", "vacio"):
             break
         time.sleep(0.3)
 
     if estado_res == "vacio":
         return False
-    if not estado_res:
-        return False
-    return True
+    return estado_res in ("ok", "parcial")
 
 
-def _iconos_organismo(page, log):
+def _iconos_organismo(page, log, estado=None):
     """Todos los íconos de planilla que corresponden al organismo de accidentes.
-    Devuelve [(indice, nombre)] — puede haber más de uno por búsqueda."""
+    Devuelve [(indice, nombre)] — puede haber más de uno por búsqueda.
+    Los íconos se pintan un instante DESPUÉS de los botones, por eso se espera."""
+    _poll(page, "() => document.querySelectorAll('img[src*=\"planillas.gif\"]').length > 0",
+          max_seg=8)
     try:
         ids_info = page.evaluate("""() => {
             return Array.from(document.querySelectorAll('img[src*="planillas.gif"]'))
                 .map(img => img.id || '');
         }""")
     except Exception:
-        return []
-    if not ids_info:
-        return []
+        ids_info = []
+
     out = []
     for i, img_id in enumerate(ids_info):
         nombre_inst = img_id.split('#')[-1] if '#' in img_id else img_id
         n = _norm(nombre_inst).upper()
         if any(_norm(k).upper() in n for k in _ORGANISMOS):
             out.append((i, nombre_inst.strip()))
+
     if not out:
-        insts = [i.split('#')[-1] for i in ids_info if i]
-        log(f"    sin organismo de accidentes entre: {insts}", "warn")
+        if ids_info:
+            insts = [i.split('#')[-1] for i in ids_info if i]
+            log(f"    sin organismo de accidentes entre: {insts}", "warn")
+        elif estado is not None and not estado.get("diag_iconos"):
+            # Ningún ícono: volcar qué muestra la pantalla de resultados
+            estado["diag_iconos"] = True
+            try:
+                dg = page.evaluate("""() => ({
+                    imgs: Array.from(document.querySelectorAll('img'))
+                        .filter(e => e.offsetParent !== null)
+                        .slice(0, 15)
+                        .map(e => (e.getAttribute('src') || '') + '|' + (e.id || '')),
+                    texto: (document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 300)
+                })""")
+                log("    [diag] no hay íconos de institución. Imágenes visibles:", "warn")
+                for im in dg["imgs"]:
+                    log(f"      {im}", "warn")
+                log(f"    [diag] texto: {dg['texto']}", "warn")
+            except Exception:
+                pass
     return out
 
 
@@ -833,7 +855,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
 
                             # Puede haber MÁS DE UN ícono de organismo por búsqueda:
                             # se descargan y suman todos.
-                            iconos = _iconos_organismo(page, log)
+                            iconos = _iconos_organismo(page, log, estado)
                             if not iconos:
                                 log(f"{marca}: sin planilla de mutual/ISL", "warn")
                                 _reset_busqueda(page, log)

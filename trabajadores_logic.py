@@ -116,10 +116,13 @@ def _reset_busqueda(page, log):
 
 
 def _nominas_rapido(page, mes, anio):
-    """Nóminas del período, con polling en vez de sleeps fijos."""
+    """Nóminas del período. Las pausas son necesarias: cada selección
+    dispara una recarga AJAX de la lista siguiente."""
     page.wait_for_selector("#mesR0", timeout=12000)
     page.select_option("#mesR0", str(mes).zfill(2))
+    time.sleep(1)
     _select_anio(page, anio)
+    time.sleep(1)
     # El combo se repuebla por AJAX: esperar a que tenga opciones reales
     _poll(page, """() => {
         const sel = document.getElementById('combo_nominas');
@@ -416,7 +419,9 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     de accidentes (Mutual/ISL). Si no existe el tipo, usa 'Todas'."""
     page.wait_for_selector("#mesR0", timeout=15000)
     page.select_option("#mesR0", str(mes).zfill(2))
+    time.sleep(1)   # cada selección recarga la lista siguiente por AJAX
     _select_anio(page, anio)
+    time.sleep(1)
     page.wait_for_selector("#combo_nominas", timeout=15000)
     _hay_nominas_cargadas(page)
     opciones = page.evaluate("""() => {
@@ -438,6 +443,7 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
         log(f"    (nómina no está en el combo: {opciones[:6]})", "warn")
         return False
     page.select_option("#combo_nominas", label=objetivo)
+    time.sleep(1)   # el portal recarga el combo de instituciones por AJAX
 
     # Tipo de institución: buscar Mutual/ISL; si no, 'Todas'
     try:
@@ -456,11 +462,12 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
             elegido = next((t for t in tipos if "todas" in _norm(t) or "todos" in _norm(t)), None)
         if elegido:
             page.select_option("#combo_tipo_institucion", label=elegido)
+        time.sleep(2)   # recarga de #combo_instituciones
         try:
-            _poll(page, """() => {
-                const sel = document.getElementById('combo_instituciones');
+            page.wait_for_function("""() => {
+                var sel = document.getElementById('combo_instituciones');
                 return sel && sel.options.length >= 1;
-            }""", max_seg=6)
+            }""", timeout=8000)
             inst = page.evaluate("""() => {
                 var sel = document.getElementById('combo_instituciones');
                 return Array.from(sel.options).map(o => o.text);
@@ -469,8 +476,9 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
                 page.select_option("#combo_instituciones", label="Todas las Instituciones")
         except Exception:
             pass
+        time.sleep(1)
     except Exception:
-        pass
+        time.sleep(1)
 
     # Cerrar dialogs flotantes y buscar
     try:
@@ -479,9 +487,11 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
                 var btn = d.querySelector('button'); if (btn) btn.click();
             });
         }""")
+        time.sleep(1)
     except Exception:
         pass
     page.evaluate("() => document.getElementById('buscar').click()")
+    time.sleep(3)   # el listado de instituciones tarda en pintarse
 
     # Esperar el resultado real. OJO: la página SIEMPRE tiene el enlace
     # "Fecha Planillas Timbradas", así que no sirve como señal de "sin datos".

@@ -488,8 +488,28 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     # Señal de resultados cargados: aparecen los botones Nueva Búsqueda /
     # Descargar Planillas Masivas, o los íconos de institución.
     estado_res = ""
-    fin = time.time() + 12
+    fin = time.time() + 14
     while time.time() < fin:
+        # Los resultados pueden pintarse en un iframe: se consultan todos los marcos
+        try:
+            for _fr in page.frames:
+                try:
+                    if _fr.evaluate("""(keys) => {
+                        const t = (document.body ? document.body.innerText : '').toLowerCase();
+                        const filas = document.querySelectorAll('tr, li');
+                        for (const f of filas) {
+                            const ft = (f.innerText || '').toLowerCase();
+                            if (ft.length < 160 && !ft.includes('presione sobre el') &&
+                                keys.some(k => ft.includes(k.toLowerCase())) &&
+                                f.querySelectorAll('img').length) return true;
+                        }
+                        return false;
+                    }""", list(_ORGANISMOS)):
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
         try:
             estado_res = page.evaluate("""() => {
                 const t = (document.body.innerText || '').toLowerCase();
@@ -557,38 +577,48 @@ _JS_TODAS_IMGS = """() => Array.from(document.querySelectorAll('img')).slice(0, 
 
 def _iconos_organismo(page, log, estado=None):
     """Fila de la institución de accidentes en los resultados.
-    Devuelve [(lista_de_indices_de_imagenes, texto_de_la_fila)]."""
-    # Esperar a que se pinte alguna fila con el nombre del organismo
-    _poll(page, """(keys) => {
-        const t = (document.body.innerText || '').toLowerCase();
-        return keys.some(k => t.includes(k.toLowerCase()));
-    }""", max_seg=8)
-    try:
-        filas = page.evaluate(_JS_FILAS_ORGANISMO, list(_ORGANISMOS))
-    except Exception:
-        filas = []
-
-    if not filas:
-        if estado is not None and not estado.get("diag_iconos"):
-            estado["diag_iconos"] = True
+    Los resultados pueden estar en un IFRAME, así que se recorren todos
+    los marcos de la página. Devuelve [(frame, indices_de_imagenes, texto)]."""
+    # Esperar (en cualquier marco) a que aparezca la fila del organismo
+    fin = time.time() + 10
+    while time.time() < fin:
+        for fr in page.frames:
             try:
-                log("    [diag] no se ubicó la fila del organismo. Imágenes de la página:", "warn")
-                for im in page.evaluate(_JS_TODAS_IMGS):
-                    log(f"      {im}", "warn")
-                txt = page.evaluate(
-                    "() => (document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 400)")
-                log(f"    [diag] texto: {txt}", "warn")
+                filas = fr.evaluate(_JS_FILAS_ORGANISMO, list(_ORGANISMOS))
             except Exception:
-                pass
-        return []
+                continue
+            if filas:
+                mejor = filas[0]
+                idxs = [im["idx"] for im in mejor["imgs"] if im["idx"] >= 0]
+                if idxs:
+                    if estado is not None and not estado.get("diag_fila"):
+                        estado["diag_fila"] = True
+                        log(f"    [diag] fila '{mejor['texto']}' en marco "
+                            f"{(fr.url or '')[-45:]} → "
+                            f"{[(im['src'], im['id']) for im in mejor['imgs']]}", "info")
+                    return [(fr, idxs, mejor["texto"])]
+        time.sleep(0.4)
 
-    mejor = filas[0]
-    idxs = [im["idx"] for im in mejor["imgs"] if im["idx"] >= 0]
-    if estado is not None and not estado.get("diag_fila"):
-        estado["diag_fila"] = True
-        log(f"    [diag] fila: '{mejor['texto']}' → imgs: "
-            f"{[(im['src'], im['id']) for im in mejor['imgs']]}", "info")
-    return [(idxs, mejor["texto"])] if idxs else []
+    # Nada: diagnóstico por marco (una sola vez)
+    if estado is not None and not estado.get("diag_iconos"):
+        estado["diag_iconos"] = True
+        try:
+            log(f"    [diag] fila no encontrada. Marcos: {len(page.frames)}", "warn")
+            for fr in page.frames:
+                try:
+                    n_img = fr.evaluate("() => document.querySelectorAll('img').length")
+                    txt = fr.evaluate(
+                        "() => (document.body ? document.body.innerText : '')"
+                        ".replace(/\\s+/g, ' ').slice(0, 200)")
+                    log(f"      marco {(fr.url or 'main')[-50:]}: {n_img} imgs | {txt}", "warn")
+                    if n_img:
+                        for im in fr.evaluate(_JS_TODAS_IMGS)[:12]:
+                            log(f"        {im}", "warn")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    return []
 
 
 # Tras expandir el ⊕, la fila muestra una subtabla con la columna "Ver Planillas"
@@ -623,7 +653,7 @@ _JS_DIAG_EXPANDIDO = """() => {
 }"""
 
 
-def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log, estado=None):
+def _descargar_pdf_organismo(page, frame, idx_org, nombre_org, carpeta_temp, log, estado=None):
     """Expande la fila del organismo (⊕) y descarga el PDF de 'Ver Planillas'.
     Devuelve (ruta_pdf, nombre_organismo)."""
 
@@ -661,7 +691,7 @@ def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log, estad
                     continue
                 clickeadas.add(gi)
                 try:
-                    page.evaluate(
+                    frame.evaluate(
                         "(i) => { const e = document.querySelectorAll('img')[i];"
                         " if (e) { e.scrollIntoView({block:'center'}); e.click(); } }", gi)
                 except Exception:
@@ -675,7 +705,7 @@ def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log, estad
                 break
             # Al expandir pueden haber aparecido imágenes nuevas en la fila
             try:
-                filas = page.evaluate(_JS_FILAS_ORGANISMO, list(_ORGANISMOS))
+                filas = frame.evaluate(_JS_FILAS_ORGANISMO, list(_ORGANISMOS))
                 if filas:
                     nuevas = [im["idx"] for im in filas[0]["imgs"]
                               if im["idx"] >= 0 and im["idx"] not in clickeadas]
@@ -690,8 +720,8 @@ def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log, estad
             if estado is not None and not estado.get("diag_expandido"):
                 estado["diag_expandido"] = True
                 try:
-                    log("    [diag] tras clickear la fila, imágenes de la página:", "warn")
-                    for d in page.evaluate(_JS_TODAS_IMGS):
+                    log("    [diag] tras clickear la fila, imágenes del marco:", "warn")
+                    for d in frame.evaluate(_JS_TODAS_IMGS):
                         log(f"      {d}", "warn")
                 except Exception:
                     pass
@@ -890,9 +920,9 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                                 _reset_busqueda(page, log)
                                 continue
 
-                            for idx_ic, nombre_org in iconos:
+                            for fr_org, idx_ic, nombre_org in iconos:
                                 ruta_pdf, organismo = _descargar_pdf_organismo(
-                                    page, idx_ic, nombre_org, carpeta_temp, log, estado)
+                                    page, fr_org, idx_ic, nombre_org, carpeta_temp, log, estado)
                                 if not ruta_pdf:
                                     log(f"{marca}: no se pudo descargar {nombre_org}", "warn")
                                     continue

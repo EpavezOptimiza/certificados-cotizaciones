@@ -142,6 +142,27 @@ def _nominas_rapido(page, mes, anio):
         return []
 
 
+class CuentaBloqueada(Exception):
+    """PreviRed respondió que la clave expiró o el usuario está bloqueado."""
+
+
+def _revisar_cuenta_bloqueada(page):
+    """Lanza CuentaBloqueada si el portal muestra ese aviso tras el login."""
+    try:
+        malo = page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '').toLowerCase();
+            return t.includes('clave ha expirado') || t.includes('encuentra bloqueado') ||
+                   t.includes('usuario bloqueado');
+        }""")
+    except Exception:
+        return
+    if malo:
+        raise CuentaBloqueada(
+            "PreviRed indica: 'Su clave ha expirado, o su usuario se encuentra bloqueado'. "
+            "Hay que desbloquear/renovar la clave en previred.com y actualizarla en el "
+            "módulo Previred de la plataforma.")
+
+
 def _menu_empresas_visible(page, espera=6):
     """True si el menú de empresas (li#empresa) está disponible en pantalla."""
     return _poll(page, "() => !!document.querySelector('li#empresa')",
@@ -862,6 +883,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
         page.set_default_navigation_timeout(45000)
         try:
             hacer_login(page, usuario, clave, log)
+            _revisar_cuenta_bloqueada(page)   # aborta de inmediato si está bloqueada
             estado = {"home": page.url}   # URL real del portal tras el login
 
             t0_global = time.time()
@@ -882,6 +904,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
 
                     ids = _ids_empresa(page, rut, log, usuario, clave)
                     if not ids:
+                        _revisar_cuenta_bloqueada(page)   # ¿bloqueo a media corrida?
                         guardar(rut, razon, "", None, "no_esta_en_previred")
                         continue
 
@@ -977,6 +1000,8 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                         log("  Sin nóminas en el período", "warn")
                         guardar(rut, razon, "", None, "sin_planilla")
 
+                except CuentaBloqueada:
+                    raise          # detener toda la corrida: no tiene sentido seguir
                 except Exception as e:
                     msg = f"{type(e).__name__}: {str(e)[:120]}"
                     log(f"  Error: {msg}", "err")

@@ -2805,6 +2805,15 @@ def trabajadores_actualizar():
                 guardar=guardar)
             _trab_log(tid, f"Finalizado — {len(pendientes)} empresa(s) procesadas", "ok")
         except Exception as e:
+            from trabajadores_logic import CuentaBloqueada
+            if isinstance(e, CuentaBloqueada):
+                _trab_log(tid, "⛔ PROCESO DETENIDO — cuenta de PreviRed bloqueada "
+                               "o clave expirada", "err")
+                _trab_log(tid, "Desbloquea la clave en previred.com y actualízala en el "
+                               "módulo Previred de la plataforma; después vuelve a lanzar "
+                               "la actualización.", "err")
+                _trab_tareas[tid]["error"] = True
+                return
             import traceback
             _trab_log(tid, f"Error fatal: {e}", "err")
             _trab_log(tid, traceback.format_exc()[:400], "err")

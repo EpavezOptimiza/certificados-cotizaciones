@@ -487,87 +487,35 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     # "Fecha Planillas Timbradas", así que no sirve como señal de "sin datos".
     # Señal de resultados cargados: aparecen los botones Nueva Búsqueda /
     # Descargar Planillas Masivas, o los íconos de institución.
+    # Esperar a que aparezcan los íconos de planilla (en el documento o en un
+    # iframe). Son la señal real de que hay resultados; los botones aparecen
+    # antes que el listado, así que no sirven para cortar la espera.
     estado_res = ""
-    fin = time.time() + 14
+    fin = time.time() + 15
     while time.time() < fin:
-        # Los resultados pueden pintarse en un iframe: se consultan todos los marcos
-        try:
-            for _fr in page.frames:
-                try:
-                    if _fr.evaluate("""(keys) => {
-                        const t = (document.body ? document.body.innerText : '').toLowerCase();
-                        const filas = document.querySelectorAll('tr, li');
-                        for (const f of filas) {
-                            const ft = (f.innerText || '').toLowerCase();
-                            if (ft.length < 160 && !ft.includes('presione sobre el') &&
-                                keys.some(k => ft.includes(k.toLowerCase())) &&
-                                f.querySelectorAll('img').length) return true;
-                        }
-                        return false;
-                    }""", list(_ORGANISMOS)):
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        for _fr in [page.main_frame] + [f for f in page.frames if f != page.main_frame]:
+            try:
+                if _fr.evaluate(
+                        "() => document.querySelectorAll('img[src*=\"planillas.gif\"]').length > 0"):
+                    return True
+            except Exception:
+                continue
         try:
             estado_res = page.evaluate("""() => {
                 const t = (document.body.innerText || '').toLowerCase();
-                // Los íconos de institución son la señal definitiva
-                if (document.querySelectorAll('img[src*="planillas.gif"]').length) return 'ok';
                 if (t.includes('no existen planillas') || t.includes('no se encontraron') ||
                     t.includes('no hay planillas') ||
                     t.includes('no se registran') || t.includes('sin resultados')) return 'vacio';
-                // Botones de resultado: hay respuesta, pero puede faltar pintar el listado
-                if (t.includes('nueva busqueda') || t.includes('nueva búsqueda') ||
-                    t.includes('descargar planillas masivas')) return 'parcial';
                 return '';
             }""")
         except Exception:
             estado_res = ""
-        # 'parcial' no corta la espera: se sigue esperando el listado de instituciones
-        if estado_res in ("ok", "vacio"):
-            break
+        if estado_res == "vacio":
+            return False
         time.sleep(0.3)
 
-    if estado_res == "vacio":
-        return False
-    return estado_res in ("ok", "parcial")
+    return False
 
-
-# Filas de institución en los resultados. El ⊕ que expande es mas_nomina.png
-# (planillas.gif es el ícono PDF que aparece DENTRO, ya expandido).
-_SEL_EXPANSOR = 'img[src*="mas_nomina"], img[src*="menos_nomina"]'
-
-# Busca el contenedor MÁS ESPECÍFICO cuyo texto nombre al organismo y que
-# tenga imágenes clickeables. Devuelve los índices globales de esas imágenes.
-# (No depende del nombre del archivo del ícono: eso ya nos costó varios intentos.)
-_JS_FILAS_ORGANISMO = """(orgKeys) => {
-    const norm = s => (s || '').toString().normalize('NFD')
-        .replace(/[\\u0300-\\u036f]/g, '').trim().toLowerCase();
-    const todas = Array.from(document.querySelectorAll('img'));
-    const res = [];
-    for (const c of document.querySelectorAll('tr, li, div, td')) {
-        const bruto = (c.innerText || '').trim();
-        if (!bruto || bruto.length > 160) continue;              // evita wrappers gigantes
-        const t = norm(bruto);
-        if (t.includes('presione sobre el icono')) continue;     // texto de instrucciones
-        if (!orgKeys.some(k => t.includes(norm(k)))) continue;
-        const imgs = Array.from(c.querySelectorAll('img'));
-        if (!imgs.length) continue;
-        res.push({
-            texto: bruto.replace(/\\s+/g, ' ').slice(0, 70),
-            largo: bruto.length,
-            imgs: imgs.map(im => ({
-                idx: todas.indexOf(im),
-                src: (im.getAttribute('src') || '').split('/').pop(),
-                id:  (im.id || '').slice(0, 40)
-            }))
-        });
-    }
-    res.sort((a, b) => a.largo - b.largo);       // el más específico primero
-    return res.slice(0, 3);
-}"""
 
 # Vuelca TODAS las imágenes (visibles u ocultas) para diagnóstico definitivo
 _JS_TODAS_IMGS = """() => Array.from(document.querySelectorAll('img')).slice(0, 40).map((e, i) =>
@@ -575,35 +523,44 @@ _JS_TODAS_IMGS = """() => Array.from(document.querySelectorAll('img')).slice(0, 
     '|' + (e.offsetParent !== null ? 'vis' : 'oculta'))"""
 
 
+_JS_IDS_PLANILLAS = """() => Array.from(
+    document.querySelectorAll('img[src*="planillas.gif"]')).map(img => img.id || '')"""
+
+
 def _iconos_organismo(page, log, estado=None):
-    """Fila de la institución de accidentes en los resultados.
-    Los resultados pueden estar en un IFRAME, así que se recorren todos
-    los marcos de la página. Devuelve [(frame, indices_de_imagenes, texto)]."""
-    # Esperar (en cualquier marco) a que aparezca la fila del organismo
-    fin = time.time() + 10
+    """Íconos de planilla del organismo de accidentes — como funcionaba antes:
+    img[src*='planillas.gif'] cuyo id trae el nombre de la institución
+    (ej. 'inst#3#Mutual de Seguridad CChC'). Devuelve [(frame, indice, nombre)].
+    Se espera a que se pinten y, si no están en el documento principal, se
+    revisan también los iframes."""
+    fin = time.time() + 15
     while time.time() < fin:
-        for fr in page.frames:
+        marcos = [page.main_frame] + [f for f in page.frames if f != page.main_frame]
+        for fr in marcos:
             try:
-                filas = fr.evaluate(_JS_FILAS_ORGANISMO, list(_ORGANISMOS))
+                ids_info = fr.evaluate(_JS_IDS_PLANILLAS)
             except Exception:
                 continue
-            if filas:
-                mejor = filas[0]
-                idxs = [im["idx"] for im in mejor["imgs"] if im["idx"] >= 0]
-                if idxs:
-                    if estado is not None and not estado.get("diag_fila"):
-                        estado["diag_fila"] = True
-                        log(f"    [diag] fila '{mejor['texto']}' en marco "
-                            f"{(fr.url or '')[-45:]} → "
-                            f"{[(im['src'], im['id']) for im in mejor['imgs']]}", "info")
-                    return [(fr, idxs, mejor["texto"])]
+            if not ids_info:
+                continue
+            out = []
+            for i, img_id in enumerate(ids_info):
+                nombre_inst = img_id.split('#')[-1] if '#' in img_id else img_id
+                n = _norm(nombre_inst).upper()
+                if any(_norm(k).upper() in n for k in _ORGANISMOS):
+                    out.append((fr, i, nombre_inst.strip()))
+            if out:
+                return out
+            # Hay planillas pero de otras instituciones (AFP, salud, etc.)
+            insts = [x.split('#')[-1] for x in ids_info if x]
+            log(f"    sin organismo de accidentes entre: {insts[:8]}", "warn")
+            return []
         time.sleep(0.4)
 
-    # Nada: diagnóstico por marco (una sola vez)
     if estado is not None and not estado.get("diag_iconos"):
         estado["diag_iconos"] = True
         try:
-            log(f"    [diag] fila no encontrada. Marcos: {len(page.frames)}", "warn")
+            log(f"    [diag] sin íconos de planilla. Marcos: {len(page.frames)}", "warn")
             for fr in page.frames:
                 try:
                     n_img = fr.evaluate("() => document.querySelectorAll('img').length")
@@ -676,59 +633,48 @@ def _descargar_pdf_organismo(page, frame, idx_org, nombre_org, carpeta_temp, log
         except Exception:
             return False
 
+    ejecutor = frame or page
     try:
-        # Clickear, una por una, TODAS las imágenes de la fila del organismo:
-        # una expandirá la fila y otra (la que aparece al expandir) baja el PDF.
-        # idx_org llega como lista de índices globales de <img>.
-        pendientes = list(idx_org if isinstance(idx_org, (list, tuple)) else [idx_org])
-        clickeadas = set()
+        log(f"    organismo: {nombre_org}", "info")
+        # Click en el ícono de la planilla (así funcionaba antes)
+        try:
+            ejecutor.evaluate(
+                "(i) => { const e = document.querySelectorAll('img[src*=\"planillas.gif\"]')[i];"
+                " if (e) { e.scrollIntoView({block:'center'}); e.click(); } }", idx_org)
+        except Exception:
+            log("    no se pudo clickear el ícono de la planilla", "warn")
+            return None, nombre_org
 
-        for vuelta in range(3):
-            if descargas or popups or _modal_visible():
-                break
-            for gi in list(pendientes):
-                if gi in clickeadas:
-                    continue
-                clickeadas.add(gi)
-                try:
-                    frame.evaluate(
-                        "(i) => { const e = document.querySelectorAll('img')[i];"
-                        " if (e) { e.scrollIntoView({block:'center'}); e.click(); } }", gi)
-                except Exception:
-                    continue
-                esp = time.time() + 5
-                while time.time() < esp and not descargas and not popups and not _modal_visible():
-                    time.sleep(0.3)
-                if descargas or popups or _modal_visible():
-                    break
-            if descargas or popups or _modal_visible():
-                break
-            # Al expandir pueden haber aparecido imágenes nuevas en la fila
+        # Puede llegar como descarga directa, modal de impresión o pestaña nueva
+        fin = time.time() + 10
+        while time.time() < fin and not descargas and not popups and not _modal_visible():
+            time.sleep(0.3)
+
+        # Si abrió el modal: marcar "Total Empresa" y aceptar
+        if not descargas and not popups and _modal_visible():
             try:
-                filas = frame.evaluate(_JS_FILAS_ORGANISMO, list(_ORGANISMOS))
-                if filas:
-                    nuevas = [im["idx"] for im in filas[0]["imgs"]
-                              if im["idx"] >= 0 and im["idx"] not in clickeadas]
-                    if not nuevas:
-                        break
-                    pendientes = nuevas
+                radio = page.locator("input[type='radio'][value*='total']").first
+                if radio.count() > 0 and not radio.is_checked():
+                    radio.click()
             except Exception:
-                break
+                pass
+            try:
+                page.click("#aceptar_modal", timeout=5000)
+            except Exception:
+                pass
+            fin = time.time() + 20
+            while time.time() < fin and not descargas and not popups:
+                time.sleep(0.3)
 
-        # Si nada resultó, volcar el estado real de la fila (una sola vez)
-        if not descargas and not popups and not _modal_visible():
+        if not descargas and not popups:
             if estado is not None and not estado.get("diag_expandido"):
                 estado["diag_expandido"] = True
                 try:
-                    log("    [diag] tras clickear la fila, imágenes del marco:", "warn")
-                    for d in frame.evaluate(_JS_TODAS_IMGS):
+                    log("    [diag] tras el click, imágenes del marco:", "warn")
+                    for d in ejecutor.evaluate(_JS_TODAS_IMGS)[:15]:
                         log(f"      {d}", "warn")
                 except Exception:
                     pass
-
-        fin = time.time() + 4
-        while time.time() < fin and not descargas and not popups and not _modal_visible():
-            time.sleep(0.3)
 
         # (b) Modal → marcar "total empresa" y aceptar
         if not descargas and _modal_visible():

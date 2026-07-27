@@ -515,33 +515,47 @@ def _buscar_planilla_organismo(page, mes, anio, nombre_nomina, log):
     return estado_res in ("ok", "parcial")
 
 
+# Filas de institución en los resultados. El ⊕ que expande es mas_nomina.png
+# (planillas.gif es el ícono PDF que aparece DENTRO, ya expandido).
+_SEL_EXPANSOR = 'img[src*="mas_nomina"], img[src*="menos_nomina"]'
+
+_JS_FILAS_ORGANISMO = """(orgKeys) => {
+    const norm = s => (s || '').toString().normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '').trim().toLowerCase();
+    const imgs = Array.from(document.querySelectorAll(
+        'img[src*="mas_nomina"], img[src*="menos_nomina"]'));
+    return imgs.map((img, i) => {
+        let cont = img.closest('tr') || img.parentElement, txt = '';
+        for (let up = 0; up < 4 && cont; up++) {
+            txt = (cont.innerText || '').trim();
+            if (txt) break;
+            cont = cont.parentElement;
+        }
+        const t = norm(txt);
+        return {
+            idx: i,
+            texto: txt.replace(/\\s+/g, ' ').slice(0, 60),
+            match: orgKeys.some(k => t.includes(norm(k)))
+        };
+    });
+}"""
+
+
 def _iconos_organismo(page, log, estado=None):
-    """Todos los íconos de planilla que corresponden al organismo de accidentes.
-    Devuelve [(indice, nombre)] — puede haber más de uno por búsqueda.
-    Los íconos se pintan un instante DESPUÉS de los botones, por eso se espera."""
-    _poll(page, "() => document.querySelectorAll('img[src*=\"planillas.gif\"]').length > 0",
-          max_seg=8)
+    """Filas de instituciones de accidentes en los resultados.
+    Devuelve [(indice_del_expansor, texto_de_la_fila)]."""
+    _poll(page, f"() => document.querySelectorAll('{_SEL_EXPANSOR}').length > 0", max_seg=8)
     try:
-        ids_info = page.evaluate("""() => {
-            return Array.from(document.querySelectorAll('img[src*="planillas.gif"]'))
-                .map(img => img.id || '');
-        }""")
+        filas = page.evaluate(_JS_FILAS_ORGANISMO, list(_ORGANISMOS))
     except Exception:
-        ids_info = []
+        filas = []
 
-    out = []
-    for i, img_id in enumerate(ids_info):
-        nombre_inst = img_id.split('#')[-1] if '#' in img_id else img_id
-        n = _norm(nombre_inst).upper()
-        if any(_norm(k).upper() in n for k in _ORGANISMOS):
-            out.append((i, nombre_inst.strip()))
-
+    out = [(f["idx"], f["texto"]) for f in filas if f.get("match")]
     if not out:
-        if ids_info:
-            insts = [i.split('#')[-1] for i in ids_info if i]
-            log(f"    sin organismo de accidentes entre: {insts}", "warn")
+        if filas:
+            log(f"    sin organismo de accidentes entre: "
+                f"{[f['texto'] for f in filas][:6]}", "warn")
         elif estado is not None and not estado.get("diag_iconos"):
-            # Ningún ícono: volcar qué muestra la pantalla de resultados
             estado["diag_iconos"] = True
             try:
                 dg = page.evaluate("""() => ({
@@ -551,7 +565,7 @@ def _iconos_organismo(page, log, estado=None):
                         .map(e => (e.getAttribute('src') || '') + '|' + (e.id || '')),
                     texto: (document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 300)
                 })""")
-                log("    [diag] no hay íconos de institución. Imágenes visibles:", "warn")
+                log("    [diag] sin filas de institución. Imágenes visibles:", "warn")
                 for im in dg["imgs"]:
                     log(f"      {im}", "warn")
                 log(f"    [diag] texto: {dg['texto']}", "warn")
@@ -616,52 +630,45 @@ def _descargar_pdf_organismo(page, idx_org, nombre_org, carpeta_temp, log, estad
             return False
 
     try:
-        # 1. Expandir la fila del organismo (el ⊕ no descarga: despliega)
+        # 1. Expandir la fila del organismo con el ⊕ (mas_nomina.png)
         try:
-            icono = page.locator('img[src*="planillas.gif"]').nth(idx_org)
-            icono.scroll_into_view_if_needed(timeout=3000)
-            icono.click(timeout=6000)
+            page.evaluate(
+                "(sel_i) => { const e = document.querySelectorAll(sel_i[0])[sel_i[1]];"
+                " if (e) e.click(); }", [_SEL_EXPANSOR, idx_org])
         except Exception:
+            log("    no se pudo expandir la fila de la institución", "warn")
+            return None, nombre_org
+
+        # 2. Al expandirse aparece la subtabla con el ícono PDF (planillas.gif)
+        _poll(page, "() => document.querySelectorAll('img[src*=\"planillas.gif\"]').length > 0",
+              max_seg=8)
+
+        # 3. Clickear el/los íconos PDF de la columna "Ver Planillas"
+        try:
+            n_pdf = page.evaluate(
+                "() => document.querySelectorAll('img[src*=\"planillas.gif\"]').length")
+        except Exception:
+            n_pdf = 0
+
+        for j in range(min(n_pdf, 3)):
+            if descargas or popups or _modal_visible():
+                break
             try:
                 page.evaluate(
-                    f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{idx_org}].click()")
+                    "(i) => { const e = document.querySelectorAll('img[src*=\"planillas.gif\"]')[i];"
+                    " if (e) e.click(); }", j)
             except Exception:
-                log("    no se pudo expandir la fila de la institución", "warn")
-                return None, nombre_org
-
-        # 2. Esperar a que aparezca el ícono de descarga de la subtabla
-        cands = []
-        fin = time.time() + 8
-        while time.time() < fin and not descargas and not popups and not _modal_visible():
-            try:
-                cands = page.evaluate(_JS_ICONOS_DESCARGA)
-            except Exception:
-                cands = []
-            if cands:
-                break
-            time.sleep(0.3)
-
-        # 3. Clickear el ícono PDF de "Ver Planillas"
-        if cands and not descargas and not popups:
-            for c in cands[:3]:
-                try:
-                    page.evaluate(
-                        "(i) => { const e = document.querySelectorAll('img, a')[i]; if (e) e.click(); }",
-                        c["idx"])
-                except Exception:
-                    continue
-                esp = time.time() + 6
-                while time.time() < esp and not descargas and not popups and not _modal_visible():
-                    time.sleep(0.3)
-                if descargas or popups or _modal_visible():
-                    break
+                continue
+            esp = time.time() + 8
+            while time.time() < esp and not descargas and not popups and not _modal_visible():
+                time.sleep(0.3)
 
         # 4. Si aún nada, volcar diagnóstico una sola vez
         if not descargas and not popups and not _modal_visible():
             if estado is not None and not estado.get("diag_expandido"):
                 estado["diag_expandido"] = True
                 try:
-                    log("    [diag] elementos tras expandir:", "warn")
+                    log(f"    [diag] tras expandir (pdf_iconos={n_pdf}):", "warn")
                     for d in page.evaluate(_JS_DIAG_EXPANDIDO):
                         log(f"      {d}", "warn")
                 except Exception:

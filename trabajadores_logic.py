@@ -167,21 +167,25 @@ _JS_CLICK_INICIO = """() => {
 
 
 def _asegurar_menu_empresas(page, usuario, clave, log):
-    """Deja la página donde existe el menú de empresas. Devuelve True/False."""
-    if _menu_empresas_visible(page, espera=1):
+    """Deja la página donde existe el menú de empresas. Devuelve True/False.
+
+    Primero espera con paciencia (el portal tarda en pintar el menú tras el
+    login); solo si no aparece se prueba el enlace "Inicio" del encabezado."""
+    if _menu_empresas_visible(page, espera=20):
         return True
     for intento in range(2):
         try:
             page.evaluate(_JS_CLICK_INICIO)
         except Exception:
             pass
-        if _menu_empresas_visible(page, espera=6):
+        if _menu_empresas_visible(page, espera=10):
             return True
         if intento == 0:
-            # La sesión pudo caerse: reabrir y volver a intentar con "Inicio"
             try:
                 if esta_en_login(page):
                     hacer_login(page, usuario, clave, log)
+                    if _menu_empresas_visible(page, espera=15):
+                        return True
             except Exception:
                 pass
     return False
@@ -238,12 +242,11 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
         except Exception:
             pass
 
-    # 4. Último recurso: re-login (y volver al listado con "Inicio")
+    # 4. Último recurso: re-login. El menú se espera después, en _ids_empresa
+    # (con 20s de paciencia y, si hace falta, el enlace "Inicio").
     log("  Reabriendo sesión...", "warn")
     hacer_login(page, usuario, clave, log)
     estado["home"] = page.url
-    # Tras el login el portal puede quedar dentro de la última empresa usada
-    _asegurar_menu_empresas(page, usuario, clave, log)
 
 
 # Lee el N° de trabajadores directamente de la tabla de resultados (sin PDF).
@@ -284,7 +287,8 @@ def _ids_empresa(page, rut, log, usuario=None, clave=None):
     rut_num = rut.replace(".", "").split("-")[0]
     patron = f"empresa#{rut_num}#"
 
-    if not _menu_empresas_visible(page, espera=2):
+    # Esperar al menú como siempre (20s); si no aparece, probar "Inicio"
+    if not _menu_empresas_visible(page, espera=20):
         if not _asegurar_menu_empresas(page, usuario, clave, log):
             log("  No se pudo abrir el listado de empresas del portal", "warn")
             return []

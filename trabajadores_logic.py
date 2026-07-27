@@ -291,6 +291,24 @@ def _ids_empresa(page, rut, log, usuario=None, clave=None):
     if not _menu_empresas_visible(page, espera=20):
         if not _asegurar_menu_empresas(page, usuario, clave, log):
             log("  No se pudo abrir el listado de empresas del portal", "warn")
+            # Diagnóstico: ¿qué está mostrando realmente el portal?
+            try:
+                info = page.evaluate("""() => ({
+                    url: location.href,
+                    titulo: document.title,
+                    login: !!document.querySelector('[name="web_rut2"]'),
+                    lis: Array.from(document.querySelectorAll('li'))
+                        .slice(0, 12).map(e => (e.id || '') + ':' +
+                        (e.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, 25)),
+                    texto: (document.body ? document.body.innerText : '')
+                        .replace(/\\s+/g, ' ').slice(0, 500)
+                })""")
+                log(f"    [diag] url={info['url'][:90]}", "warn")
+                log(f"    [diag] titulo='{info['titulo']}' pantalla_login={info['login']}", "warn")
+                log(f"    [diag] li: {info['lis']}", "warn")
+                log(f"    [diag] texto: {info['texto']}", "warn")
+            except Exception as e_d:
+                log(f"    [diag] no se pudo inspeccionar: {type(e_d).__name__}", "warn")
             return []
     page.click("li#empresa")
 

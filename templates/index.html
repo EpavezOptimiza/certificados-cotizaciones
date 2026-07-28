@@ -943,8 +943,9 @@ function applyRoleUI(){
   document.querySelectorAll(".admin-only").forEach(el=>{
     el.style.display = (rol==="admin") ? "" : "none";
   });
+  // El admin también puede crear solicitudes (antes el botón quedaba oculto para él)
   document.querySelectorAll(".ahorro-only").forEach(el=>{
-    el.style.display = ROLES_DEUDA.has(rol) ? "" : "none";
+    el.style.display = (rol==="admin" || ROLES_DEUDA.has(rol)) ? "" : "none";
   });
   document.querySelectorAll(".terreno-only").forEach(el=>{
     el.style.display = (rol==="terreno") ? "" : "none";

@@ -79,6 +79,24 @@ tbody tr:hover{background:#f8fafc}
 .post-card{display:inline-flex;flex-direction:column;gap:2px;background:#eff6ff;border:1px solid #dbeafe;border-radius:10px;padding:10px 16px;margin:0 10px 10px 0}
 .post-card .pn{font-size:12px;color:#64748b}
 .post-card .pv{font-size:16px;font-weight:700;color:#1E3A5F}
+.det-lista-title{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.det-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;cursor:pointer;background:#fff}
+.det-item:hover{background:#f8fafc;border-color:#cbd5e1}
+.det-item.sel{border-color:#1E3A5F;box-shadow:0 0 0 2px rgba(30,58,95,.12);background:#eff6ff}
+.det-item .nom{font-size:12.5px;font-weight:600;color:#0f172a;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.det-item .badge{background:#dbeafe;color:#1E3A5F;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+.det-item .del{color:#cbd5e1;font-size:13px;padding:0 2px}
+.det-item .del:hover{color:#dc2626}
+.det-razon-head{font-size:15px;font-weight:700;color:#1E3A5F;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.rm-tab{border:none;background:none;padding:6px 14px;font-size:12.5px;font-weight:600;color:#64748b;cursor:pointer;border-radius:7px}
+.rm-tab.active{background:#fff;color:#1E3A5F;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.rep-sec{margin-bottom:20px}
+.rep-sec-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:8px}
+.rep-dot{width:11px;height:11px;border-radius:50%}
+.rep-emp{display:flex;gap:8px;padding:5px 8px;border-bottom:1px solid #f1f5f9;font-size:12.5px}
+.rep-emp .gr{color:#94a3b8;width:130px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-emp .em{flex:1;color:#0f172a;font-weight:500}
+.rep-emp .rp{color:#64748b;width:70px;flex-shrink:0;text-align:right}
 #toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
 #toast.show{opacity:1}
 .spinner{width:14px;height:14px;border:2px solid #dbeafe;border-top-color:#1E3A5F;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
@@ -167,13 +185,19 @@ tbody tr:hover{background:#f8fafc}
 
     <div id="vista-detalle" style="display:none">
       <div class="upload-box">
-        <input type="file" id="det-file" accept=".xlsx,.xls" style="display:none" onchange="subirDetalle(this)">
-        <button class="btn primary" onclick="document.getElementById('det-file').click()" id="btn-det">
-          📂 Subir Excel de detalle de postulación
-        </button>
-        <div class="hint">Sube el archivo que contiene la hoja <b>detallePostulacion</b> (columnas NumeroPostulacionEmpresa, FechaPostulacion, RutTrabajador…)</div>
+        <div style="display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap">
+          <select id="det-razon" style="min-width:280px;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit;background:#fff">
+            <option value="">Selecciona la razón social…</option>
+          </select>
+          <input type="file" id="det-file" accept=".xlsx,.xls" style="display:none" onchange="subirDetalle(this)">
+          <button class="btn primary" onclick="abrirSubidaDetalle()" id="btn-det">📂 Subir Excel de detalle</button>
+        </div>
+        <div class="hint">1) Elige la razón social · 2) sube el Excel con la hoja <b>detallePostulacion</b>. Puedes cargar varias empresas (se acumulan mientras la página esté abierta).</div>
       </div>
-      <div id="det-resultado"></div>
+      <div style="display:flex;gap:16px;align-items:flex-start">
+        <div id="det-lista" style="width:290px;flex-shrink:0"></div>
+        <div id="det-resultado" style="flex:1;min-width:0"><div class="empty">Sube un detalle para ver las gestiones por empresa.</div></div>
+      </div>
     </div>
 
   </div>
@@ -181,9 +205,13 @@ tbody tr:hover{background:#f8fafc}
 
 <div id="rep-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;align-items:flex-start;justify-content:center;padding:32px;overflow:auto">
   <div id="rep-box" style="background:#fff;border-radius:14px;max-width:820px;width:100%;padding:0;box-shadow:0 20px 50px rgba(0,0,0,.25)">
-    <div style="display:flex;align-items:center;gap:10px;padding:16px 22px;border-bottom:1px solid #f1f5f9">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap">
       <span style="font-size:18px">📄</span>
-      <b style="font-size:15px">Reporte resumen — Subsidio a la Contratación</b>
+      <b style="font-size:15px">Reporte — Subsidio a la Contratación</b>
+      <div style="display:flex;gap:3px;background:#f1f5f9;border-radius:9px;padding:3px">
+        <button class="rm-tab active" id="rm-resumen" onclick="setRepModo('resumen')">📊 Resumen</button>
+        <button class="rm-tab" id="rm-detallado" onclick="setRepModo('detallado')">📋 Detallado</button>
+      </div>
       <div style="margin-left:auto;display:flex;gap:8px">
         <button class="btn primary" onclick="imprimirReporte()">🖨 Imprimir / PDF</button>
         <button class="btn" onclick="document.getElementById('rep-overlay').style.display='none'">Cerrar</button>
@@ -230,7 +258,7 @@ async function cargar(forzar){
     }
     _cols = data.columnas; _filas = data.filas; _resumen = data.resumen || {};
     document.getElementById('meta').textContent = data.ultima_lectura ? ('Actualizado: '+data.ultima_lectura) : '';
-    poblarFiltros(); renderCards(_resumen); render();
+    poblarFiltros(); renderCards(_resumen); render(); poblarRazones();
   }catch(e){ toast('Error al cargar'); }
   finally{ btn.disabled=false; btn.innerHTML='🔄 Actualizar'; }
 }
@@ -354,43 +382,70 @@ function _conteo(filas, campo){
   const c={}; filas.forEach(f=>{ const k=(f[campo]||'(vacío)'); c[k]=(c[k]||0)+1; });
   return Object.entries(c).sort((a,b)=>b[1]-a[1]);
 }
+let _repModo = 'resumen';
 function generarReporte(){
   if(!_filas.length){ toast('No hay datos cargados'); return; }
-  const filas = filasFiltradas();
-  const total = filas.length;
+  setRepModo('resumen');
+  document.getElementById('rep-overlay').style.display = 'flex';
+}
+function setRepModo(m){
+  _repModo = m;
+  document.getElementById('rm-resumen').classList.toggle('active', m==='resumen');
+  document.getElementById('rm-detallado').classList.toggle('active', m==='detallado');
+  construirReporte();
+}
+function _cabeceraReporte(filas){
+  const total=filas.length;
+  const grupos=new Set(filas.map(f=>f['Grupo']).filter(Boolean)).size;
   const g=document.getElementById('f-grupo').value, r=document.getElementById('f-resp').value,
         ge=document.getElementById('f-gestion').value, q=document.getElementById('f-buscar').value;
   const filtros=[g&&('Grupo: '+g), r&&('Responsable: '+r), ge&&('Gestión: '+ge), q&&('Búsqueda: "'+q+'"')].filter(Boolean);
-  const grupos=new Set(filas.map(f=>f['Grupo']).filter(Boolean)).size;
-  function bloque(titulo, pares){
-    return `<div style="margin-bottom:18px"><div style="font-size:12px;font-weight:700;color:#1E3A5F;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">${titulo}</div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-      ${pares.map(([k,n])=>{const c=colorGestion(k);const pct=total?Math.round(n/total*100):0;
-        return `<tr><td style="padding:5px 8px;border-bottom:1px solid #f1f5f9">${k}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700">${n}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;width:120px"><div style="background:#f1f5f9;border-radius:5px;height:8px"><div style="background:${c.fg};height:8px;border-radius:5px;width:${pct}%"></div></div></td>
-        <td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;color:#64748b;width:44px;text-align:right">${pct}%</td></tr>`;}).join('')}
-      </table></div>`;
-  }
-  const html = `
-    <div style="display:flex;gap:24px;margin-bottom:18px">
+  return `<div style="display:flex;gap:24px;margin-bottom:18px">
       <div><div style="font-size:34px;font-weight:800;color:#1E3A5F">${total}</div><div style="font-size:12px;color:#64748b">Empresas</div></div>
       <div><div style="font-size:34px;font-weight:800;color:#1E3A5F">${grupos}</div><div style="font-size:12px;color:#64748b">Grupos</div></div>
       <div style="margin-left:auto;text-align:right;font-size:11px;color:#94a3b8">${(document.getElementById('meta').textContent)||''}<br>${filtros.length?('Filtros — '+filtros.join(' · ')):'Sin filtros (base completa)'}</div>
-    </div>
-    ${bloque('Por estatus de gestión', _conteo(filas,'Estatus de gestión'))}
-    ${bloque('Por responsable', _conteo(filas,'Responsable'))}
-    ${bloque('Por estatus (inscripción)', _conteo(filas,'Estatus'))}
-  `;
+    </div>`;
+}
+function construirReporte(){
+  const filas = filasFiltradas();
+  const total = filas.length;
+  let html = _cabeceraReporte(filas);
+  if(_repModo==='resumen'){
+    function bloque(titulo, pares){
+      return `<div style="margin-bottom:18px"><div style="font-size:12px;font-weight:700;color:#1E3A5F;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">${titulo}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+        ${pares.map(([k,n])=>{const c=colorGestion(k);const pct=total?Math.round(n/total*100):0;
+          return `<tr><td style="padding:5px 8px;border-bottom:1px solid #f1f5f9">${k}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700">${n}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;width:120px"><div style="background:#f1f5f9;border-radius:5px;height:8px"><div style="background:${c.fg};height:8px;border-radius:5px;width:${pct}%"></div></div></td>
+          <td style="padding:5px 8px;border-bottom:1px solid #f1f5f9;color:#64748b;width:44px;text-align:right">${pct}%</td></tr>`;}).join('')}
+        </table></div>`;
+    }
+    html += bloque('Por estatus de gestión', _conteo(filas,'Estatus de gestión'))
+          + bloque('Por responsable', _conteo(filas,'Responsable'))
+          + bloque('Por estatus (inscripción)', _conteo(filas,'Estatus'));
+  } else {
+    // DETALLADO: empresas agrupadas por estatus de gestión (quién autorizó, quién no…)
+    const grupos={};
+    filas.forEach(f=>{ const k=f['Estatus de gestión']||'(sin gestión)'; (grupos[k]=grupos[k]||[]).push(f); });
+    Object.entries(grupos).sort((a,b)=>b[1].length-a[1].length).forEach(([est,arr])=>{
+      const c=colorGestion(est);
+      arr.sort((a,b)=>((a['Grupo']||'')+(a['Empresa']||'')).localeCompare((b['Grupo']||'')+(b['Empresa']||'')));
+      html += `<div class="rep-sec"><div class="rep-sec-h"><span class="rep-dot" style="background:${c.fg}"></span>
+        <span style="color:${c.fg}">${est}</span><span style="color:#64748b;font-weight:600">— ${arr.length} empresa${arr.length!==1?'s':''}</span></div>
+        <div class="rep-emp" style="font-weight:700;color:#94a3b8;border-bottom:2px solid #e2e8f0"><span class="gr">Grupo</span><span class="em">Empresa</span><span class="rp">Responsable</span></div>
+        ${arr.map(f=>`<div class="rep-emp"><span class="gr" title="${f['Grupo']||''}">${f['Grupo']||''}</span><span class="em">${f['Empresa']||''}</span><span class="rp">${f['Responsable']||''}</span></div>`).join('')}
+      </div>`;
+    });
+  }
   document.getElementById('rep-content').innerHTML = html;
-  document.getElementById('rep-overlay').style.display = 'flex';
 }
 function imprimirReporte(){
   const cont = document.getElementById('rep-content').innerHTML;
   const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Reporte Subsidio a la Contratación</title>
     <style>body{font-family:-apple-system,Segoe UI,sans-serif;padding:28px;color:#0f172a}h1{font-size:18px;color:#1E3A5F}table{width:100%;border-collapse:collapse}</style>
-    </head><body><h1>📄 Reporte resumen — Subsidio a la Contratación</h1>${cont}</body></html>`);
+    </head><body><h1>📄 Reporte ${_repModo==='detallado'?'detallado':'resumen'} — Subsidio a la Contratación</h1>${cont}</body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>{w.print();}, 300);
 }
 
@@ -402,11 +457,30 @@ function verTab(t){
   document.getElementById('vista-detalle').style.display = (t==='detalle')?'':'none';
   document.getElementById('tab-visor').classList.toggle('active', t==='visor');
   document.getElementById('tab-detalle').classList.toggle('active', t==='detalle');
+  if(t==='detalle') poblarRazones();
 }
 
-// ── Detalle de Gestiones (subida) ─────────────────────────
+// ── Detalle de Gestiones (subida + acumulación por razón social) ──────────
+let _detalles = {};    // razón social → datos parseados (en memoria)
+let _detSel   = null;  // razón social seleccionada
+
+function poblarRazones(){
+  const sel = document.getElementById('det-razon'); const cur = sel.value;
+  const empresas = [...new Set(_filas.map(f=>f['Empresa']).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Selecciona la razón social…</option>' +
+                  empresas.map(e=>`<option>${e}</option>`).join('');
+  sel.value = cur;
+}
+
+function abrirSubidaDetalle(){
+  if(!document.getElementById('det-razon').value){ toast('Primero selecciona la razón social'); return; }
+  document.getElementById('det-file').click();
+}
+
 async function subirDetalle(input){
-  const file = input.files[0];
+  const razon = document.getElementById('det-razon').value;
+  const file  = input.files[0];
+  if(!razon){ toast('Primero selecciona la razón social'); input.value=''; return; }
   if(!file) return;
   const btn = document.getElementById('btn-det');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Procesando...';
@@ -414,16 +488,55 @@ async function subirDetalle(input){
   try{
     const res = await fetch('/api/subsidio/detalle', {method:'POST', body:fd});
     const d = await res.json();
-    if(d.error){ toast(d.error); document.getElementById('det-resultado').innerHTML=`<div class="empty">⚠ ${d.error}</div>`; return; }
-    renderDetalle(d);
+    if(d.error){ toast(d.error); return; }
+    const yaExistia = !!_detalles[razon];
+    _detalles[razon] = d;
+    seleccionarDetalle(razon);
+    document.getElementById('det-razon').value = '';
+    toast(yaExistia ? `Actualizada "${razon}" (${d.total} trab.)` : `Guardada "${razon}" (${d.total} trab.)`);
   }catch(e){ toast('Error al procesar el archivo'); }
-  finally{ btn.disabled=false; btn.innerHTML='📂 Subir Excel de detalle de postulación'; input.value=''; }
+  finally{ btn.disabled=false; btn.innerHTML='📂 Subir Excel de detalle'; input.value=''; }
 }
 
-function renderDetalle(d){
+function renderListaDetalle(){
+  const cont = document.getElementById('det-lista');
+  const razones = Object.keys(_detalles).sort();
+  if(!razones.length){ cont.innerHTML=''; return; }
+  let html = `<div class="det-lista-title">Empresas con gestiones (${razones.length})</div>`;
+  razones.forEach(rz=>{
+    const d = _detalles[rz]; const sel = (_detSel===rz)?' sel':'';
+    const e = rz.replace(/'/g,"\\'");
+    html += `<div class="det-item${sel}" onclick="seleccionarDetalle('${e}')">
+      <div class="nom" title="${rz}">${rz}</div>
+      <span class="badge">${d.total}</span>
+      <span class="del" title="Quitar" onclick="event.stopPropagation();quitarDetalle('${e}')">✕</span>
+    </div>`;
+  });
+  cont.innerHTML = html;
+}
+
+function quitarDetalle(rz){
+  delete _detalles[rz];
+  if(_detSel===rz) _detSel=null;
+  const razones = Object.keys(_detalles);
+  if(razones.length){ seleccionarDetalle(razones.sort()[0]); }
+  else{
+    renderListaDetalle();
+    document.getElementById('det-resultado').innerHTML='<div class="empty">Sube un detalle para ver las gestiones por empresa.</div>';
+  }
+}
+
+function seleccionarDetalle(razon){
+  _detSel = razon;
+  renderListaDetalle();
+  renderDetalle(_detalles[razon], razon);
+}
+
+function renderDetalle(d, razon){
   const cont = document.getElementById('det-resultado');
+  let html = `<div class="det-razon-head">🏢 ${razon||''}</div>`;
   // Métrica principal: N° de trabajadores registrados/postulados
-  let html = `<div class="big-metric">
+  html += `<div class="big-metric">
       <div class="num">${d.total||0}</div>
       <div><div class="lbl">N° de trabajadores</div><div style="font-size:15px;font-weight:700;color:#0f172a">registrados o postulados</div></div>
     </div>`;

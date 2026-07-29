@@ -2714,9 +2714,23 @@ def base_madre_datos():
     rut_col = next((c for c in (columnas or []) if "rut" in c.lower()), None)
     if rut_col and filas:
         _rn = lambda x: re.sub(r"[.\-\s]", "", str(x or "")).upper()
+        # Claves digitadas a mano y guardadas en la app (para las que no están en el Excel)
+        manuales = {}
+        try:
+            with get_conn() as conn:
+                for r in conn.execute("SELECT rut, clave FROM claves_afc"):
+                    manuales[r["rut"]] = r["clave"]
+        except Exception:
+            manuales = {}
         for f in filas:
-            clv = (claves or {}).get(_rn(f.get(rut_col)), "")
-            f["Clave AFC"] = clv if clv else "NO REGISTRA CLAVE EN BASE"
+            rn = _rn(f.get(rut_col))
+            excel_clv = (claves or {}).get(rn, "")
+            if excel_clv:
+                f["Clave AFC"], f["_clave_origen"] = excel_clv, "excel"
+            elif manuales.get(rn):
+                f["Clave AFC"], f["_clave_origen"] = manuales[rn], "manual"
+            else:
+                f["Clave AFC"], f["_clave_origen"] = "NO REGISTRA CLAVE EN BASE", "ninguna"
         columnas = list(columnas or [])
         if "Clave AFC" not in columnas:
             columnas.append("Clave AFC")
@@ -2734,6 +2748,28 @@ def base_madre_datos():
         "ultima_lectura": _dt.datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M") if ts else None,
     })
 
+
+@app.route("/api/base_madre/clave_afc", methods=["POST"])
+@api_login_required
+def base_madre_guardar_clave():
+    """Guarda (o borra si viene vacía) la Clave AFC digitada a mano para un RUT."""
+    d = request.json or {}
+    rut = re.sub(r"[.\-\s]", "", str(d.get("rut") or "")).upper()
+    clave = (d.get("clave") or "").strip()
+    if not rut:
+        return jsonify({"error": "RUT requerido"}), 400
+    user = get_current_user()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        if clave:
+            conn.execute(
+                "INSERT INTO claves_afc(rut, clave, actualizada, usuario) VALUES(?,?,?,?) "
+                "ON CONFLICT(rut) DO UPDATE SET clave=excluded.clave, "
+                "actualizada=excluded.actualizada, usuario=excluded.usuario",
+                (rut, clave, now, (user or {}).get("nombre", "")))
+        else:
+            conn.execute("DELETE FROM claves_afc WHERE rut=?", (rut,))
+    return jsonify({"ok": True})
 
 @app.route("/api/base_madre/config", methods=["POST"])
 @admin_required

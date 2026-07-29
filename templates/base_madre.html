@@ -60,6 +60,9 @@ tbody tr:hover{background:#eff6ff}
 .td-rut{font-variant-numeric:tabular-nums;color:#64748b}
 .chip{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:12px;white-space:nowrap}
 .chip-vigente{background:#ecfdf5;color:#047857}
+.clave-inp{width:100%;min-width:120px;padding:4px 7px;border:1px solid #fca5a5;border-radius:6px;font-size:12px;font-family:monospace;background:#fff7f7}
+.clave-inp:focus{border-color:#1E3A5F;outline:none;background:#fff}
+.clave-inp::placeholder{color:#dc2626;font-family:inherit;font-style:italic}
 .chip-finalizado{background:#f1f5f9;color:#64748b}
 .chip-suspendido{background:#fffbeb;color:#b45309}
 .chip-otro{background:#eff6ff;color:#1d4ed8}
@@ -199,12 +202,44 @@ function detectarColumnas(){
   };
 }
 
-function claveAfcCelda(v){
-  const s = (v ?? '').toString().trim();
-  if (!s || s.toUpperCase().includes('NO REGISTRA')){
-    return '<td style="color:#dc2626;font-size:11px;font-style:italic;white-space:nowrap">NO REGISTRA CLAVE EN BASE</td>';
+function claveAfcCelda(f){
+  const origen = f['_clave_origen'] ||
+    (((f[COL.claveAfc]||'').toUpperCase().includes('NO REGISTRA')) ? 'ninguna' : 'excel');
+  const rut = f[COL.rut] || '';
+  const v   = f[COL.claveAfc] || '';
+  if (origen === 'excel'){
+    // Clave que viene del Excel (fuente): se muestra, no editable
+    return `<td style="font-family:monospace;font-size:12px">${esc(v)}</td>`;
   }
-  return `<td style="font-family:monospace;font-size:12px">${esc(s)}</td>`;
+  // 'manual' (guardada en la app) o 'ninguna' → editable para digitarla
+  const val = origen === 'manual' ? v : '';
+  return `<td onclick="event.stopPropagation()">
+    <input class="clave-inp" value="${esc(val)}" placeholder="Digitar clave…"
+      onclick="event.stopPropagation()"
+      onchange="guardarClaveAfc('${esc(rut).replace(/'/g,"\\'")}', this.value, this)">
+  </td>`;
+}
+
+async function guardarClaveAfc(rut, clave, inp){
+  try{
+    const res = await fetch('/api/base_madre/clave_afc', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({rut, clave})
+    });
+    const d = await res.json();
+    if (inp){
+      inp.style.borderColor = d.ok ? '#10b981' : '#dc2626';
+      setTimeout(()=>{ inp.style.borderColor=''; }, 1500);
+    }
+    // Reflejar el cambio en los datos locales (para que persista al re-filtrar)
+    const rn = s => (s||'').replace(/[.\-\s]/g,'').toUpperCase();
+    filas.forEach(f=>{
+      if (rn(f[COL.rut]) === rn(rut)){
+        f[COL.claveAfc] = clave || 'NO REGISTRA CLAVE EN BASE';
+        f['_clave_origen'] = clave ? 'manual' : 'ninguna';
+      }
+    });
+  }catch(e){ if(inp){ inp.style.borderColor='#dc2626'; } }
 }
 
 // Formatea un FEE: 0.25 → "25%", 0 → "0%", "No aplica" queda igual
@@ -354,7 +389,7 @@ function renderTabla(){
       <td style="font-weight:700;color:#1E3A5F">${esc(fmtFee(f[COL.feeDeuda]))}</td>
       <td style="font-weight:800" title="${esc(tit)}">${nT !== '' ? esc(nT) : '—'}</td>
       <td>${chipEstatus(f[COL.estatus])}</td>
-      ${COL.claveAfc ? claveAfcCelda(f[COL.claveAfc]) : ''}
+      ${COL.claveAfc ? claveAfcCelda(f) : ''}
     </tr>`;
   }).join('') + '</tbody>';
   cont.innerHTML = `<table>${thead}${tbody}</table>`;

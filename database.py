@@ -259,6 +259,14 @@ def init_db():
             )""")
         except: pass
         try:
+            conn.execute("""CREATE TABLE IF NOT EXISTS claves_afc (
+                rut         TEXT PRIMARY KEY,
+                clave       TEXT DEFAULT '',
+                actualizada TEXT DEFAULT '',
+                usuario     TEXT DEFAULT ''
+            )""")
+        except: pass
+        try:
             conn.execute("""CREATE TABLE IF NOT EXISTS trabajadores_periodo (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 rut_empresa    TEXT NOT NULL,

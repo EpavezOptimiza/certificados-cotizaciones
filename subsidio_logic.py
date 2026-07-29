@@ -343,6 +343,65 @@ def _cruzar_base_madre(filas, forzar=False):
     return filas, nuevos
 
 
+# ── Claves AFC (hoja 'Claves AFC' del mismo Excel de subsidios) ────────────────
+
+_CLAVES = {"mapa": None, "ts": 0}
+
+
+def _parsear_claves_afc(data):
+    """Lee la hoja 'Claves AFC' → {rut_normalizado: clave_afc}."""
+    wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    try:
+        ws = None
+        for nombre in wb.sheetnames:
+            n = nombre.strip().lower().replace(" ", "")
+            if n == "clavesafc" or ("claves" in n and "afc" in n):
+                ws = wb[nombre]; break
+        if ws is None:
+            return {}
+        gen = ws.iter_rows(values_only=True)
+        header = [str(h).strip() if h else "" for h in next(gen)]
+        i_rut = i_clave = None
+        for i, h in enumerate(header):
+            hn = _norm_txt(h)
+            if i_rut is None and "rut" in hn and "empresa" in hn:
+                i_rut = i
+            if i_clave is None and "clave" in hn and "afc" in hn:
+                i_clave = i
+        if i_rut is None:  # fallback: primera columna con 'rut'
+            for i, h in enumerate(header):
+                if "rut" in _norm_txt(h):
+                    i_rut = i; break
+        if i_rut is None or i_clave is None:
+            return {}
+        mapa = {}
+        for row in gen:
+            rn = _rut_norm(row[i_rut] if i_rut < len(row) else None)
+            if not rn:
+                continue
+            clave = _fmt(row[i_clave]) if i_clave < len(row) else ""
+            mapa[rn] = clave
+        return mapa
+    finally:
+        wb.close()
+
+
+def mapa_claves_afc(forzar=False):
+    """Devuelve {rut_normalizado: clave_afc} desde la hoja 'Claves AFC'. Cache 10 min.
+    Nunca lanza excepción: si falla, devuelve el último mapa o {}."""
+    with _LOCK:
+        fresco = _CLAVES["mapa"] is not None and (time.time() - _CLAVES["ts"]) < REFRESCO_SEG
+        if fresco and not forzar:
+            return _CLAVES["mapa"]
+    try:
+        mapa = _parsear_claves_afc(_descargar())
+        with _LOCK:
+            _CLAVES.update({"mapa": mapa, "ts": time.time()})
+        return mapa
+    except Exception:
+        return _CLAVES["mapa"] or {}
+
+
 def obtener(forzar=False):
     """Devuelve dict {columnas, filas, resumen, ts, error}. Cache de REFRESCO_SEG."""
     with _LOCK:

@@ -2702,6 +2702,25 @@ def base_madre_datos():
     columnas, filas, ts, error = obtener_clientes(forzar=forzar)
     # Sólo empresas VIGENTE o ESTUDIO INICIAL (para todos los roles)
     filas = filtrar_permitidos(columnas, filas)
+
+    # Cruce con la hoja 'Claves AFC' del Excel de subsidios (por RUT).
+    # Se copian las filas para no mutar el cache de base madre.
+    filas = [dict(f) for f in (filas or [])]
+    try:
+        from subsidio_logic import mapa_claves_afc
+        claves = mapa_claves_afc(forzar=forzar)
+    except Exception:
+        claves = {}
+    rut_col = next((c for c in (columnas or []) if "rut" in c.lower()), None)
+    if rut_col and filas:
+        _rn = lambda x: re.sub(r"[.\-\s]", "", str(x or "")).upper()
+        for f in filas:
+            clv = (claves or {}).get(_rn(f.get(rut_col)), "")
+            f["Clave AFC"] = clv if clv else "NO REGISTRA CLAVE EN BASE"
+        columnas = list(columnas or [])
+        if "Clave AFC" not in columnas:
+            columnas.append("Clave AFC")
+
     import datetime as _dt
     user = get_current_user()
     return jsonify({

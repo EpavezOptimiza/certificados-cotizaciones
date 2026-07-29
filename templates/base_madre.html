@@ -194,8 +194,17 @@ function detectarColumnas(){
     estatus:     buscar('estatus','cliente') || buscar('estatus'),
     dotacion:    buscar('dotacion'),
     feeDeuda:    buscar('fee','deuda'),
+    claveAfc:    buscar('clave','afc'),
     fees:        columnas.filter(c => norm(c).includes('fee')),
   };
+}
+
+function claveAfcCelda(v){
+  const s = (v ?? '').toString().trim();
+  if (!s || s.toUpperCase().includes('NO REGISTRA')){
+    return '<td style="color:#dc2626;font-size:11px;font-style:italic;white-space:nowrap">NO REGISTRA CLAVE EN BASE</td>';
+  }
+  return `<td style="font-family:monospace;font-size:12px">${esc(s)}</td>`;
 }
 
 // Formatea un FEE: 0.25 → "25%", 0 → "0%", "No aplica" queda igual
@@ -327,6 +336,7 @@ function renderTabla(){
   }
   const perTrab = window.__TRAB_PERIODO ? ` (${window.__TRAB_PERIODO})` : '';
   const cab = ['RUT','Razón Social','Grupo','KAM','Cons. Deuda','Cons. Ingreso','Rubro','FEE Deuda',`N° Trab.${perTrab}`,'Estatus'];
+  if (COL.claveAfc) cab.push('Clave AFC');
   const thead = '<thead><tr>' + cab.map(c=>`<th>${c}</th>`).join('') + '</tr></thead>';
   const tbody = '<tbody>' + filtradas.map((f, i) => {
     const tr = TRAB[rutNorm(f[COL.rut])];
@@ -344,6 +354,7 @@ function renderTabla(){
       <td style="font-weight:700;color:#1E3A5F">${esc(fmtFee(f[COL.feeDeuda]))}</td>
       <td style="font-weight:800" title="${esc(tit)}">${nT !== '' ? esc(nT) : '—'}</td>
       <td>${chipEstatus(f[COL.estatus])}</td>
+      ${COL.claveAfc ? claveAfcCelda(f[COL.claveAfc]) : ''}
     </tr>`;
   }).join('') + '</tbody>';
   cont.innerHTML = `<table>${thead}${tbody}</table>`;

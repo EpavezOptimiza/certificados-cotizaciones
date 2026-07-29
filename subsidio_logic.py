@@ -11,8 +11,10 @@ entrega SharePoint y lo convierte al endpoint de descarga directa.
 
 import io
 import os
+import re
 import time
 import threading
+import unicodedata
 import http.cookiejar
 import urllib.request
 import datetime as _dt
@@ -265,6 +267,70 @@ def parsear_detalle(data):
         wb.close()
 
 
+# ── Cruce con BASE MADRE ───────────────────────────────────────────────────────
+
+def _rut_norm(r):
+    return re.sub(r"[.\-\s]", "", str(r or "")).upper()
+
+
+def _norm_txt(s):
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
+    return s.strip().lower()
+
+
+def _cruzar_base_madre(filas):
+    """Agrega al listado las empresas que están en BASE MADRE pero NO en la base
+    de subsidios (cruce por RUT). Se marcan con Estatus de gestión 'NO APLICA'.
+    Motivo automático 'No tiene gestión de ingresos' si no tienen consultor de
+    ingreso asignado; si lo tienen, el motivo queda vacío para completarlo a mano.
+    Devuelve (filas, nº agregadas). Si base madre no está disponible, no falla."""
+    try:
+        from base_madre_logic import obtener_clientes
+        cols, filas_bm, _ts, _err = obtener_clientes()
+    except Exception:
+        return filas, 0
+    if not filas_bm:
+        return filas, 0
+
+    def col(*terms):
+        for c in (cols or []):
+            cn = _norm_txt(c)
+            if all(t in cn for t in terms):
+                return c
+        return None
+
+    c_rut     = col("rut")
+    c_razon   = col("razon", "social") or col("empresa")
+    c_grupo   = col("grupo")
+    c_ingreso = col("consultor", "ingreso")
+    c_estcli  = col("estatus", "cliente") or col("estatus")
+    if not c_rut:
+        return filas, 0
+
+    presentes = {_rut_norm(f.get("RUT")) for f in filas}
+    vistos, nuevos = set(), 0
+    for f in filas_bm:
+        rn = _rut_norm(f.get(c_rut))
+        if not rn or rn in presentes or rn in vistos:
+            continue
+        vistos.add(rn)
+        consultor = (f.get(c_ingreso) or "").strip() if c_ingreso else ""
+        filas.append({
+            "Grupo":              (f.get(c_grupo) or "").strip() if c_grupo else "",
+            "Responsable":        consultor,
+            "RUT":                (f.get(c_rut) or "").strip(),
+            "Estatus cliente":    (f.get(c_estcli) or "").strip() if c_estcli else "",
+            "Empresa":            (f.get(c_razon) or "").strip() if c_razon else "",
+            "Estatus":            "",
+            "Estatus de gestión": "NO APLICA",
+            "Estatus de carga":   "",
+            "Motivo":             "No tiene gestión de ingresos" if not consultor else "",
+            "_no_aplica":         True,   # marca fila agregada por el cruce (motivo editable)
+        })
+        nuevos += 1
+    return filas, nuevos
+
+
 def obtener(forzar=False):
     """Devuelve dict {columnas, filas, resumen, ts, error}. Cache de REFRESCO_SEG."""
     with _LOCK:
@@ -274,10 +340,12 @@ def obtener(forzar=False):
         try:
             data  = _descargar()
             filas = _parsear(data)
+            filas, cruzadas = _cruzar_base_madre(filas)   # agrega NO APLICA desde base madre
             payload = {
-                "columnas": [et for _, et in COLUMNAS],
+                "columnas": [et for _, et in COLUMNAS] + ["Motivo"],
                 "filas":    filas,
                 "resumen":  _resumen(filas),
+                "cruzadas": cruzadas,
             }
             _CACHE.update({"data": payload, "ts": time.time(), "error": None})
         except Exception as e:

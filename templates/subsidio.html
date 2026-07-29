@@ -97,6 +97,8 @@ tbody tr:hover{background:#f8fafc}
 .rep-emp .gr{color:#94a3b8;width:130px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rep-emp .em{flex:1;color:#0f172a;font-weight:500}
 .rep-emp .rp{color:#64748b;width:70px;flex-shrink:0;text-align:right}
+.motivo-inp{width:100%;min-width:150px;padding:4px 7px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-family:inherit;background:#fffdf5}
+.motivo-inp:focus{border-color:#1E3A5F;outline:none;background:#fff}
 #toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
 #toast.show{opacity:1}
 .spinner{width:14px;height:14px;border:2px solid #dbeafe;border-top-color:#1E3A5F;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
@@ -224,7 +226,7 @@ tbody tr:hover{background:#f8fafc}
 <div id="toast"></div>
 
 <script>
-let _cols = [], _filas = [], _resumen = {};
+let _cols = [], _filas = [], _resumen = {}, _motivos = {};
 
 // Colores por "Estatus de gestión"
 function colorGestion(v){
@@ -352,8 +354,18 @@ function render(){
     document.getElementById('tbody').innerHTML = `<tr><td class="empty" colspan="${_cols.length}">Sin resultados con esos filtros</td></tr>`;
   }else{
     document.getElementById('tbody').innerHTML = filas.map(f=>{
+      const noAplica = (f['Estatus de gestión']||'').toUpperCase()==='NO APLICA';
       return '<tr>' + _cols.map(c=>{
         let v = f[c]||'';
+        if(c==='Motivo'){
+          const rut = f['RUT']||'';
+          const val = (_motivos[rut]!==undefined) ? _motivos[rut] : v;
+          if(noAplica){
+            return `<td><input class="motivo-inp" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="Motivo…"
+              onchange="_motivos['${rut.replace(/'/g,"\\'")}']=this.value"></td>`;
+          }
+          return `<td>${val}</td>`;
+        }
         if(c==='Estatus de gestión' && v){ const col=colorGestion(v); return `<td><span class="pill" style="background:${col.bg};color:${col.fg}">${v}</span></td>`; }
         if(c==='Estatus' && v){ const col=colorEstatus(v); return `<td><span class="pill" style="background:${col.bg};color:${col.fg}">${v}</span></td>`; }
         return `<td>${v}</td>`;

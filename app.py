@@ -172,6 +172,30 @@ def api_login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def ingreso_required(f):
+    """Página accesible sólo para el Área de Ingreso y el admin."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            return redirect(url_for("login"))
+        if user["rol"] not in ("ingreso", "admin"):
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return decorated
+
+def api_ingreso_required(f):
+    """API accesible sólo para el Área de Ingreso y el admin."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            return jsonify({"error": "No autenticado"}), 401
+        if user["rol"] not in ("ingreso", "admin"):
+            return jsonify({"error": "Sin permisos"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
 # ── Rutas auth ────────────────────────────────────────────────────────────────
 @app.route("/login", methods=["GET"])
 def login():
@@ -2898,6 +2922,56 @@ def trabajadores_excel():
     return send_file(buf, as_attachment=True,
                      download_name=f"n_trabajadores_{periodo}.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ============================================================
+#  SUBSIDIO A LA CONTRATACIÓN — LÍNEA DE ACTIVACIÓN LABORAL
+#  (visor de la hoja 'Linea contrata' del Excel de Gestión de Ingresos)
+#  Acceso: sólo Área de Ingreso + admin
+# ============================================================
+
+@app.route("/subsidio")
+@ingreso_required
+def subsidio_page():
+    user = get_current_user()
+    return render_template("subsidio.html", es_admin=(user["rol"] == "admin"))
+
+@app.route("/api/subsidio/datos")
+@api_ingreso_required
+def subsidio_datos():
+    import subsidio_logic
+    forzar = request.args.get("forzar") == "1"
+    r = subsidio_logic.obtener(forzar=forzar)
+    ts = r.get("ts") or 0
+    return jsonify({
+        "columnas":      r.get("columnas", []),
+        "filas":         r.get("filas", []),
+        "resumen":       r.get("resumen", {}),
+        "error":         r.get("error"),
+        "ultima_lectura": _time.strftime("%d/%m/%Y %H:%M", _time.localtime(ts)) if ts else None,
+        "configurado":   bool(subsidio_logic.url_guardada()),
+    })
+
+@app.route("/api/subsidio/config", methods=["GET"])
+@api_ingreso_required
+def subsidio_config_get():
+    import subsidio_logic
+    return jsonify({"configurado": bool(subsidio_logic.url_guardada())})
+
+@app.route("/api/subsidio/config", methods=["POST"])
+@admin_required
+def subsidio_config_set():
+    import subsidio_logic
+    d = request.json or {}
+    url = (d.get("url") or "").strip()
+    if not url.lower().startswith("https://") or "sharepoint.com" not in url.lower():
+        return jsonify({"error": "El enlace debe ser el vínculo compartido de SharePoint "
+                                 "(empieza con https:// y contiene sharepoint.com)"}), 400
+    subsidio_logic.guardar_url(url)
+    r = subsidio_logic.obtener(forzar=True)
+    if r.get("error"):
+        return jsonify({"error": f"El enlace se guardó pero la lectura falló: {r['error']}"}), 400
+    return jsonify({"ok": True, "total": r.get("resumen", {}).get("total", 0)})
 
 
 if __name__ == "__main__":

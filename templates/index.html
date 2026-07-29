@@ -361,6 +361,13 @@ body.dark .pref-label{color:#e2e8f0}
         <div style="font-size:10px;opacity:.65;font-weight:400">Consolidar deudas AFP</div>
       </div>
     </a>
+    <a href="/subsidio" class="sb-btn nav-ingreso-only" style="text-decoration:none;display:none;align-items:center;gap:8px;background:rgba(37,99,235,.12);color:#93c5fd;border-color:rgba(37,99,235,.25)">
+      <span style="font-size:15px">📝</span>
+      <div>
+        <div style="font-size:12px;font-weight:600">Subsidio Contratación</div>
+        <div style="font-size:10px;opacity:.65;font-weight:400">Línea de Activación Laboral</div>
+      </div>
+    </a>
     <a href="#" onclick="verSolicitudes();return false" class="sb-btn nav-no-ingreso" style="text-decoration:none;display:flex;align-items:center;gap:8px;background:rgba(148,163,184,.1);color:#cbd5e1;border-color:rgba(148,163,184,.2)">
       <span style="font-size:15px">📄</span>
       <div>
@@ -960,6 +967,10 @@ function applyRoleUI(){
   // Módulos del sidebar: ocultos para ingreso
   document.querySelectorAll(".nav-no-ingreso").forEach(el=>{
     el.style.display = (rol==="ingreso") ? "none" : "flex";
+  });
+  // Módulos exclusivos del Área de Ingreso (+admin)
+  document.querySelectorAll(".nav-ingreso-only").forEach(el=>{
+    el.style.display = (rol==="ingreso" || rol==="admin") ? "flex" : "none";
   });
   // Menú más
   const canEdit = rol === "admin";

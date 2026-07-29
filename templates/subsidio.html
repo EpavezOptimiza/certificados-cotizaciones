@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Subsidio a la Contratación</title>
+<script src="/static/theme.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#1E3A5F;--sidebar-bg:#0d1b2e}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#0f172a;min-height:100vh;display:flex;flex-direction:column}
+.topnav{background:var(--sidebar-bg);padding:0 16px;height:50px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-shrink:0}
+.toggle-btn{width:32px;height:32px;border-radius:6px;background:rgba(255,255,255,.08);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.nav-cur{color:#fff;font-weight:600;font-size:13px}
+.nav-sep{color:rgba(255,255,255,.25);font-size:12px}
+.layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - 50px)}
+.side-panel{width:0;overflow:hidden;transition:width .25s ease;background:#fff;border-right:1px solid #e2e8f0;flex-shrink:0}
+.side-panel.open{width:256px}
+.panel-inner{width:256px;display:flex;flex-direction:column;height:100%}
+.panel-header{padding:16px;border-bottom:1px solid #f1f5f9}
+.panel-brand{font-size:14px;font-weight:700}
+.panel-sub{font-size:11px;color:#64748b;margin-top:2px}
+.panel-section-label{font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;padding:12px 14px 5px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;text-decoration:none}
+.nav-item:hover{background:#f8fafc}
+.nav-item.active{background:#eff6ff}
+.nav-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.nav-title{font-size:13px;font-weight:500;color:#0f172a}
+.nav-item.active .nav-title{color:#1E3A5F}
+.nav-item-sub{font-size:10px;color:#64748b;margin-top:1px}
+.panel-footer{margin-top:auto;padding:12px 14px;border-top:1px solid #f1f5f9}
+.logout-link{font-size:12px;color:#94a3b8;text-decoration:none}
+.main-content{flex:1;overflow-y:auto;padding:24px}
+.page-header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.page-icon{width:42px;height:42px;background:#dbeafe;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.page-title{font-size:19px;font-weight:700;letter-spacing:-.3px}
+.page-sub{font-size:12px;color:#64748b;margin-top:2px}
+.toolbar{display:flex;align-items:center;gap:10px;margin-left:auto}
+.btn{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#374151;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:#1E3A5F;color:#fff;border-color:#1E3A5F}
+.btn:hover{opacity:.9}
+.meta{font-size:11px;color:#94a3b8}
+/* Tarjetas resumen */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px}
+.card .n{font-size:24px;font-weight:800;color:#0f172a}
+.card .l{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.card.clickable{cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.card.clickable:hover{box-shadow:0 3px 10px rgba(0,0,0,.06)}
+.card.sel{border-color:#1E3A5F;box-shadow:0 0 0 2px rgba(30,58,95,.12)}
+.card .bar{height:4px;border-radius:3px;margin-top:8px}
+/* Filtros */
+.filtros{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;align-items:center}
+.filtros input,.filtros select{padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff;outline:none;font-family:inherit}
+.filtros input:focus,.filtros select:focus{border-color:#1E3A5F}
+.filtros .search{flex:1;min-width:200px}
+/* Tabla */
+.tbl-wrap{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:auto;max-height:calc(100vh - 340px)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{position:sticky;top:0;background:#1E3A5F;color:#fff;text-align:left;padding:10px 12px;font-weight:600;white-space:nowrap;z-index:1}
+tbody td{padding:8px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+tbody tr:hover{background:#f8fafc}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.empty{padding:40px;text-align:center;color:#94a3b8;font-size:14px}
+/* Config admin */
+.config{background:#fff8e6;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:18px}
+.config .t{font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px}
+.config-row{display:flex;gap:8px}
+.config input{flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:inherit}
+#toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
+#toast.show{opacity:1}
+.spinner{width:14px;height:14px;border:2px solid #dbeafe;border-top-color:#1E3A5F;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:6px}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <button class="toggle-btn" onclick="document.getElementById('sp').classList.toggle('open')">☰</button>
+  <span class="nav-sep">›</span>
+  <span class="nav-cur">Subsidio a la Contratación</span>
+</div>
+
+<div class="layout">
+  <div class="side-panel open" id="sp">
+    <div class="panel-inner">
+      <div class="panel-header">
+        <div class="panel-brand">⬡ Optimiza</div>
+        <div class="panel-sub">Área de Ingreso</div>
+      </div>
+      <div class="panel-section-label">Principal</div>
+      <a href="/" class="nav-item">
+        <div class="nav-icon" style="background:#eff6ff">📊</div>
+        <div><div class="nav-title">Portal certificados</div><div class="nav-item-sub">Inicio</div></div>
+      </a>
+      <div class="panel-section-label">Ingreso</div>
+      <a href="/subsidio" class="nav-item active">
+        <div class="nav-icon" style="background:#dbeafe">📝</div>
+        <div><div class="nav-title">Subsidio Contratación</div><div class="nav-item-sub">Línea de Activación Laboral</div></div>
+      </a>
+      <div class="panel-footer">
+        <a href="/logout" class="logout-link">↩ Cerrar sesión</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="page-header">
+      <div class="page-icon">📝</div>
+      <div>
+        <div class="page-title">Subsidio a la Contratación</div>
+        <div class="page-sub">Línea de Activación Laboral — visor de gestión</div>
+      </div>
+      <div class="toolbar">
+        <span class="meta" id="meta"></span>
+        <button class="btn" onclick="cargar(true)" id="btn-refrescar">🔄 Actualizar</button>
+      </div>
+    </div>
+
+    {% if es_admin %}
+    <div class="config">
+      <div class="t">⚙ Configuración (solo admin) — enlace del Excel en SharePoint</div>
+      <div class="config-row">
+        <input type="text" id="cfg-url" placeholder="Pega aquí el enlace compartido de SharePoint (https://...sharepoint.com/...)">
+        <button class="btn primary" onclick="guardarUrl()" id="btn-guardar">Guardar y probar</button>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="cards" id="cards"></div>
+
+    <div class="filtros">
+      <input class="search" id="f-buscar" placeholder="🔍 Buscar por empresa, RUT o grupo..." oninput="render()">
+      <select id="f-grupo" onchange="render()"><option value="">Todos los grupos</option></select>
+      <select id="f-resp" onchange="render()"><option value="">Todos los responsables</option></select>
+      <select id="f-gestion" onchange="render()"><option value="">Todo estatus de gestión</option></select>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"><tr><td class="empty">Cargando datos...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let _cols = [], _filas = [], _filtroCard = "";
+
+// Colores por "Estatus de gestión"
+function colorGestion(v){
+  const t = (v||'').toLowerCase();
+  if(t.includes('autorizado'))       return {bg:'#dcfce7', fg:'#15803d'};
+  if(t.includes('sin autoriz'))      return {bg:'#fee2e2', fg:'#b91c1c'};
+  if(t.includes('estancado'))        return {bg:'#fed7aa', fg:'#c2410c'};
+  if(t.includes('pendiente'))        return {bg:'#fef9c3', fg:'#a16207'};
+  if(t.includes('revisi'))           return {bg:'#dbeafe', fg:'#1d4ed8'};
+  if(t.includes('no aplica'))        return {bg:'#f1f5f9', fg:'#64748b'};
+  return {bg:'#f1f5f9', fg:'#475569'};
+}
+function colorEstatus(v){
+  const t=(v||'').toLowerCase();
+  if(t.includes('no inscrita')) return {bg:'#fee2e2', fg:'#b91c1c'};
+  if(t.includes('inscrito'))    return {bg:'#dcfce7', fg:'#15803d'};
+  return {bg:'#f1f5f9', fg:'#475569'};
+}
+
+async function cargar(forzar){
+  const btn = document.getElementById('btn-refrescar');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Cargando...';
+  try{
+    const res  = await fetch('/api/subsidio/datos' + (forzar?'?forzar=1':''));
+    const data = await res.json();
+    if(data.error){
+      document.getElementById('tbody').innerHTML =
+        `<tr><td class="empty">⚠ ${data.error}${data.configurado?'':'<br>Un administrador debe configurar el enlace del Excel.'}</td></tr>`;
+      document.getElementById('cards').innerHTML='';
+      return;
+    }
+    _cols = data.columnas; _filas = data.filas;
+    document.getElementById('meta').textContent = data.ultima_lectura ? ('Actualizado: '+data.ultima_lectura) : '';
+    poblarFiltros(); renderCards(data.resumen); render();
+  }catch(e){ toast('Error al cargar'); }
+  finally{ btn.disabled=false; btn.innerHTML='🔄 Actualizar'; }
+}
+
+function poblarFiltros(){
+  const grupos = [...new Set(_filas.map(f=>f['Grupo']).filter(Boolean))].sort();
+  const resps  = [...new Set(_filas.map(f=>f['Responsable']).filter(Boolean))].sort();
+  const gest   = [...new Set(_filas.map(f=>f['Estatus de gestión']).filter(Boolean))].sort();
+  fill('f-grupo', grupos, 'Todos los grupos');
+  fill('f-resp',  resps,  'Todos los responsables');
+  fill('f-gestion', gest, 'Todo estatus de gestión');
+}
+function fill(id, arr, first){
+  const s=document.getElementById(id); const cur=s.value;
+  s.innerHTML = `<option value="">${first}</option>` + arr.map(v=>`<option>${v}</option>`).join('');
+  s.value = cur;
+}
+
+function renderCards(res){
+  const cont = document.getElementById('cards');
+  let html = `<div class="card"><div class="n">${res.total||0}</div><div class="l">Empresas</div></div>
+              <div class="card"><div class="n">${res.grupos||0}</div><div class="l">Grupos</div></div>`;
+  (res.por_gestion||[]).forEach(([v,n])=>{
+    const c = colorGestion(v);
+    const sel = (_filtroCard===v)?' sel':'';
+    html += `<div class="card clickable${sel}" onclick="toggleCard('${v.replace(/'/g,"\\'")}')">
+      <div class="n" style="color:${c.fg}">${n}</div><div class="l">${v}</div>
+      <div class="bar" style="background:${c.fg}"></div></div>`;
+  });
+  cont.innerHTML = html;
+}
+function toggleCard(v){
+  _filtroCard = (_filtroCard===v) ? "" : v;
+  render(); // re-render cards para marcar selección
+  renderCardsSel();
+}
+function renderCardsSel(){
+  document.querySelectorAll('#cards .card.clickable').forEach(el=>{
+    const lbl = el.querySelector('.l').textContent;
+    el.classList.toggle('sel', lbl===_filtroCard);
+  });
+}
+
+function render(){
+  const q  = document.getElementById('f-buscar').value.toLowerCase();
+  const g  = document.getElementById('f-grupo').value;
+  const r  = document.getElementById('f-resp').value;
+  const ge = document.getElementById('f-gestion').value;
+  let filas = _filas.filter(f=>{
+    if(g  && f['Grupo']!==g) return false;
+    if(r  && f['Responsable']!==r) return false;
+    if(ge && f['Estatus de gestión']!==ge) return false;
+    if(_filtroCard && f['Estatus de gestión']!==_filtroCard) return false;
+    if(q){
+      const blob = (f['Empresa']+' '+f['RUT']+' '+f['Grupo']+' '+f['Responsable']).toLowerCase();
+      if(!blob.includes(q)) return false;
+    }
+    return true;
+  });
+  // encabezado
+  document.getElementById('thead').innerHTML =
+    '<tr>' + _cols.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+  // cuerpo
+  if(!filas.length){
+    document.getElementById('tbody').innerHTML = `<tr><td class="empty" colspan="${_cols.length}">Sin resultados con esos filtros</td></tr>`;
+  }else{
+    document.getElementById('tbody').innerHTML = filas.map(f=>{
+      return '<tr>' + _cols.map(c=>{
+        let v = f[c]||'';
+        if(c==='Estatus de gestión' && v){ const col=colorGestion(v); return `<td><span class="pill" style="background:${col.bg};color:${col.fg}">${v}</span></td>`; }
+        if(c==='Estatus' && v){ const col=colorEstatus(v); return `<td><span class="pill" style="background:${col.bg};color:${col.fg}">${v}</span></td>`; }
+        return `<td>${v}</td>`;
+      }).join('') + '</tr>';
+    }).join('');
+  }
+  document.getElementById('meta').dataset.count = filas.length;
+  renderCardsSel();
+}
+
+async function guardarUrl(){
+  const url = document.getElementById('cfg-url').value.trim();
+  if(!url){ toast('Pega el enlace primero'); return; }
+  const btn=document.getElementById('btn-guardar'); btn.disabled=true; btn.textContent='Probando...';
+  try{
+    const res = await fetch('/api/subsidio/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+    const d = await res.json();
+    if(d.error){ toast(d.error); }
+    else{ toast(`✅ Guardado — ${d.total} empresas leídas`); cargar(true); }
+  }catch(e){ toast('Error al guardar'); }
+  finally{ btn.disabled=false; btn.textContent='Guardar y probar'; }
+}
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3400); }
+
+cargar(false);
+</script>
+</body>
+</html>

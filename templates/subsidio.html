@@ -253,9 +253,10 @@ function renderCards(res){
   const cont = document.getElementById('cards');
   let html = `<div class="card"><div class="n">${res.total||0}</div><div class="l">Empresas</div></div>
               <div class="card"><div class="n">${res.grupos||0}</div><div class="l">Grupos</div></div>`;
+  const curGestion = document.getElementById('f-gestion').value;
   (res.por_gestion||[]).forEach(([v,n])=>{
     const c = colorGestion(v);
-    const sel = (_filtroCard===v)?' sel':'';
+    const sel = (curGestion===v)?' sel':'';
     html += `<div class="card clickable${sel}" onclick="toggleCard('${v.replace(/'/g,"\\'")}')">
       <div class="n" style="color:${c.fg}">${n}</div><div class="l">${v}</div>
       <div class="bar" style="background:${c.fg}"></div></div>`;

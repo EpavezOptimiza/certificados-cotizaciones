@@ -170,6 +170,101 @@ def _resumen(filas):
     }
 
 
+# ── Detalle de Gestiones (subida manual del Excel detallePostulacion) ──────────
+
+DET_COLS = ["NumeroPostulacionEmpresa", "NumeroPostulacionDupla", "FechaPostulacion",
+            "RutTrabajador", "DvTrabajador", "Nombres", "Apellidos", "Estado", "Motivo"]
+
+
+def _fmt_rut(rut, dv):
+    """Une RUT + DV con puntos: 16936974 + 7 → 16.936.974-7."""
+    s = _fmt(rut)
+    if not s:
+        return ""
+    dvs = _fmt(dv)
+    s = s.replace(".", "").replace("-", "")
+    try:
+        s = f"{int(s):,}".replace(",", ".")
+    except Exception:
+        pass
+    return f"{s}-{dvs}" if dvs else s
+
+
+def parsear_detalle(data):
+    """Lee la hoja 'detallePostulacion...' de un Excel subido y devuelve el detalle
+    de trabajadores postulados + un resumen por número de postulación."""
+    wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    try:
+        ws = None
+        for nombre in wb.sheetnames:
+            if "detallepostulacion" in nombre.lower().replace(" ", ""):
+                ws = wb[nombre]; break
+        if ws is None:  # buscar por la columna clave en la primera fila
+            for w in wb.worksheets:
+                first = next(w.iter_rows(values_only=True), None)
+                if first and any(h and "numeropostulacionempresa" in str(h).lower().replace(" ", "")
+                                 for h in first):
+                    ws = w; break
+        if ws is None:
+            raise Exception("No se encontró la hoja de detalle de postulación "
+                            "(debe tener la columna 'NumeroPostulacionEmpresa').")
+
+        gen = ws.iter_rows(values_only=True)
+        header = [str(h).strip() if h else "" for h in next(gen)]
+
+        def idx(name):
+            for i, h in enumerate(header):
+                if h.lower() == name.lower():
+                    return i
+            for i, h in enumerate(header):
+                if name.lower() in h.lower():
+                    return i
+            return None
+
+        I = {c: idx(c) for c in DET_COLS}
+
+        def g(row, c):
+            i = I.get(c)
+            return row[i] if (i is not None and i < len(row)) else None
+
+        trabajadores = []
+        for row in gen:
+            if not any(v is not None and str(v).strip() for v in row):
+                continue
+            trabajadores.append({
+                "postulacion": _fmt(g(row, "NumeroPostulacionEmpresa")),
+                "dupla":       _fmt(g(row, "NumeroPostulacionDupla")),
+                "fecha":       _fmt(g(row, "FechaPostulacion")),
+                "rut":         _fmt_rut(g(row, "RutTrabajador"), g(row, "DvTrabajador")),
+                "nombre":      f"{_fmt(g(row, 'Nombres'))} {_fmt(g(row, 'Apellidos'))}".strip(),
+                "estado":      _fmt(g(row, "Estado")),
+                "motivo":      _fmt(g(row, "Motivo")),
+            })
+
+        posts = OrderedDict()
+        for t in trabajadores:
+            p = t["postulacion"] or "(sin nº)"
+            if p not in posts:
+                posts[p] = {"numero": p, "fecha": t["fecha"], "total": 0, "estados": Counter()}
+            posts[p]["total"] += 1
+            posts[p]["estados"][t["estado"] or "(sin estado)"] += 1
+
+        postulaciones = [{
+            "numero":  v["numero"],
+            "fecha":   v["fecha"],
+            "total":   v["total"],
+            "estados": v["estados"].most_common(),
+        } for v in posts.values()]
+
+        return {
+            "postulaciones": postulaciones,
+            "trabajadores":  trabajadores,
+            "total":         len(trabajadores),
+        }
+    finally:
+        wb.close()
+
+
 def obtener(forzar=False):
     """Devuelve dict {columnas, filas, resumen, ts, error}. Cache de REFRESCO_SEG."""
     with _LOCK:

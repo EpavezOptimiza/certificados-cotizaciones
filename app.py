@@ -2952,6 +2952,19 @@ def subsidio_datos():
         "configurado":   bool(subsidio_logic.url_guardada()),
     })
 
+@app.route("/api/subsidio/detalle", methods=["POST"])
+@api_ingreso_required
+def subsidio_detalle():
+    """Recibe un Excel 'detallePostulacion' subido y devuelve el detalle de gestiones."""
+    import subsidio_logic
+    archivo = request.files.get("archivo")
+    if not archivo:
+        return jsonify({"error": "No se recibió archivo"}), 400
+    try:
+        return jsonify(subsidio_logic.parsear_detalle(archivo.read()))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @app.route("/api/subsidio/config", methods=["GET"])
 @api_ingreso_required
 def subsidio_config_get():

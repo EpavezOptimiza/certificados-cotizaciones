@@ -278,6 +278,15 @@ def _norm_txt(s):
     return s.strip().lower()
 
 
+# Solo se consideran empresas con estos Estatus cliente (el resto no aparece)
+_ESTATUS_PERMITIDOS = ("vigente", "estudio inicial")
+
+
+def _estatus_ok(val):
+    n = _norm_txt(val)
+    return any(n == p or n.startswith(p) for p in _ESTATUS_PERMITIDOS)
+
+
 def _cruzar_base_madre(filas):
     """Agrega al listado las empresas que están en BASE MADRE pero NO en la base
     de subsidios (cruce por RUT). Se marcan con Estatus de gestión 'NO APLICA'.
@@ -313,6 +322,9 @@ def _cruzar_base_madre(filas):
         rn = _rut_norm(f.get(c_rut))
         if not rn or rn in presentes or rn in vistos:
             continue
+        # Solo empresas VIGENTE o ESTUDIO INICIAL de base madre
+        if c_estcli and not _estatus_ok(f.get(c_estcli)):
+            continue
         vistos.add(rn)
         consultor = (f.get(c_ingreso) or "").strip() if c_ingreso else ""
         filas.append({
@@ -340,6 +352,8 @@ def obtener(forzar=False):
         try:
             data  = _descargar()
             filas = _parsear(data)
+            # Solo empresas con Estatus cliente VIGENTE o ESTUDIO INICIAL
+            filas = [f for f in filas if _estatus_ok(f.get("Estatus cliente"))]
             filas, cruzadas = _cruzar_base_madre(filas)   # agrega NO APLICA desde base madre
             # Unificar variantes de 'no aplica' (ej. 'No aplica' de la hoja vs
             # 'NO APLICA' del cruce) para que no salgan dos tarjetas separadas.

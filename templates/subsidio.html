@@ -235,16 +235,36 @@ async function cargar(forzar){
   finally{ btn.disabled=false; btn.innerHTML='🔄 Actualizar'; }
 }
 
+// Opciones de un filtro, considerando TODOS los otros filtros activos
+// (filtros en cascada: si filtras por 'Respuesta pendiente', el desplegable de
+// grupos solo muestra los grupos que tienen esa gestión).
+function opcionesPara(campo){
+  const q  = document.getElementById('f-buscar').value.toLowerCase();
+  const g  = document.getElementById('f-grupo').value;
+  const r  = document.getElementById('f-resp').value;
+  const ge = document.getElementById('f-gestion').value;
+  const rows = _filas.filter(f=>{
+    if(campo!=='Grupo'               && g  && f['Grupo']!==g) return false;
+    if(campo!=='Responsable'         && r  && f['Responsable']!==r) return false;
+    if(campo!=='Estatus de gestión'  && ge && f['Estatus de gestión']!==ge) return false;
+    if(q){
+      const blob = (f['Empresa']+' '+f['RUT']+' '+f['Grupo']+' '+f['Responsable']).toLowerCase();
+      if(!blob.includes(q)) return false;
+    }
+    return true;
+  });
+  return [...new Set(rows.map(f=>f[campo]).filter(Boolean))].sort();
+}
+
 function poblarFiltros(){
-  const grupos = [...new Set(_filas.map(f=>f['Grupo']).filter(Boolean))].sort();
-  const resps  = [...new Set(_filas.map(f=>f['Responsable']).filter(Boolean))].sort();
-  const gest   = [...new Set(_filas.map(f=>f['Estatus de gestión']).filter(Boolean))].sort();
-  fill('f-grupo', grupos, 'Todos los grupos');
-  fill('f-resp',  resps,  'Todos los responsables');
-  fill('f-gestion', gest, 'Todo estatus de gestión');
+  fill('f-grupo',   opcionesPara('Grupo'),              'Todos los grupos');
+  fill('f-resp',    opcionesPara('Responsable'),        'Todos los responsables');
+  fill('f-gestion', opcionesPara('Estatus de gestión'), 'Todo estatus de gestión');
 }
 function fill(id, arr, first){
   const s=document.getElementById(id); const cur=s.value;
+  // conservar la selección activa aunque el filtrado la deje fuera de la lista
+  if(cur && !arr.includes(cur)) arr = [cur, ...arr];
   s.innerHTML = `<option value="">${first}</option>` + arr.map(v=>`<option>${v}</option>`).join('');
   s.value = cur;
 }
@@ -294,6 +314,7 @@ function filasFiltradas(){
 }
 
 function render(){
+  poblarFiltros();          // recalcular opciones de los filtros (en cascada)
   let filas = filasFiltradas();
   // encabezado
   document.getElementById('thead').innerHTML =

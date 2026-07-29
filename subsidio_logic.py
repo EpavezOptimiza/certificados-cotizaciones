@@ -334,7 +334,7 @@ def _cruzar_base_madre(filas, forzar=False):
             "Estatus cliente":    (f.get(c_estcli) or "").strip() if c_estcli else "",
             "Empresa":            (f.get(c_razon) or "").strip() if c_razon else "",
             "Estatus":            "",
-            "Estatus de gestión": "NO APLICA",
+            "Estatus de gestión": "No Aplica",
             "Estatus de carga":   "",
             "Motivo":             "No tiene gestión de ingresos" if not consultor else "",
             "_no_aplica":         True,   # marca fila agregada por el cruce (motivo editable)
@@ -359,7 +359,7 @@ def obtener(forzar=False):
             # 'NO APLICA' del cruce) para que no salgan dos tarjetas separadas.
             for _f in filas:
                 if _norm_txt(_f.get("Estatus de gestión")) == "no aplica":
-                    _f["Estatus de gestión"] = "NO APLICA"
+                    _f["Estatus de gestión"] = "No Aplica"
             payload = {
                 "columnas": [et for _, et in COLUMNAS] + ["Motivo"],
                 "filas":    filas,

@@ -341,6 +341,11 @@ def obtener(forzar=False):
             data  = _descargar()
             filas = _parsear(data)
             filas, cruzadas = _cruzar_base_madre(filas)   # agrega NO APLICA desde base madre
+            # Unificar variantes de 'no aplica' (ej. 'No aplica' de la hoja vs
+            # 'NO APLICA' del cruce) para que no salgan dos tarjetas separadas.
+            for _f in filas:
+                if _norm_txt(_f.get("Estatus de gestión")) == "no aplica":
+                    _f["Estatus de gestión"] = "NO APLICA"
             payload = {
                 "columnas": [et for _, et in COLUMNAS] + ["Motivo"],
                 "filas":    filas,

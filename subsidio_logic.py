@@ -287,7 +287,7 @@ def _estatus_ok(val):
     return any(n == p or n.startswith(p) for p in _ESTATUS_PERMITIDOS)
 
 
-def _cruzar_base_madre(filas):
+def _cruzar_base_madre(filas, forzar=False):
     """Agrega al listado las empresas que están en BASE MADRE pero NO en la base
     de subsidios (cruce por RUT). Se marcan con Estatus de gestión 'NO APLICA'.
     Motivo automático 'No tiene gestión de ingresos' si no tienen consultor de
@@ -295,7 +295,7 @@ def _cruzar_base_madre(filas):
     Devuelve (filas, nº agregadas). Si base madre no está disponible, no falla."""
     try:
         from base_madre_logic import obtener_clientes
-        cols, filas_bm, _ts, _err = obtener_clientes()
+        cols, filas_bm, _ts, _err = obtener_clientes(forzar=forzar)
     except Exception:
         return filas, 0
     if not filas_bm:
@@ -354,7 +354,7 @@ def obtener(forzar=False):
             filas = _parsear(data)
             # Solo empresas con Estatus cliente VIGENTE o ESTUDIO INICIAL
             filas = [f for f in filas if _estatus_ok(f.get("Estatus cliente"))]
-            filas, cruzadas = _cruzar_base_madre(filas)   # agrega NO APLICA desde base madre
+            filas, cruzadas = _cruzar_base_madre(filas, forzar=forzar)  # agrega NO APLICA desde base madre
             # Unificar variantes de 'no aplica' (ej. 'No aplica' de la hoja vs
             # 'NO APLICA' del cruce) para que no salgan dos tarjetas separadas.
             for _f in filas:

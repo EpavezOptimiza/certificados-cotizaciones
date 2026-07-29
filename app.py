@@ -2620,10 +2620,11 @@ def base_madre_resumen():
     Admin y otros roles ven el total + desglose por consultor.
     """
     import unicodedata
-    from base_madre_logic import obtener_clientes
+    from base_madre_logic import obtener_clientes, filtrar_permitidos
 
     user = get_current_user()
     columnas, filas, ts, error = obtener_clientes()
+    filas = filtrar_permitidos(columnas, filas)   # solo VIGENTE / ESTUDIO INICIAL
     if not filas:
         return jsonify({"ok": False, "error": error or "BASE MADRE sin datos"})
 
@@ -2696,9 +2697,11 @@ def base_madre_resumen():
 @app.route("/api/base_madre/datos")
 @api_login_required
 def base_madre_datos():
-    from base_madre_logic import obtener_clientes, url_guardada
+    from base_madre_logic import obtener_clientes, url_guardada, filtrar_permitidos
     forzar = request.args.get("refrescar") == "1"
     columnas, filas, ts, error = obtener_clientes(forzar=forzar)
+    # Sólo empresas VIGENTE o ESTUDIO INICIAL (para todos los roles)
+    filas = filtrar_permitidos(columnas, filas)
     import datetime as _dt
     user = get_current_user()
     return jsonify({

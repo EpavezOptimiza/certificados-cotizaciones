@@ -133,6 +133,39 @@ def _parsear(data):
         wb.close()
 
 
+_ESTATUS_PERMITIDOS = ("vigente", "estudio inicial")
+
+
+def _norm_estatus(s):
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
+    return s.strip().lower()
+
+
+def filtrar_permitidos(columnas, filas):
+    """Devuelve sólo las filas con Estatus cliente VIGENTE o ESTUDIO INICIAL.
+    Usado por la página BASE MADRE para mostrar únicamente esos estatus."""
+    if not filas:
+        return filas
+
+    def col(*terms):
+        for c in (columnas or []):
+            cn = _norm_estatus(c)
+            if all(t in cn for t in terms):
+                return c
+        return None
+
+    c = col("estatus", "cliente") or col("estatus")
+    if not c:
+        return filas
+
+    def ok(v):
+        n = _norm_estatus(v)
+        return any(n == p or n.startswith(p) for p in _ESTATUS_PERMITIDOS)
+
+    return [f for f in filas if ok(f.get(c))]
+
+
 def obtener_clientes(forzar=False):
     """Devuelve (columnas, filas, ts_ultima_lectura, error).
 

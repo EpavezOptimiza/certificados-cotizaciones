@@ -10,11 +10,13 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-URL_LOGIN = "https://sec.equifax.cl/compraonline/login"
+URL_LOGIN = "https://business.equifax.ca/auth/login"
 
-# Campos del formulario (verificados en el portal real)
-_SEL_EMAIL = "input[type='email']"
-_SEL_CLAVE = "input[type='password']"
+# Paso 1 — identificadores verificados en el portal real (Okta / Client Central)
+_SEL_USUARIO = "#idp-discovery-username, input[name='username']"
+_SEL_NEXT    = "#idp-discovery-submit, input[type='submit'][value='Next']"
+# Paso 2 — la contraseña aparece después de "Next"
+_SEL_CLAVE   = "input[type='password']"
 
 
 class LoginFallido(Exception):
@@ -38,39 +40,59 @@ def _sigue_en_login(page):
         return False
 
 
+def _hay(page, selector):
+    try:
+        return page.locator(selector).count() > 0
+    except Exception:
+        return False
+
+
 def hacer_login(page, correo, clave, log):
-    """Inicia sesión en el portal. Lanza LoginFallido si no entra."""
-    log("Abriendo el portal DICOM...", "info")
+    """Login en dos pasos: usuario → Next → contraseña → entrar."""
+    log("Abriendo el portal de Equifax...", "info")
     page.goto(URL_LOGIN, wait_until="domcontentloaded", timeout=45000)
 
+    # ── Paso 1: usuario (el correo) y botón Next ────────────────────────────
     try:
-        page.wait_for_selector(_SEL_EMAIL, state="visible", timeout=20000)
+        page.wait_for_selector(_SEL_USUARIO, state="visible", timeout=25000)
     except Exception:
-        raise LoginFallido(f"No apareció el formulario de acceso. "
+        raise LoginFallido(f"No apareció el campo Username. "
                            f"La página muestra: {_texto(page, 200)}")
 
-    log("Ingresando credenciales...", "info")
-    page.fill(_SEL_EMAIL, correo)
+    log("Escribiendo el usuario...", "info")
+    page.fill(_SEL_USUARIO, correo)
     time.sleep(0.4)
+
+    log("Presionando Next...", "info")
+    try:
+        page.click(_SEL_NEXT, timeout=8000)
+    except Exception:
+        try:
+            page.press(_SEL_USUARIO, "Enter")
+        except Exception:
+            raise LoginFallido("No se pudo presionar Next")
+
+    # ── Paso 2: contraseña ──────────────────────────────────────────────────
+    try:
+        page.wait_for_selector(_SEL_CLAVE, state="visible", timeout=25000)
+    except Exception:
+        detalle = _texto(page, 250)
+        raise LoginFallido(
+            "Tras Next no apareció el campo de contraseña. "
+            f"El portal muestra: {detalle}")
+
+    log("Escribiendo la contraseña...", "info")
     page.fill(_SEL_CLAVE, clave)
     time.sleep(0.4)
 
-    # Botón "Iniciar sesión"
     try:
-        page.click("button[type='submit']", timeout=8000)
+        page.click("input[type='submit'], button[type='submit']", timeout=8000)
     except Exception:
-        page.evaluate("""() => {
-            for (const b of document.querySelectorAll('button')) {
-                if ((b.innerText || '').toLowerCase().includes('iniciar sesion') ||
-                    (b.innerText || '').toLowerCase().includes('iniciar sesión')) {
-                    b.click(); return;
-                }
-            }
-        }""")
+        page.press(_SEL_CLAVE, "Enter")
 
     log("Enviando...", "info")
-    # Esperar a que el formulario desaparezca (entró) o aparezca un error
-    fin = time.time() + 30
+    # Esperar: entró, error de credenciales, o pide código de verificación
+    fin = time.time() + 35
     error_texto = ""
     while time.time() < fin:
         if not _sigue_en_login(page):
@@ -78,13 +100,13 @@ def hacer_login(page, correo, clave, log):
         try:
             error_texto = page.evaluate("""() => {
                 const t = (document.body ? document.body.innerText : '').toLowerCase();
-                for (const frase of ['credenciales', 'incorrect', 'inválid', 'invalid',
-                                     'no coinciden', 'usuario o contraseña', 'bloquead',
-                                     'intentos']) {
+                for (const frase of ['unable to sign in', 'incorrect', 'invalid',
+                                     'credenciales', 'inválid', 'no coinciden',
+                                     'locked', 'bloquead', 'too many', 'intentos']) {
                     if (t.includes(frase)) {
                         const i = t.indexOf(frase);
                         return (document.body.innerText || '')
-                            .substring(Math.max(0, i - 90), i + 90).replace(/\\s+/g, ' ');
+                            .substring(Math.max(0, i - 90), i + 100).replace(/\\s+/g, ' ');
                     }
                 }
                 return '';
@@ -94,6 +116,24 @@ def hacer_login(page, correo, clave, log):
         if error_texto:
             break
         time.sleep(0.5)
+
+    # ¿Pide código de verificación? Eso no lo puede resolver el bot solo.
+    try:
+        pide_codigo = page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '').toLowerCase();
+            return t.includes('verification code') || t.includes('security code') ||
+                   t.includes('enter code') || t.includes('codigo de verificacion') ||
+                   t.includes('código de verificación') || t.includes('authenticator') ||
+                   t.includes('multifactor') || t.includes('verify your identity');
+        }""")
+    except Exception:
+        pide_codigo = False
+    if pide_codigo:
+        raise LoginFallido(
+            "El portal pide un CÓDIGO DE VERIFICACIÓN (autenticación en dos pasos). "
+            "Eso llega a tu correo o teléfono, así que el robot no puede completarlo "
+            "solo. Habría que pedirle a Equifax una cuenta de servicio sin ese paso, "
+            "o ingresar el código a mano cada vez.")
 
     if _sigue_en_login(page):
         detalle = error_texto or _texto(page, 200)

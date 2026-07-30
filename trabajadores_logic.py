@@ -167,15 +167,39 @@ def _login_previred(page, usuario, clave, log, estado, motivo=""):
     _revisar_cuenta_bloqueada(page)
 
 
-def _reconectar_si_cerro(page, usuario, clave, log, estado):
-    """Si PreviRed cerró la sesión, vuelve a entrar. Devuelve True si reconectó."""
+def _sesion_expirada(page):
+    """True si PreviRed muestra la pantalla de sesión expirada / cerrada.
+
+    OJO: 'Su CLAVE ha expirado' NO es esto (significa cuenta bloqueada y lo
+    maneja _revisar_cuenta_bloqueada). Aquí solo interesa la SESIÓN."""
     try:
-        if not esta_en_login(page):
-            return False
+        if esta_en_login(page):        # volvió al formulario de login
+            return True
+        return bool(page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '')
+                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+            if (t.includes('clave ha expirado') || t.includes('encuentra bloqueado'))
+                return false;                       // eso es cuenta bloqueada
+            return t.includes('sesion expirada') || t.includes('sesion ha expirado') ||
+                   t.includes('sesion ha caducado') || t.includes('sesion caducada') ||
+                   t.includes('sesion ha finalizado') || t.includes('sesion finalizada') ||
+                   t.includes('sesion ha sido cerrada') || t.includes('vuelva a iniciar sesion') ||
+                   t.includes('debe iniciar sesion') || t.includes('sesion no valida') ||
+                   t.includes('su sesion ha');
+        }"""))
     except Exception:
         return False
+
+
+def _reconectar_si_cerro(page, usuario, clave, log, estado):
+    """Reconecta SOLO si la sesión expiró o el portal volvió al login.
+    Devuelve True si reconectó."""
+    # Primero: ¿la cuenta está bloqueada? Entonces no se reintenta nada.
+    _revisar_cuenta_bloqueada(page)
+    if not _sesion_expirada(page):
+        return False
     _login_previred(page, usuario, clave, log, estado,
-                    motivo="Sesión cerrada por PreviRed — reconectando")
+                    motivo="Sesión expirada en PreviRed — reconectando")
     return True
 
 
@@ -278,7 +302,7 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
             page.go_back(wait_until="domcontentloaded", timeout=8000)
         except Exception:
             break
-        if esta_en_login(page):
+        if _sesion_expirada(page):
             break
         if _menu_empresas_visible(page, espera=2):
             return
@@ -288,7 +312,7 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
     if home:
         try:
             page.goto(home, wait_until="domcontentloaded", timeout=20000)
-            if not esta_en_login(page) and _menu_empresas_visible(page, espera=4):
+            if not _sesion_expirada(page) and _menu_empresas_visible(page, espera=4):
                 return
         except Exception:
             pass

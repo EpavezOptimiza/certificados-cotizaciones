@@ -138,47 +138,72 @@ def hacer_login(page, correo, clave, log):
         except Exception:
             raise LoginFallido("No se pudo presionar Next")
 
-    # ── Paso 2: contraseña ──────────────────────────────────────────────────
+    # ── Paso 2: pantalla de Okta (usuario + contraseña) ─────────────────────
     try:
         page.wait_for_selector(_SEL_CLAVE, state="visible", timeout=25000)
+        # Dar tiempo a que el widget de Okta termine de montarse: si se escribe
+        # antes, el texto queda en pantalla pero el widget no lo registra.
+        time.sleep(2.5)
     except Exception:
         detalle = _texto(page, 250)
         raise LoginFallido(
             "Tras Next no apareció el campo de contraseña. "
             f"El portal muestra: {detalle}")
 
-    # Tras "Next" el portal redirige a su pantalla de acceso (en español), que
-    # pide NOMBRE DE USUARIO **y** CONTRASEÑA de nuevo. Si el campo de usuario
-    # está presente y vacío, hay que volver a escribirlo.
-    try:
-        usuario_vacio = page.evaluate("""() => {
-            const cs = Array.from(document.querySelectorAll(
-                "input[type='text'], input[type='email'], input:not([type])"))
-                .filter(e => e.offsetParent !== null);
-            if (!cs.length) return null;
-            const u = cs[0];
-            return {selectorIdx: 0, vacio: !(u.value || '').trim(),
-                    id: u.id || '', name: u.name || ''};
-        }""")
-    except Exception:
-        usuario_vacio = None
+    # Tras "Next" el portal redirige a su pantalla de acceso (Okta, en español),
+    # que pide NOMBRE DE USUARIO y CONTRASEÑA de nuevo.
+    # Identificadores reales del widget (confirmados en el log)
+    _OKTA_USER = "#okta-signin-username, input[name='username']"
+    _OKTA_PASS = "#okta-signin-password, input[name='password']"
 
-    if usuario_vacio and usuario_vacio.get("vacio"):
-        log("La pantalla pide el usuario otra vez — escribiéndolo...", "info")
-        # Tecla por tecla: asignarlo por programa no lo registra el sitio
-        try:
-            _tipear(page, "input[type='text']:visible, input[type='email']:visible",
-                    correo, log)
-        except Exception:
-            try:
-                _tipear(page, "input[type='text']", correo, log)
-            except Exception:
-                pass
-        time.sleep(0.3)
+    log("Escribiendo el usuario...", "info")
+    try:
+        _tipear(page, _OKTA_USER, correo, log)
+    except Exception:
+        pass
+    time.sleep(0.6)
 
     log("Escribiendo la contraseña...", "info")
-    _tipear(page, _SEL_CLAVE, clave, log)
-    time.sleep(0.4)
+    _tipear(page, _OKTA_PASS, clave, log)
+    time.sleep(0.8)
+
+    # ¿El botón quedó activo? Si Okta no registró lo escrito, sigue inhabilitado
+    # y el click no hace nada (sin mostrar error). En ese caso se reescribe.
+    def _estado_boton():
+        try:
+            return page.evaluate("""() => {
+                for (const b of document.querySelectorAll(
+                        "input[type=submit], button, .button-primary")) {
+                    const t = ((b.innerText || b.value || '')).trim().toLowerCase();
+                    if (t.includes('iniciar') || t.includes('sign in')) {
+                        const cs = getComputedStyle(b);
+                        return {texto: (b.innerText || b.value || '').trim(),
+                                deshabilitado: !!b.disabled ||
+                                    b.getAttribute('aria-disabled') === 'true' ||
+                                    (b.className || '').includes('disabled'),
+                                opacidad: cs.opacity};
+                    }
+                }
+                return null;
+            }""")
+        except Exception:
+            return None
+
+    est = _estado_boton()
+    log(f"  estado del botón: {est}", "info")
+
+    if est and est.get("deshabilitado"):
+        log("  el botón está inhabilitado — reescribiendo los campos...", "warn")
+        # Reescribir despacio, campo por campo, dando tiempo a que el widget valide
+        try:
+            _tipear(page, "#okta-signin-username, input[name='username']", correo, log)
+            time.sleep(0.8)
+            _tipear(page, "#okta-signin-password, input[name='password']", clave, log)
+            time.sleep(1.2)
+            est = _estado_boton()
+            log(f"  estado del botón tras reescribir: {est}", "info")
+        except Exception as e:
+            log(f"  no se pudo reescribir: {type(e).__name__}", "warn")
 
     # Qué botones hay realmente en esta pantalla (queda en el log para diagnóstico)
     try:

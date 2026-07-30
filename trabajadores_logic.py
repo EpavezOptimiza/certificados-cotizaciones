@@ -146,22 +146,37 @@ class CuentaBloqueada(Exception):
     """PreviRed respondió que la clave expiró o el usuario está bloqueado."""
 
 
-# Tope de inicios de sesión por corrida. Anoche un bucle de re-login llegó a
-# más de 100 en dos horas y PreviRed bloqueó la cuenta: nunca más.
+# Tope de seguridad: el re-login solo ocurre cuando la sesión se cerró de
+# verdad, pero si algo la cortara una y otra vez, esto detiene la corrida
+# antes de que PreviRed lo interprete como un ataque (así se bloqueó la cuenta).
 _MAX_LOGINS = 15
 
 
-def _login_seguro(page, usuario, clave, log, estado):
-    """hacer_login con contador: corta la corrida antes de que el portal
-    interprete los reintentos como un ataque."""
+def _login_previred(page, usuario, clave, log, estado, motivo=""):
+    """Inicia sesión. Se llama UNA VEZ al comenzar; después, solo si se
+    detecta que PreviRed cerró la sesión (nunca de forma preventiva)."""
     estado["logins"] = estado.get("logins", 0) + 1
     if estado["logins"] > _MAX_LOGINS:
         raise CuentaBloqueada(
-            f"Se alcanzó el límite de {_MAX_LOGINS} inicios de sesión en esta corrida. "
-            "Se detiene para no provocar el bloqueo de la cuenta en PreviRed. "
-            "Revisa el log: algo está cortando la sesión en cada empresa.")
+            f"La sesión se cerró {_MAX_LOGINS} veces en esta corrida. Se detiene "
+            "para no arriesgar el bloqueo de la cuenta en PreviRed. Vuelve a "
+            "lanzarla: continuará donde quedó.")
+    if motivo:
+        log(f"  {motivo} (reconexión {estado['logins']})", "warn")
     hacer_login(page, usuario, clave, log)
     _revisar_cuenta_bloqueada(page)
+
+
+def _reconectar_si_cerro(page, usuario, clave, log, estado):
+    """Si PreviRed cerró la sesión, vuelve a entrar. Devuelve True si reconectó."""
+    try:
+        if not esta_en_login(page):
+            return False
+    except Exception:
+        return False
+    _login_previred(page, usuario, clave, log, estado,
+                    motivo="Sesión cerrada por PreviRed — reconectando")
+    return True
 
 
 def _revisar_cuenta_bloqueada(page):
@@ -219,17 +234,11 @@ def _asegurar_menu_empresas(page, usuario, clave, log, estado=None):
             pass
         if _menu_empresas_visible(page, espera=10):
             return True
-        if intento == 0:
-            try:
-                if esta_en_login(page):
-                    _login_seguro(page, usuario, clave, log,
-                                  estado if estado is not None else {})
-                    if _menu_empresas_visible(page, espera=15):
-                        return True
-            except CuentaBloqueada:
-                raise
-            except Exception:
-                pass
+        if intento == 0 and estado is not None:
+            # Reconectar SOLO si la sesión se cerró de verdad
+            if _reconectar_si_cerro(page, usuario, clave, log, estado):
+                if _menu_empresas_visible(page, espera=15):
+                    return True
     return False
 
 
@@ -284,11 +293,9 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
         except Exception:
             pass
 
-    # 4. Último recurso: re-login. El menú se espera después, en _ids_empresa
-    # (con 20s de paciencia y, si hace falta, el enlace "Inicio").
-    log("  Reabriendo sesión...", "warn")
-    _login_seguro(page, usuario, clave, log, estado)
-    estado["home"] = page.url
+    # 4. Solo si PreviRed cerró la sesión de verdad, se vuelve a entrar.
+    if _reconectar_si_cerro(page, usuario, clave, log, estado):
+        estado["home"] = page.url
 
 
 # Lee el N° de trabajadores directamente de la tabla de resultados (sin PDF).
@@ -904,7 +911,9 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
         page.set_default_navigation_timeout(45000)
         estado = {"logins": 0}
         try:
-            _login_seguro(page, usuario, clave, log, estado)   # aborta si está bloqueada
+            # ÚNICO login del proceso; después solo se reconecta si PreviRed
+            # cierra la sesión (nunca de forma preventiva).
+            _login_previred(page, usuario, clave, log, estado)
             estado["home"] = page.url   # URL real del portal tras el login
 
             t0_global = time.time()

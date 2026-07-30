@@ -119,31 +119,51 @@ def hacer_login(page, correo, clave, log):
     page.fill(_SEL_CLAVE, clave)
     time.sleep(0.4)
 
-    # Botón de acceso: "Iniciar Sesión" / "Sign in" / submit
+    # Qué botones hay realmente en esta pantalla (queda en el log para diagnóstico)
+    try:
+        botones = page.evaluate("""() => Array.from(
+            document.querySelectorAll("button, input[type=submit], input[type=button], a"))
+            .filter(e => e.offsetParent !== null)
+            .map(e => (e.tagName + '[' + (e.type || '') + ']' +
+                       (e.id ? '#' + e.id : '') + ' "' +
+                       (e.innerText || e.value || '').trim().slice(0, 25) + '"'))
+            .slice(0, 8)""")
+        log(f"  botones en pantalla: {botones}", "info")
+    except Exception:
+        pass
+
+    url_antes = page.url
+
+    # Enviar: PRIMERO el botón cuyo texto sea "Iniciar Sesión" (el correcto),
+    # después los submit genéricos, y por último Enter.
     enviado = False
-    for sel in ("input[type='submit']", "button[type='submit']"):
-        try:
-            page.click(sel, timeout=4000)
-            enviado = True
-            break
-        except Exception:
-            continue
-    if not enviado:
-        try:
-            enviado = bool(page.evaluate("""() => {
-                for (const b of document.querySelectorAll('button, input[type=button], a')) {
-                    const t = ((b.innerText || b.value || '')).trim().toLowerCase();
-                    if (t.includes('iniciar sesion') || t.includes('iniciar sesión') ||
-                        t.includes('sign in') || t.includes('ingresar')) {
-                        b.click(); return true;
-                    }
+    try:
+        enviado = bool(page.evaluate("""() => {
+            const cands = Array.from(document.querySelectorAll(
+                "button, input[type=submit], input[type=button]"))
+                .filter(e => e.offsetParent !== null);
+            for (const b of cands) {
+                const t = ((b.innerText || b.value || '')).trim().toLowerCase();
+                if (t.includes('iniciar sesion') || t.includes('iniciar sesión') ||
+                    t.includes('sign in') || t === 'ingresar') {
+                    b.click(); return true;
                 }
-                return false;
-            }"""))
-        except Exception:
-            pass
+            }
+            return false;
+        }"""))
+    except Exception:
+        pass
+    if not enviado:
+        for sel in ("input[type='submit']", "button[type='submit']"):
+            try:
+                page.click(sel, timeout=4000)
+                enviado = True
+                break
+            except Exception:
+                continue
     if not enviado:
         page.press(_SEL_CLAVE, "Enter")
+    log(f"  formulario enviado ({'botón' if enviado else 'Enter'})", "info")
 
     log("Enviando...", "info")
     # Esperar: entró, error de credenciales, o pide código de verificación
@@ -191,8 +211,8 @@ def hacer_login(page, correo, clave, log):
             "o ingresar el código a mano cada vez.")
 
     if _sigue_en_login(page):
-        # Diagnóstico: ¿quedó algún campo sin llenar?
-        estado_campos = ""
+        # Diagnóstico completo para saber por qué rebotó
+        estado_campos, alertas = "", ""
         try:
             estado_campos = page.evaluate("""() => {
                 return Array.from(document.querySelectorAll('input'))
@@ -201,11 +221,26 @@ def hacer_login(page, correo, clave, log):
                                ((e.value || '').trim() ? 'con dato' : 'VACIO')))
                     .join(' | ');
             }""") or ""
+            alertas = page.evaluate("""() => {
+                const sels = ['[role=alert]', '.error', '.alert', '.o-form-error-container',
+                              '.infobox-error', '[class*=error]', '[class*=Error]'];
+                const out = [];
+                for (const s of sels) {
+                    for (const e of document.querySelectorAll(s)) {
+                        const t = (e.innerText || '').trim().replace(/\\s+/g, ' ');
+                        if (t && t.length < 200 && !out.includes(t)) out.push(t);
+                    }
+                }
+                return out.slice(0, 3).join(' / ');
+            }""") or ""
         except Exception:
             pass
-        detalle = error_texto or _texto(page, 200)
-        extra = f" [campos: {estado_campos}]" if estado_campos else ""
-        raise LoginFallido(f"No se pudo entrar. El portal responde: {detalle}{extra}")
+        cambio = "sí" if page.url != url_antes else "no"
+        detalle = error_texto or alertas or _texto(page, 180)
+        raise LoginFallido(
+            f"No se pudo entrar. Portal: {detalle}"
+            f"{(' [avisos: ' + alertas + ']') if alertas and alertas != detalle else ''}"
+            f" [campos: {estado_campos}] [cambió de página: {cambio}]")
 
     try:
         page.wait_for_load_state("networkidle", timeout=15000)

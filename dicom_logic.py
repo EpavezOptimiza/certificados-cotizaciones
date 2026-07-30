@@ -88,15 +88,27 @@ def _hay(page, selector):
         return False
 
 
-def _tipear(page, selector, texto, log=None):
+def _tipear(page, selector, texto, log=None, timeout_click=8000):
     """Escribe TECLA POR TECLA (no page.fill).
 
     El portal está hecho con un framework JS: si el valor se asigna por
     programa, la página lo muestra pero internamente lo considera vacío y el
     botón de acceso no hace nada. Con pulsaciones reales sí lo registra.
+
+    El click lleva timeout corto: si el campo está bloqueado o prellenado
+    (Okta lo hace con el usuario), no se pierden 45 s esperándolo.
     """
     loc = page.locator(selector).first
-    loc.click()
+    try:
+        loc.click(timeout=timeout_click)
+    except Exception:
+        # Campo no clickeable (readonly/disabled/cubierto): enfocar por JS
+        try:
+            loc.evaluate("e => e.focus()")
+        except Exception:
+            if log:
+                log(f"  no se pudo enfocar {selector[:30]}", "warn")
+            return False
     try:
         loc.press("Control+a")
         loc.press("Backspace")
@@ -106,14 +118,19 @@ def _tipear(page, selector, texto, log=None):
         loc.press_sequentially(texto, delay=70)
     except AttributeError:          # Playwright antiguo
         loc.type(texto, delay=70)
+    except Exception:
+        if log:
+            log(f"  no se pudo escribir en {selector[:30]}", "warn")
+        return False
     try:
         loc.dispatch_event("input")
         loc.dispatch_event("change")
     except Exception:
         pass
+    return True
 
 
-VERSION = "v5 (Okta + pantalla virtual + código de verificación)"
+VERSION = "v6 (corrige el falso error por la palabra 'credenciales')"
 
 
 def _pide_verificacion(page):
@@ -253,12 +270,25 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
     _OKTA_USER = "#okta-signin-username, input[name='username']"
     _OKTA_PASS = "#okta-signin-password, input[name='password']"
 
-    log("Escribiendo el usuario...", "info")
+    # Okta suele traer el usuario ya puesto (y el campo bloqueado): solo se
+    # escribe si viene vacío o distinto, para no perder tiempo ni romperlo.
     try:
-        _tipear(page, _OKTA_USER, correo, log)
+        actual = page.evaluate(
+            """(sel) => { const e = document.querySelector(sel.split(',')[0].trim())
+                 || document.querySelector("input[name='username']");
+                 return e ? (e.value || '') : null; }""", _OKTA_USER)
     except Exception:
-        pass
-    time.sleep(0.6)
+        actual = None
+
+    if actual and actual.strip().lower() == correo.strip().lower():
+        log("El usuario ya viene puesto por el portal", "info")
+    else:
+        log("Escribiendo el usuario...", "info")
+        try:
+            _tipear(page, _OKTA_USER, correo, log)
+        except Exception:
+            pass
+        time.sleep(0.6)
 
     log("Escribiendo la contraseña...", "info")
     _tipear(page, _OKTA_PASS, clave, log)
@@ -374,17 +404,19 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
             ultimo_aviso = time.time()
             restante = int(fin - time.time())
             log(f"  esperando respuesta del portal... ({restante}s restantes)", "info")
+        # Errores REALES: solo desde los recuadros de error de Okta, nunca del
+        # texto general de la página. (Antes se buscaba la palabra "credenciales"
+        # en todo el cuerpo y coincidía con "Ingrese sus credenciales para
+        # iniciar sesión", el texto de bienvenida: fallo instantáneo y falso.)
         try:
             error_texto = page.evaluate("""() => {
-                const t = (document.body ? document.body.innerText : '').toLowerCase();
-                for (const frase of ['unable to sign in', 'incorrect', 'invalid',
-                                     'credenciales', 'inválid', 'no coinciden',
-                                     'locked', 'bloquead', 'too many', 'intentos']) {
-                    if (t.includes(frase)) {
-                        const i = t.indexOf(frase);
-                        return (document.body.innerText || '')
-                            .substring(Math.max(0, i - 90), i + 100).replace(/\\s+/g, ' ');
-                    }
+                const cajas = document.querySelectorAll(
+                    '.okta-form-infobox-error, [data-se="o-form-error-container"], ' +
+                    '.o-form-error-container, .infobox-error, [role="alert"]');
+                for (const c of cajas) {
+                    if (c.offsetParent === null) continue;
+                    const t = (c.innerText || '').trim().replace(/\\s+/g, ' ');
+                    if (t) return t.slice(0, 200);
                 }
                 return '';
             }""") or ""

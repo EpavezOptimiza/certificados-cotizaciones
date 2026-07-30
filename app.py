@@ -3120,7 +3120,25 @@ def dicom_probar_login():
         return jsonify({"error": "Faltan el correo y la contraseña de DICOM"}), 400
 
     tid = uuid.uuid4().hex[:12]
-    _dicom_tareas[tid] = {"logs": [], "done": False, "error": False, "captura": None}
+    _dicom_tareas[tid] = {"logs": [], "done": False, "error": False, "captura": None,
+                          "esperando_codigo": False, "codigo": None}
+
+    def _pedir_codigo():
+        """Marca que se espera el código y aguarda a que la persona lo escriba
+        en la plataforma (hasta 5 minutos)."""
+        import time as _t
+        _dicom_tareas[tid]["esperando_codigo"] = True
+        _dicom_log(tid, "⏳ Esperando el código de verificación — revisa tu correo "
+                        "y escríbelo aquí abajo", "warn")
+        fin = _t.time() + 300
+        while _t.time() < fin:
+            cod = _dicom_tareas[tid].get("codigo")
+            if cod:
+                _dicom_tareas[tid]["esperando_codigo"] = False
+                return cod
+            _t.sleep(1)
+        _dicom_tareas[tid]["esperando_codigo"] = False
+        return None
 
     def run_task():
         ruta = os.path.join(_EXCELS_DIR, f"dicom_login_{tid}.png")
@@ -3129,7 +3147,8 @@ def dicom_probar_login():
             try:
                 probar_login(correo, clave,
                              log=lambda m, t="info": _dicom_log(tid, m, t),
-                             ruta_captura=ruta)
+                             ruta_captura=ruta,
+                             obtener_codigo=_pedir_codigo)
                 if os.path.exists(ruta):
                     _dicom_tareas[tid]["captura"] = os.path.basename(ruta)
                 _dicom_log(tid, "✓ Acceso confirmado", "ok")
@@ -3159,7 +3178,25 @@ def dicom_tarea(tid):
         return jsonify({"error": "Tarea no encontrada", "logs": [], "done": True}), 404
     since = int(request.args.get("since", 0))
     return jsonify({"logs": t["logs"][since:], "done": t["done"],
-                    "error": t["error"], "captura": t["captura"]})
+                    "error": t["error"], "captura": t["captura"],
+                    "esperando_codigo": t.get("esperando_codigo", False)})
+
+
+@app.route("/api/dicom/codigo", methods=["POST"])
+@api_login_required
+def dicom_codigo():
+    """Recibe el código de verificación que la persona leyó en su correo."""
+    d = request.json or {}
+    tid = (d.get("task_id") or "").strip()
+    codigo = (d.get("codigo") or "").strip()
+    t = _dicom_tareas.get(tid)
+    if not t:
+        return jsonify({"error": "Tarea no encontrada"}), 404
+    if not codigo:
+        return jsonify({"error": "Escribe el código"}), 400
+    t["codigo"] = codigo
+    _dicom_log(tid, "Código recibido desde la plataforma", "ok")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/dicom/captura/<nombre>")

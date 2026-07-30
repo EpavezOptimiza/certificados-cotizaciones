@@ -113,11 +113,104 @@ def _tipear(page, selector, texto, log=None):
         pass
 
 
-VERSION = "v4 (Okta + pantalla virtual + verificación de botón)"
+VERSION = "v5 (Okta + pantalla virtual + código de verificación)"
 
 
-def hacer_login(page, correo, clave, log):
-    """Login en dos pasos: usuario → Next → contraseña → entrar."""
+def _pide_verificacion(page):
+    """True si el portal muestra la pantalla 'Verify your Account'."""
+    try:
+        return bool(page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '').toLowerCase();
+            return t.includes('verify your account') || t.includes('send me the code') ||
+                   t.includes('verification code') || t.includes('security code') ||
+                   t.includes('codigo de verificacion') ||
+                   t.includes('código de verificación') ||
+                   t.includes('verifique su cuenta') || t.includes('enviarme el codigo') ||
+                   t.includes('enviarme el código');
+        }"""))
+    except Exception:
+        return False
+
+
+def _resolver_verificacion(page, log, obtener_codigo):
+    """Pide el envío del código, espera a que la persona lo escriba en la
+    plataforma y lo ingresa en el portal (flujo semiautomático)."""
+    log("El portal pide un código de verificación", "warn")
+
+    # 1. Botón "SEND ME THE CODE" (si aún no se ha enviado)
+    try:
+        enviado = page.evaluate("""() => {
+            for (const b of document.querySelectorAll('button, input[type=submit], a')) {
+                const t = ((b.innerText || b.value || '')).trim().toLowerCase();
+                if (t.includes('send me the code') || t.includes('enviarme el') ||
+                    t.includes('send code') || t.includes('enviar código') ||
+                    t.includes('enviar codigo')) { b.click(); return true; }
+            }
+            return false;
+        }""")
+        if enviado:
+            log("Código solicitado — revisa tu correo", "info")
+            time.sleep(3)
+    except Exception:
+        pass
+
+    # 2. Esperar a que la persona escriba el código en la plataforma
+    codigo = obtener_codigo()
+    if not codigo:
+        raise LoginFallido(
+            "No se recibió el código de verificación a tiempo. Vuelve a intentarlo "
+            "y escribe el código apenas llegue a tu correo.")
+    log("Código recibido — ingresándolo...", "info")
+
+    # 3. Escribirlo en el campo correspondiente
+    campo = None
+    for sel in ("input[name='passCode']", "input[autocomplete='one-time-code']",
+                "input[type='tel']", "input[name*='code' i]", "input[id*='code' i]",
+                "input[type='text']"):
+        try:
+            loc = page.locator(sel).first
+            loc.wait_for(state="visible", timeout=4000)
+            campo = sel
+            break
+        except Exception:
+            continue
+    if not campo:
+        raise LoginFallido("No se encontró dónde escribir el código de verificación")
+
+    _tipear(page, campo, str(codigo).strip(), log)
+    time.sleep(0.5)
+
+    # 4. Enviar
+    for descripcion, loc in (
+        ("botón Verify", page.get_by_role("button", name="Verify")),
+        ("botón Verificar", page.get_by_role("button", name="Verificar")),
+        ("submit", page.locator("input[type='submit'], button[type='submit']")),
+    ):
+        try:
+            el = loc.first
+            el.wait_for(state="visible", timeout=3000)
+            el.click(timeout=4000)
+            log(f"Código enviado ({descripcion})", "info")
+            break
+        except Exception:
+            continue
+    else:
+        try:
+            page.locator(campo).first.press("Enter")
+        except Exception:
+            pass
+
+    # 5. Esperar a que pase la verificación
+    fin = time.time() + 60
+    while time.time() < fin:
+        if not _pide_verificacion(page):
+            return True
+        time.sleep(1)
+    raise LoginFallido("El portal no aceptó el código de verificación")
+
+
+def hacer_login(page, correo, clave, log, obtener_codigo=None):
+    """Login en dos pasos: usuario → Next → contraseña → (código) → entrar."""
     log(f"DICOM {VERSION}", "info")
     log("Abriendo el portal de Equifax...", "info")
     page.goto(URL_LOGIN, wait_until="domcontentloaded", timeout=45000)
@@ -301,23 +394,13 @@ def hacer_login(page, correo, clave, log):
             break
         time.sleep(0.5)
 
-    # ¿Pide código de verificación? Eso no lo puede resolver el bot solo.
-    try:
-        pide_codigo = page.evaluate("""() => {
-            const t = (document.body ? document.body.innerText : '').toLowerCase();
-            return t.includes('verification code') || t.includes('security code') ||
-                   t.includes('enter code') || t.includes('codigo de verificacion') ||
-                   t.includes('código de verificación') || t.includes('authenticator') ||
-                   t.includes('multifactor') || t.includes('verify your identity');
-        }""")
-    except Exception:
-        pide_codigo = False
-    if pide_codigo:
-        raise LoginFallido(
-            "El portal pide un CÓDIGO DE VERIFICACIÓN (autenticación en dos pasos). "
-            "Eso llega a tu correo o teléfono, así que el robot no puede completarlo "
-            "solo. Habría que pedirle a Equifax una cuenta de servicio sin ese paso, "
-            "o ingresar el código a mano cada vez.")
+    # ── Verificación en dos pasos ───────────────────────────────────────────
+    if _pide_verificacion(page):
+        if obtener_codigo is None:
+            raise LoginFallido(
+                "El portal pide un CÓDIGO DE VERIFICACIÓN y esta prueba no está "
+                "preparada para pedírtelo.")
+        _resolver_verificacion(page, log, obtener_codigo)
 
     if _sigue_en_login(page):
         # Diagnóstico completo para saber por qué rebotó
@@ -369,7 +452,7 @@ def hacer_login(page, correo, clave, log):
     return True
 
 
-def probar_login(correo, clave, log, ruta_captura=None):
+def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None):
     """Entra al portal, confirma el acceso y guarda una captura de pantalla.
 
     Equifax detecta navegadores automatizados: en modo invisible (headless)
@@ -424,7 +507,7 @@ def probar_login(correo, clave, log, ruta_captura=None):
 
         try:
             try:
-                hacer_login(page, correo, clave, log)
+                hacer_login(page, correo, clave, log, obtener_codigo=obtener_codigo)
             except LoginFallido:
                 # Guardar la captura del FALLO para poder ver qué muestra el portal
                 _captura(" (pantalla del error)")

@@ -81,13 +81,68 @@ def hacer_login(page, correo, clave, log):
             "Tras Next no apareció el campo de contraseña. "
             f"El portal muestra: {detalle}")
 
+    # Tras "Next" el portal redirige a su pantalla de acceso (en español), que
+    # pide NOMBRE DE USUARIO **y** CONTRASEÑA de nuevo. Si el campo de usuario
+    # está presente y vacío, hay que volver a escribirlo.
+    try:
+        usuario_vacio = page.evaluate("""() => {
+            const cs = Array.from(document.querySelectorAll(
+                "input[type='text'], input[type='email'], input:not([type])"))
+                .filter(e => e.offsetParent !== null);
+            if (!cs.length) return null;
+            const u = cs[0];
+            return {selectorIdx: 0, vacio: !(u.value || '').trim(),
+                    id: u.id || '', name: u.name || ''};
+        }""")
+    except Exception:
+        usuario_vacio = None
+
+    if usuario_vacio and usuario_vacio.get("vacio"):
+        log("La pantalla pide el usuario otra vez — completando...", "info")
+        try:
+            page.evaluate("""(correo) => {
+                const cs = Array.from(document.querySelectorAll(
+                    "input[type='text'], input[type='email'], input:not([type])"))
+                    .filter(e => e.offsetParent !== null);
+                if (cs.length) {
+                    const u = cs[0];
+                    u.focus(); u.value = correo;
+                    u.dispatchEvent(new Event('input',  {bubbles: true}));
+                    u.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            }""", correo)
+            time.sleep(0.3)
+        except Exception:
+            pass
+
     log("Escribiendo la contraseña...", "info")
     page.fill(_SEL_CLAVE, clave)
     time.sleep(0.4)
 
-    try:
-        page.click("input[type='submit'], button[type='submit']", timeout=8000)
-    except Exception:
+    # Botón de acceso: "Iniciar Sesión" / "Sign in" / submit
+    enviado = False
+    for sel in ("input[type='submit']", "button[type='submit']"):
+        try:
+            page.click(sel, timeout=4000)
+            enviado = True
+            break
+        except Exception:
+            continue
+    if not enviado:
+        try:
+            enviado = bool(page.evaluate("""() => {
+                for (const b of document.querySelectorAll('button, input[type=button], a')) {
+                    const t = ((b.innerText || b.value || '')).trim().toLowerCase();
+                    if (t.includes('iniciar sesion') || t.includes('iniciar sesión') ||
+                        t.includes('sign in') || t.includes('ingresar')) {
+                        b.click(); return true;
+                    }
+                }
+                return false;
+            }"""))
+        except Exception:
+            pass
+    if not enviado:
         page.press(_SEL_CLAVE, "Enter")
 
     log("Enviando...", "info")
@@ -136,8 +191,21 @@ def hacer_login(page, correo, clave, log):
             "o ingresar el código a mano cada vez.")
 
     if _sigue_en_login(page):
+        # Diagnóstico: ¿quedó algún campo sin llenar?
+        estado_campos = ""
+        try:
+            estado_campos = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('input'))
+                    .filter(e => e.offsetParent !== null && e.type !== 'hidden')
+                    .map(e => (e.type + ':' + (e.name || e.id || '?') + ':' +
+                               ((e.value || '').trim() ? 'con dato' : 'VACIO')))
+                    .join(' | ');
+            }""") or ""
+        except Exception:
+            pass
         detalle = error_texto or _texto(page, 200)
-        raise LoginFallido(f"No se pudo entrar. El portal responde: {detalle}")
+        extra = f" [campos: {estado_campos}]" if estado_campos else ""
+        raise LoginFallido(f"No se pudo entrar. El portal responde: {detalle}{extra}")
 
     try:
         page.wait_for_load_state("networkidle", timeout=15000)

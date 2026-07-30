@@ -1993,7 +1993,8 @@ def previred_iniciar():
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
                     return
-                from previred_logic import descargar, CuentaBloqueada
+                from previred_logic import (descargar, CuentaBloqueada,
+                                            CredencialesInvalidas)
                 todas_rutas_pdf = []
                 for emp in empresas:
                     rut_empresa  = (emp.get("rut") or "").strip()
@@ -2013,6 +2014,12 @@ def previred_iniciar():
                         _log(tid, "⛔ PROCESO DETENIDO — cuenta de PreviRed bloqueada "
                                   "o clave expirada", "err")
                         _log(tid, str(e_bloq), "err")
+                        _tareas[tid]["error"] = True
+                        _tareas[tid]["done"]  = True
+                        return
+                    except CredencialesInvalidas as e_cred:
+                        _log(tid, "⛔ PROCESO DETENIDO — no se pudo iniciar sesión", "err")
+                        _log(tid, str(e_cred), "err")
                         _tareas[tid]["error"] = True
                         _tareas[tid]["done"]  = True
                         return

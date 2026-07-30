@@ -73,7 +73,8 @@ def hacer_login(page, rut_usuario: str, contrasena: str, log):
         page.click("button[type='submit']")
     page.wait_for_load_state("domcontentloaded", timeout=20000)
     time.sleep(2)
-    log("Sesión iniciada", "ok")
+    # No se afirma "sesión iniciada" aquí: eso lo confirma verificar_acceso()
+    log("Credenciales enviadas", "info")
 
 
 def esta_en_login(page) -> bool:
@@ -131,6 +132,44 @@ def sesion_expirada(page) -> bool:
         return False
 
 
+class CredencialesInvalidas(Exception):
+    """El usuario/clave configurados no sirven para entrar a PreviRed."""
+
+
+def verificar_acceso(page, log):
+    """Comprueba que el login realmente entró (hacer_login no lo verifica).
+
+    Si quedó en la pantalla de acceso, informa el motivo textual del portal:
+    normalmente la clave guardada quedó desactualizada."""
+    revisar_cuenta_bloqueada(page)
+    if not esta_en_login(page):
+        log("Sesión iniciada", "ok")
+        return True
+
+    detalle = ""
+    try:
+        detalle = page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '');
+            const low = t.toLowerCase();
+            for (const f of ['incorrect', 'inválid', 'invalid', 'no coincide',
+                             'erróne', 'errone', 'intentos', 'bloquead', 'no válid']) {
+                const i = low.indexOf(f);
+                if (i >= 0) return t.substring(Math.max(0, i - 80), i + 100)
+                    .replace(/\\s+/g, ' ').trim();
+            }
+            return '';
+        }""") or ""
+    except Exception:
+        pass
+
+    raise CredencialesInvalidas(
+        "No se pudo iniciar sesión en PreviRed: el portal sigue mostrando la "
+        "pantalla de acceso. Revisa el RUT y la clave guardados en la "
+        "configuración de Previred (⚙) — si renovaste la clave en previred.com, "
+        "hay que actualizarla también aquí."
+        + (f" El portal dice: {detalle}" if detalle else ""))
+
+
 def login_previred(page, rut_usuario, contrasena, log, estado, motivo=""):
     """Inicia sesión llevando la cuenta. Se usa UNA VEZ al comenzar y,
     después, solo cuando se detecta que la sesión expiró."""
@@ -142,7 +181,7 @@ def login_previred(page, rut_usuario, contrasena, log, estado, motivo=""):
     if motivo:
         log(f"{motivo} (reconexión {estado['logins']})", "warn")
     hacer_login(page, rut_usuario, contrasena, log)
-    revisar_cuenta_bloqueada(page)
+    verificar_acceso(page, log)
 
 
 def reconectar_si_expiro(page, rut_usuario, contrasena, log, estado):
@@ -160,7 +199,22 @@ def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
     patron = f"empresa#{rut_num}#"
     log(f"Navegando a empresa {rut_empresa}...", "info")
 
-    page.wait_for_selector("li#empresa", timeout=20000)
+    try:
+        page.wait_for_selector("li#empresa", timeout=20000)
+    except Exception:
+        # ¿Por qué no está el menú? Puede ser sesión no iniciada u otra pantalla
+        verificar_acceso(page, log)          # lanza si son credenciales/bloqueo
+        try:
+            info = page.evaluate("""() => ({
+                url: location.href,
+                texto: (document.body ? document.body.innerText : '')
+                    .replace(/\\s+/g, ' ').trim().slice(0, 250)
+            })""")
+            log(f"[debug] sin menú de empresas — url: {info['url'][:80]}", "warn")
+            log(f"[debug] pantalla: {info['texto']}", "warn")
+        except Exception:
+            pass
+        raise
     page.click("li#empresa")
     # Esperar navegación completa antes de evaluar
     try:

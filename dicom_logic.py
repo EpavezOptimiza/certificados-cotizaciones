@@ -47,6 +47,31 @@ def _hay(page, selector):
         return False
 
 
+def _tipear(page, selector, texto, log=None):
+    """Escribe TECLA POR TECLA (no page.fill).
+
+    El portal está hecho con un framework JS: si el valor se asigna por
+    programa, la página lo muestra pero internamente lo considera vacío y el
+    botón de acceso no hace nada. Con pulsaciones reales sí lo registra.
+    """
+    loc = page.locator(selector).first
+    loc.click()
+    try:
+        loc.press("Control+a")
+        loc.press("Backspace")
+    except Exception:
+        pass
+    try:
+        loc.press_sequentially(texto, delay=70)
+    except AttributeError:          # Playwright antiguo
+        loc.type(texto, delay=70)
+    try:
+        loc.dispatch_event("input")
+        loc.dispatch_event("change")
+    except Exception:
+        pass
+
+
 def hacer_login(page, correo, clave, log):
     """Login en dos pasos: usuario → Next → contraseña → entrar."""
     log("Abriendo el portal de Equifax...", "info")
@@ -60,7 +85,7 @@ def hacer_login(page, correo, clave, log):
                            f"La página muestra: {_texto(page, 200)}")
 
     log("Escribiendo el usuario...", "info")
-    page.fill(_SEL_USUARIO, correo)
+    _tipear(page, _SEL_USUARIO, correo, log)
     time.sleep(0.4)
 
     log("Presionando Next...", "info")
@@ -98,25 +123,20 @@ def hacer_login(page, correo, clave, log):
         usuario_vacio = None
 
     if usuario_vacio and usuario_vacio.get("vacio"):
-        log("La pantalla pide el usuario otra vez — completando...", "info")
+        log("La pantalla pide el usuario otra vez — escribiéndolo...", "info")
+        # Tecla por tecla: asignarlo por programa no lo registra el sitio
         try:
-            page.evaluate("""(correo) => {
-                const cs = Array.from(document.querySelectorAll(
-                    "input[type='text'], input[type='email'], input:not([type])"))
-                    .filter(e => e.offsetParent !== null);
-                if (cs.length) {
-                    const u = cs[0];
-                    u.focus(); u.value = correo;
-                    u.dispatchEvent(new Event('input',  {bubbles: true}));
-                    u.dispatchEvent(new Event('change', {bubbles: true}));
-                }
-            }""", correo)
-            time.sleep(0.3)
+            _tipear(page, "input[type='text']:visible, input[type='email']:visible",
+                    correo, log)
         except Exception:
-            pass
+            try:
+                _tipear(page, "input[type='text']", correo, log)
+            except Exception:
+                pass
+        time.sleep(0.3)
 
     log("Escribiendo la contraseña...", "info")
-    page.fill(_SEL_CLAVE, clave)
+    _tipear(page, _SEL_CLAVE, clave, log)
     time.sleep(0.4)
 
     # Qué botones hay realmente en esta pantalla (queda en el log para diagnóstico)
@@ -134,36 +154,30 @@ def hacer_login(page, correo, clave, log):
 
     url_antes = page.url
 
-    # Enviar: PRIMERO el botón cuyo texto sea "Iniciar Sesión" (el correcto),
-    # después los submit genéricos, y por último Enter.
-    enviado = False
-    try:
-        enviado = bool(page.evaluate("""() => {
-            const cands = Array.from(document.querySelectorAll(
-                "button, input[type=submit], input[type=button]"))
-                .filter(e => e.offsetParent !== null);
-            for (const b of cands) {
-                const t = ((b.innerText || b.value || '')).trim().toLowerCase();
-                if (t.includes('iniciar sesion') || t.includes('iniciar sesión') ||
-                    t.includes('sign in') || t === 'ingresar') {
-                    b.click(); return true;
-                }
-            }
-            return false;
-        }"""))
-    except Exception:
-        pass
+    # Enviar con un click REAL (los clicks por programa tampoco los registra
+    # el framework). Se prueba por texto del botón y luego por submit.
+    enviado = ""
+    for descripcion, localizador in (
+        ("botón Iniciar Sesión", page.get_by_role("button", name="Iniciar Sesión")),
+        ("botón Sign in",        page.get_by_role("button", name="Sign in")),
+        ("texto Iniciar Sesión", page.get_by_text("Iniciar Sesión", exact=False)),
+        ("submit",               page.locator("input[type='submit'], button[type='submit']")),
+    ):
+        try:
+            el = localizador.first
+            el.wait_for(state="visible", timeout=4000)
+            el.click(timeout=5000)
+            enviado = descripcion
+            break
+        except Exception:
+            continue
     if not enviado:
-        for sel in ("input[type='submit']", "button[type='submit']"):
-            try:
-                page.click(sel, timeout=4000)
-                enviado = True
-                break
-            except Exception:
-                continue
-    if not enviado:
-        page.press(_SEL_CLAVE, "Enter")
-    log(f"  formulario enviado ({'botón' if enviado else 'Enter'})", "info")
+        try:
+            page.locator(_SEL_CLAVE).first.press("Enter")
+            enviado = "Enter"
+        except Exception:
+            enviado = "no se pudo enviar"
+    log(f"  enviado con: {enviado}", "info")
 
     log("Enviando...", "info")
     # Esperar: entró, error de credenciales, o pide código de verificación

@@ -3135,6 +3135,9 @@ def dicom_probar_login():
                 _dicom_log(tid, "✓ Acceso confirmado", "ok")
             except LoginFallido as e:
                 _dicom_log(tid, f"✗ {e}", "err")
+                # La captura del fallo también se muestra, para ver la pantalla real
+                if os.path.exists(ruta):
+                    _dicom_tareas[tid]["captura"] = os.path.basename(ruta)
                 _dicom_tareas[tid]["error"] = True
         except Exception as e:
             import traceback

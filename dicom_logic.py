@@ -40,6 +40,47 @@ def _sigue_en_login(page):
         return False
 
 
+def _dump_campos(page, log):
+    """Detalla todos los campos visibles: etiqueta, placeholder, si es
+    obligatorio y si tiene valor. Sirve para identificar campos ocultos
+    a la vista (captcha, código, etc.) que estén frenando el envío."""
+    try:
+        campos = page.evaluate("""() => {
+            const out = [];
+            for (const e of document.querySelectorAll('input, select, textarea')) {
+                if (e.offsetParent === null || e.type === 'hidden') continue;
+                let etiqueta = e.getAttribute('aria-label') || '';
+                if (!etiqueta && e.id) {
+                    const l = document.querySelector('label[for="' + e.id + '"]');
+                    if (l) etiqueta = l.innerText.trim();
+                }
+                if (!etiqueta) {
+                    const cont = e.closest('div, li, td');
+                    if (cont) {
+                        const l = cont.querySelector('label');
+                        if (l) etiqueta = l.innerText.trim();
+                    }
+                }
+                out.push({
+                    tipo: e.type || e.tagName.toLowerCase(),
+                    name: e.name || '', id: e.id || '',
+                    etiqueta: (etiqueta || '').replace(/\\s+/g, ' ').slice(0, 40),
+                    placeholder: e.placeholder || '',
+                    obligatorio: !!e.required || e.getAttribute('aria-required') === 'true',
+                    conValor: !!(e.value || '').trim()
+                });
+            }
+            return out.slice(0, 10);
+        }""")
+        log("  [debug] campos de la pantalla:", "warn")
+        for c in campos:
+            log(f"    {c['tipo']} name={c['name']!r} id={c['id']!r} "
+                f"etiqueta={c['etiqueta']!r} ph={c['placeholder']!r} "
+                f"obligatorio={c['obligatorio']} conValor={c['conValor']}", "warn")
+    except Exception:
+        pass
+
+
 def _hay(page, selector):
     try:
         return page.locator(selector).count() > 0
@@ -283,8 +324,25 @@ def probar_login(correo, clave, log, ruta_captura=None):
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
         page = ctx.new_page()
         page.set_default_timeout(45000)
+
+        def _captura(etiqueta=""):
+            if not ruta_captura:
+                return
+            try:
+                os.makedirs(os.path.dirname(ruta_captura), exist_ok=True)
+                page.screenshot(path=ruta_captura, full_page=False)
+                log(f"Captura de pantalla guardada{etiqueta}", "ok")
+            except Exception as e:
+                log(f"No se pudo guardar la captura: {type(e).__name__}", "warn")
+
         try:
-            hacer_login(page, correo, clave, log)
+            try:
+                hacer_login(page, correo, clave, log)
+            except LoginFallido:
+                # Guardar la captura del FALLO para poder ver qué muestra el portal
+                _captura(" (pantalla del error)")
+                _dump_campos(page, log)
+                raise
             # Dejar constancia de dónde quedó y qué se ve
             info = {"url": page.url, "titulo": ""}
             try:
@@ -295,13 +353,7 @@ def probar_login(correo, clave, log, ruta_captura=None):
             resumen = _texto(page, 300)
             if resumen:
                 log(f"Contenido: {resumen}", "info")
-            if ruta_captura:
-                try:
-                    os.makedirs(os.path.dirname(ruta_captura), exist_ok=True)
-                    page.screenshot(path=ruta_captura, full_page=False)
-                    log("Captura de pantalla guardada", "ok")
-                except Exception as e:
-                    log(f"No se pudo guardar la captura: {type(e).__name__}", "warn")
+            _captura()
             return info
         finally:
             try:

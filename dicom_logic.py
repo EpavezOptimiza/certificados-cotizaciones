@@ -113,8 +113,12 @@ def _tipear(page, selector, texto, log=None):
         pass
 
 
+VERSION = "v4 (Okta + pantalla virtual + verificación de botón)"
+
+
 def hacer_login(page, correo, clave, log):
     """Login en dos pasos: usuario → Next → contraseña → entrar."""
+    log(f"DICOM {VERSION}", "info")
     log("Abriendo el portal de Equifax...", "info")
     page.goto(URL_LOGIN, wait_until="domcontentloaded", timeout=45000)
 
@@ -246,12 +250,28 @@ def hacer_login(page, correo, clave, log):
     log(f"  enviado con: {enviado}", "info")
 
     log("Enviando...", "info")
-    # Esperar: entró, error de credenciales, o pide código de verificación
-    fin = time.time() + 35
+    # Esperar hasta 90 s: el portal pasa por /auth/implicit/callback y ahí se
+    # queda "cargando" un buen rato antes de entrar. Se informa el avance.
+    fin = time.time() + 90
     error_texto = ""
+    ultimo_aviso = time.time()
+    url_previa = page.url
     while time.time() < fin:
+        # ¿Cambió de dirección? Señal de que el acceso avanzó
+        try:
+            if page.url != url_previa:
+                log(f"  → {page.url[:90]}", "info")
+                url_previa = page.url
+                if "callback" in page.url.lower() or "login" not in page.url.lower():
+                    log("  El portal está procesando el acceso...", "info")
+        except Exception:
+            pass
         if not _sigue_en_login(page):
             break
+        if time.time() - ultimo_aviso > 15:
+            ultimo_aviso = time.time()
+            restante = int(fin - time.time())
+            log(f"  esperando respuesta del portal... ({restante}s restantes)", "info")
         try:
             error_texto = page.evaluate("""() => {
                 const t = (document.body ? document.body.innerText : '').toLowerCase();
@@ -322,8 +342,17 @@ def hacer_login(page, correo, clave, log):
             f"{(' [avisos: ' + alertas + ']') if alertas and alertas != detalle else ''}"
             f" [campos: {estado_campos}] [cambió de página: {cambio}]")
 
+    # Salió del login. Ahora puede quedar en /auth/implicit/callback "cargando":
+    # se espera a que termine de resolver antes de dar por buena la entrada.
+    if "callback" in (page.url or "").lower():
+        log("Procesando el acceso (pantalla de carga)...", "info")
+        fin_cb = time.time() + 60
+        while time.time() < fin_cb and "callback" in (page.url or "").lower():
+            time.sleep(1)
+        log(f"  → {page.url[:90]}", "info")
+
     try:
-        page.wait_for_load_state("networkidle", timeout=15000)
+        page.wait_for_load_state("networkidle", timeout=20000)
     except Exception:
         pass
 

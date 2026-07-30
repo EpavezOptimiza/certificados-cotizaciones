@@ -83,6 +83,78 @@ def esta_en_login(page) -> bool:
         return False
 
 
+class CuentaBloqueada(Exception):
+    """PreviRed indica clave expirada o usuario bloqueado."""
+
+
+# Tope de seguridad: los re-login preventivos fueron los que provocaron el
+# bloqueo de la cuenta maestra. Nunca más se inicia sesión "por si acaso".
+_MAX_LOGINS = 15
+
+
+def revisar_cuenta_bloqueada(page):
+    """Lanza CuentaBloqueada si el portal avisa clave expirada / usuario bloqueado."""
+    try:
+        malo = page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '').toLowerCase();
+            return t.includes('clave ha expirado') || t.includes('encuentra bloqueado') ||
+                   t.includes('usuario bloqueado');
+        }""")
+    except Exception:
+        return
+    if malo:
+        raise CuentaBloqueada(
+            "PreviRed indica: 'Su clave ha expirado, o su usuario se encuentra "
+            "bloqueado'. Renueva la clave en previred.com y actualízala en la "
+            "configuración de Previred de la plataforma.")
+
+
+def sesion_expirada(page) -> bool:
+    """True si el portal muestra 'sesión expirada' o volvió al login.
+    OJO: 'Su CLAVE ha expirado' NO es esto (es cuenta bloqueada)."""
+    try:
+        if esta_en_login(page):
+            return True
+        return bool(page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '')
+                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+            if (t.includes('clave ha expirado') || t.includes('encuentra bloqueado'))
+                return false;
+            return t.includes('sesion expirada') || t.includes('sesion ha expirado') ||
+                   t.includes('sesion ha caducado') || t.includes('sesion caducada') ||
+                   t.includes('sesion ha finalizado') || t.includes('sesion finalizada') ||
+                   t.includes('sesion ha sido cerrada') || t.includes('vuelva a iniciar sesion') ||
+                   t.includes('debe iniciar sesion') || t.includes('sesion no valida') ||
+                   t.includes('su sesion ha');
+        }"""))
+    except Exception:
+        return False
+
+
+def login_previred(page, rut_usuario, contrasena, log, estado, motivo=""):
+    """Inicia sesión llevando la cuenta. Se usa UNA VEZ al comenzar y,
+    después, solo cuando se detecta que la sesión expiró."""
+    estado["logins"] = estado.get("logins", 0) + 1
+    if estado["logins"] > _MAX_LOGINS:
+        raise CuentaBloqueada(
+            f"La sesión se cerró {_MAX_LOGINS} veces en esta descarga. Se detiene "
+            "para no arriesgar el bloqueo de la cuenta en PreviRed.")
+    if motivo:
+        log(f"{motivo} (reconexión {estado['logins']})", "warn")
+    hacer_login(page, rut_usuario, contrasena, log)
+    revisar_cuenta_bloqueada(page)
+
+
+def reconectar_si_expiro(page, rut_usuario, contrasena, log, estado):
+    """Reconecta SOLO si la sesión expiró. Devuelve True si reconectó."""
+    revisar_cuenta_bloqueada(page)
+    if not sesion_expirada(page):
+        return False
+    login_previred(page, rut_usuario, contrasena, log, estado,
+                   motivo="Sesión expirada en PreviRed — reconectando")
+    return True
+
+
 def ir_a_empresa(page, rut_empresa: str, log, razon_social: str = ""):
     rut_num = rut_empresa.replace(".", "").split("-")[0]
     patron = f"empresa#{rut_num}#"
@@ -203,14 +275,16 @@ def ir_a_planillas_pagadas(page, log):
     log("En sección Planillas Pagadas", "ok")
 
 
-def verificar_y_relogin(page, rut_usuario, contrasena, rut_empresa, razon_social, log):
-    if esta_en_login(page):
-        log("Sesión expirada — re-login automático...", "warn")
-        hacer_login(page, rut_usuario, contrasena, log)
-        ir_a_empresa(page, rut_empresa, log, razon_social)
-        ir_a_planillas_pagadas(page, log)
-        return True
-    return False
+def verificar_y_relogin(page, rut_usuario, contrasena, rut_empresa, razon_social, log,
+                        estado=None):
+    """Reconecta solo si la sesión expiró (nunca de forma preventiva)."""
+    if estado is None:
+        estado = {}
+    if not reconectar_si_expiro(page, rut_usuario, contrasena, log, estado):
+        return False
+    ir_a_empresa(page, rut_empresa, log, razon_social)
+    ir_a_planillas_pagadas(page, log)
+    return True
 
 
 def _cerrar_tabs_extra(page):
@@ -487,7 +561,8 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
     return False
 
 
-def volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log):
+def volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log,
+                      estado=None):
     _cerrar_tabs_extra(page)
     # Intentar con el texto exacto (timeout corto)
     if _click_texto(page, "Nueva búsqueda", timeout=3000):
@@ -516,8 +591,9 @@ def volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, 
     try:
         ir_a_planillas_pagadas(page, log)
     except Exception:
-        if esta_en_login(page):
-            hacer_login(page, rut_usuario, contrasena, log)
+        # Reconectar solo si la sesión expiró de verdad
+        if reconectar_si_expiro(page, rut_usuario, contrasena, log,
+                                estado if estado is not None else {}):
             ir_a_empresa(page, rut_empresa, log, razon_social)
             ir_a_planillas_pagadas(page, log)
 
@@ -539,27 +615,27 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
         # Timeout global: ninguna operación Playwright puede colgar más de 45s
         page.set_default_timeout(45000)
         page.set_default_navigation_timeout(45000)
+        estado = {"logins": 0}
         try:
-            hacer_login(page, rut_usuario, contrasena, log)
+            # ÚNICO login de la descarga. Después solo se reconecta si PreviRed
+            # cierra la sesión (los re-login preventivos bloquearon la cuenta).
+            login_previred(page, rut_usuario, contrasena, log, estado)
             try:
                 ir_a_empresa(page, rut_empresa, log, razon_social)
             except Exception as e_emp:
-                log(f"ir_a_empresa falló ({e_emp.__class__.__name__}), reintentando con re-login...", "warn")
-                hacer_login(page, rut_usuario, contrasena, log)
+                log(f"ir_a_empresa falló ({e_emp.__class__.__name__}), reintentando...", "warn")
+                reconectar_si_expiro(page, rut_usuario, contrasena, log, estado)
                 ir_a_empresa(page, rut_empresa, log, razon_social)
             ir_a_planillas_pagadas(page, log)
 
             log(f"Períodos a procesar: {len(periodos)}", "info")
 
-            periodos_con_nomina = 0
             for (mes, anio) in periodos:
                 mes_nombre = MESES_NOMBRE.get(mes, str(mes))
                 log(f"── Período: {mes_nombre} {anio}", "info")
 
-                if periodos_con_nomina > 0 and periodos_con_nomina % 3 == 0:
-                    log("Re-login preventivo...", "info")
-                    # hacer_login ya navega a URL_LOGIN, no duplicar goto
-                    hacer_login(page, rut_usuario, contrasena, log)
+                # Sin re-login preventivo: solo si la sesión expiró de verdad
+                if reconectar_si_expiro(page, rut_usuario, contrasena, log, estado):
                     ir_a_empresa(page, rut_empresa, log, razon_social)
                     ir_a_planillas_pagadas(page, log)
 
@@ -573,7 +649,6 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                     log("Sin nóminas para este período", "warn")
                     continue
 
-                periodos_con_nomina += 1
                 log(f"Nóminas ({len(nominas)}): {', '.join(nominas)}", "info")
 
                 for nombre_nomina in nominas:
@@ -582,15 +657,15 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                         hay = buscar_planilla(page, mes, anio, nombre_nomina)
                         if not hay:
                             log(f"Sin planillas timbradas: {nombre_nomina}", "warn")
-                            volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log)
+                            volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log, estado)
                             continue
                         descargar_planilla(page, mes, anio, nombre_nomina,
                                            carpeta_temp, carpeta_dest, log)
-                        volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log)
+                        volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log, estado)
                     except Exception as e:
                         log(f"Error '{nombre_nomina}' ({type(e).__name__}): {str(e)[:200]}", "err")
                         try:
-                            volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log)
+                            volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log, estado)
                         except Exception:
                             pass
 

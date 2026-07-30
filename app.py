@@ -1993,7 +1993,7 @@ def previred_iniciar():
                     _tareas[tid]["error"] = True
                     _tareas[tid]["done"]  = True
                     return
-                from previred_logic import descargar
+                from previred_logic import descargar, CuentaBloqueada
                 todas_rutas_pdf = []
                 for emp in empresas:
                     rut_empresa  = (emp.get("rut") or "").strip()
@@ -2005,9 +2005,17 @@ def previred_iniciar():
                     os.makedirs(carpeta_emp, exist_ok=True)
                     carpeta_temp_tarea = os.path.join(_TEMP_DIR, tid)
                     os.makedirs(carpeta_temp_tarea, exist_ok=True)
-                    descargar(rut_usr, cont_usr, rut_empresa, periodos,
-                              carpeta_emp, carpeta_temp_tarea, lambda m, t: _log(tid, m, t),
-                              razon_social=razon_social)
+                    try:
+                        descargar(rut_usr, cont_usr, rut_empresa, periodos,
+                                  carpeta_emp, carpeta_temp_tarea, lambda m, t: _log(tid, m, t),
+                                  razon_social=razon_social)
+                    except CuentaBloqueada as e_bloq:
+                        _log(tid, "⛔ PROCESO DETENIDO — cuenta de PreviRed bloqueada "
+                                  "o clave expirada", "err")
+                        _log(tid, str(e_bloq), "err")
+                        _tareas[tid]["error"] = True
+                        _tareas[tid]["done"]  = True
+                        return
                     pdfs_emp = [os.path.join(carpeta_emp, f) for f in os.listdir(carpeta_emp) if f.endswith(".pdf")]
                     todas_rutas_pdf.extend(pdfs_emp)
                     _log(tid, f"__EMPRESA_OK__:{rut_empresa}:{razon_social}", "ok")

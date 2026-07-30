@@ -307,21 +307,45 @@ def hacer_login(page, correo, clave, log):
 
 
 def probar_login(correo, clave, log, ruta_captura=None):
-    """Entra al portal, confirma el acceso y guarda una captura de pantalla."""
-    with sync_playwright() as pw:
+    """Entra al portal, confirma el acceso y guarda una captura de pantalla.
+
+    Equifax detecta navegadores automatizados: en modo invisible (headless)
+    el acceso rebota sin dar error. Por eso se levanta una pantalla virtual
+    (xvfb) y el navegador corre CON pantalla, igual que en el módulo Mi DT.
+    """
+    display = None
+    headless = True
+    try:
+        from pyvirtualdisplay import Display
+        display = Display(visible=0, size=(1440, 1000))
+        display.start()
+        headless = False
+        log("Pantalla virtual iniciada — navegador con pantalla", "info")
+    except Exception as e:
+        log(f"Sin pantalla virtual ({str(e)[:40]}); se usará modo invisible", "warn")
+
+    try:
+      with sync_playwright() as pw:
         browser = pw.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-                  "--disable-blink-features=AutomationControlled"],
+            headless=headless,
+            args=["--no-sandbox", "--disable-dev-shm-usage",
+                  "--disable-blink-features=AutomationControlled",
+                  "--disable-features=IsolateOrigins,site-per-process"],
         )
         ctx = browser.new_context(
             viewport={"width": 1400, "height": 900},
             user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"),
             locale="es-CL",
+            timezone_id="America/Santiago",
         )
-        ctx.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+        # Ocultar las señales típicas de automatización
+        ctx.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['es-CL','es','en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+            window.chrome = window.chrome || {runtime: {}};
+        """)
         page = ctx.new_page()
         page.set_default_timeout(45000)
 
@@ -361,3 +385,9 @@ def probar_login(correo, clave, log, ruta_captura=None):
             except Exception:
                 pass
             browser.close()
+    finally:
+        if display:
+            try:
+                display.stop()
+            except Exception:
+                pass

@@ -146,6 +146,24 @@ class CuentaBloqueada(Exception):
     """PreviRed respondió que la clave expiró o el usuario está bloqueado."""
 
 
+# Tope de inicios de sesión por corrida. Anoche un bucle de re-login llegó a
+# más de 100 en dos horas y PreviRed bloqueó la cuenta: nunca más.
+_MAX_LOGINS = 15
+
+
+def _login_seguro(page, usuario, clave, log, estado):
+    """hacer_login con contador: corta la corrida antes de que el portal
+    interprete los reintentos como un ataque."""
+    estado["logins"] = estado.get("logins", 0) + 1
+    if estado["logins"] > _MAX_LOGINS:
+        raise CuentaBloqueada(
+            f"Se alcanzó el límite de {_MAX_LOGINS} inicios de sesión en esta corrida. "
+            "Se detiene para no provocar el bloqueo de la cuenta en PreviRed. "
+            "Revisa el log: algo está cortando la sesión en cada empresa.")
+    hacer_login(page, usuario, clave, log)
+    _revisar_cuenta_bloqueada(page)
+
+
 def _revisar_cuenta_bloqueada(page):
     """Lanza CuentaBloqueada si el portal muestra ese aviso tras el login."""
     try:
@@ -187,7 +205,7 @@ _JS_CLICK_INICIO = """() => {
 }"""
 
 
-def _asegurar_menu_empresas(page, usuario, clave, log):
+def _asegurar_menu_empresas(page, usuario, clave, log, estado=None):
     """Deja la página donde existe el menú de empresas. Devuelve True/False.
 
     Primero espera con paciencia (el portal tarda en pintar el menú tras el
@@ -204,9 +222,12 @@ def _asegurar_menu_empresas(page, usuario, clave, log):
         if intento == 0:
             try:
                 if esta_en_login(page):
-                    hacer_login(page, usuario, clave, log)
+                    _login_seguro(page, usuario, clave, log,
+                                  estado if estado is not None else {})
                     if _menu_empresas_visible(page, espera=15):
                         return True
+            except CuentaBloqueada:
+                raise
             except Exception:
                 pass
     return False
@@ -266,7 +287,7 @@ def _volver_al_inicio(page, estado, usuario, clave, log):
     # 4. Último recurso: re-login. El menú se espera después, en _ids_empresa
     # (con 20s de paciencia y, si hace falta, el enlace "Inicio").
     log("  Reabriendo sesión...", "warn")
-    hacer_login(page, usuario, clave, log)
+    _login_seguro(page, usuario, clave, log, estado)
     estado["home"] = page.url
 
 
@@ -302,7 +323,7 @@ _JS_TABLA_TRABAJADORES = """(orgKeys) => {
 }"""
 
 
-def _ids_empresa(page, rut, log, usuario=None, clave=None):
+def _ids_empresa(page, rut, log, usuario=None, clave=None, estado=None):
     """Abre el menú de empresas y devuelve los ids de botón para ese RUT.
     Si no aparece, intenta filtrar por RUT y entrega diagnóstico real."""
     rut_num = rut.replace(".", "").split("-")[0]
@@ -310,7 +331,7 @@ def _ids_empresa(page, rut, log, usuario=None, clave=None):
 
     # Esperar al menú como siempre (20s); si no aparece, probar "Inicio"
     if not _menu_empresas_visible(page, espera=20):
-        if not _asegurar_menu_empresas(page, usuario, clave, log):
+        if not _asegurar_menu_empresas(page, usuario, clave, log, estado):
             log("  No se pudo abrir el listado de empresas del portal", "warn")
             # Diagnóstico: ¿qué está mostrando realmente el portal?
             try:
@@ -881,10 +902,10 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
         page = context.new_page()
         page.set_default_timeout(45000)
         page.set_default_navigation_timeout(45000)
+        estado = {"logins": 0}
         try:
-            hacer_login(page, usuario, clave, log)
-            _revisar_cuenta_bloqueada(page)   # aborta de inmediato si está bloqueada
-            estado = {"home": page.url}   # URL real del portal tras el login
+            _login_seguro(page, usuario, clave, log, estado)   # aborta si está bloqueada
+            estado["home"] = page.url   # URL real del portal tras el login
 
             t0_global = time.time()
             for i, cli in enumerate(clientes, 1):
@@ -902,7 +923,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                     if i > 1:
                         _volver_al_inicio(page, estado, usuario, clave, log)
 
-                    ids = _ids_empresa(page, rut, log, usuario, clave)
+                    ids = _ids_empresa(page, rut, log, usuario, clave, estado)
                     if not ids:
                         _revisar_cuenta_bloqueada(page)   # ¿bloqueo a media corrida?
                         guardar(rut, razon, "", None, "no_esta_en_previred")
@@ -918,7 +939,7 @@ def actualizar_trabajadores(usuario, clave, clientes, mes, anio, carpeta_temp, l
                     for k, btn_id in enumerate(ids):
                         if k > 0:
                             _volver_al_inicio(page, estado, usuario, clave, log)
-                            if not _ids_empresa(page, rut, log, usuario, clave):
+                            if not _ids_empresa(page, rut, log, usuario, clave, estado):
                                 break
                         etiqueta = btn_id.split("#")[2] if btn_id.count("#") >= 2 else str(k)
                         try:

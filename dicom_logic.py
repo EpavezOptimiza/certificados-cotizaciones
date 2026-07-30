@@ -256,6 +256,7 @@ def hacer_login(page, correo, clave, log):
     error_texto = ""
     ultimo_aviso = time.time()
     url_previa = page.url
+    estable = 0          # veces seguidas SIN formulario (evita el falso positivo)
     while time.time() < fin:
         # ¿Cambió de dirección? Señal de que el acceso avanzó
         try:
@@ -266,8 +267,16 @@ def hacer_login(page, correo, clave, log):
                     log("  El portal está procesando el acceso...", "info")
         except Exception:
             pass
+
+        # El formulario de Okta desaparece un instante al enviarse: hay que
+        # confirmar que se fue DE VERDAD (varias comprobaciones seguidas).
         if not _sigue_en_login(page):
-            break
+            estable += 1
+            if estable >= 4:
+                break
+        else:
+            estable = 0
+
         if time.time() - ultimo_aviso > 15:
             ultimo_aviso = time.time()
             restante = int(fin - time.time())

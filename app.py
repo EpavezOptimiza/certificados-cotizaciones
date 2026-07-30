@@ -3053,6 +3053,116 @@ def subsidio_config_set():
     return jsonify({"ok": True, "total": r.get("resumen", {}).get("total", 0)})
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# DICOM / Equifax — por ahora solo prueba de acceso (no compra nada)
+# ────────────────────────────────────────────────────────────────────────────
+
+_dicom_tareas: dict = {}
+
+
+def _dicom_log(tid, msg, tipo="info"):
+    import datetime as _dt
+    if tid in _dicom_tareas:
+        _dicom_tareas[tid]["logs"].append({
+            "msg": msg, "tipo": tipo, "t": _dt.datetime.now().strftime("%H:%M:%S")})
+
+
+def _dicom_cfg(clave, valor=None):
+    """Lee o guarda configuración de DICOM en app_config."""
+    with get_conn() as conn:
+        if valor is None:
+            row = conn.execute("SELECT valor FROM app_config WHERE clave=?",
+                               (f"dicom_{clave}",)).fetchone()
+            return (row["valor"] if row else "") or ""
+        conn.execute("INSERT INTO app_config(clave, valor) VALUES(?, ?) "
+                     "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor",
+                     (f"dicom_{clave}", valor))
+        return valor
+
+
+@app.route("/dicom")
+@login_required
+def dicom_page():
+    return render_template("dicom.html")
+
+
+@app.route("/api/dicom/config", methods=["GET", "POST"])
+@api_login_required
+def dicom_config():
+    if request.method == "POST":
+        d = request.json or {}
+        correo = (d.get("correo") or "").strip()
+        clave  = (d.get("clave") or "").strip()
+        if correo:
+            _dicom_cfg("correo", correo)
+        if clave:
+            _dicom_cfg("clave", clave)
+        return jsonify({"ok": True})
+    return jsonify({"correo": _dicom_cfg("correo"),
+                    "tiene_clave": bool(_dicom_cfg("clave"))})
+
+
+@app.route("/api/dicom/probar_login", methods=["POST"])
+@api_login_required
+def dicom_probar_login():
+    import threading, uuid
+    d = request.json or {}
+    correo = (d.get("correo") or "").strip() or _dicom_cfg("correo")
+    clave  = (d.get("clave") or "").strip() or _dicom_cfg("clave")
+    if not correo or not clave:
+        return jsonify({"error": "Faltan el correo y la contraseña de DICOM"}), 400
+
+    tid = uuid.uuid4().hex[:12]
+    _dicom_tareas[tid] = {"logs": [], "done": False, "error": False, "captura": None}
+
+    def run_task():
+        ruta = os.path.join(_EXCELS_DIR, f"dicom_login_{tid}.png")
+        try:
+            from dicom_logic import probar_login, LoginFallido
+            try:
+                probar_login(correo, clave,
+                             log=lambda m, t="info": _dicom_log(tid, m, t),
+                             ruta_captura=ruta)
+                if os.path.exists(ruta):
+                    _dicom_tareas[tid]["captura"] = os.path.basename(ruta)
+                _dicom_log(tid, "✓ Acceso confirmado", "ok")
+            except LoginFallido as e:
+                _dicom_log(tid, f"✗ {e}", "err")
+                _dicom_tareas[tid]["error"] = True
+        except Exception as e:
+            import traceback
+            _dicom_log(tid, f"Error: {e}", "err")
+            _dicom_log(tid, traceback.format_exc()[:300], "err")
+            _dicom_tareas[tid]["error"] = True
+        finally:
+            _dicom_tareas[tid]["done"] = True
+
+    threading.Thread(target=run_task, daemon=True).start()
+    return jsonify({"ok": True, "task_id": tid})
+
+
+@app.route("/api/dicom/tarea/<tid>")
+@api_login_required
+def dicom_tarea(tid):
+    t = _dicom_tareas.get(tid)
+    if not t:
+        return jsonify({"error": "Tarea no encontrada", "logs": [], "done": True}), 404
+    since = int(request.args.get("since", 0))
+    return jsonify({"logs": t["logs"][since:], "done": t["done"],
+                    "error": t["error"], "captura": t["captura"]})
+
+
+@app.route("/api/dicom/captura/<nombre>")
+@api_login_required
+def dicom_captura(nombre):
+    if not (nombre.startswith("dicom_login_") and nombre.endswith(".png")):
+        return jsonify({"error": "Nombre inválido"}), 400
+    ruta = os.path.join(_EXCELS_DIR, os.path.basename(nombre))
+    if not os.path.exists(ruta):
+        return jsonify({"error": "Captura no encontrada"}), 404
+    return send_file(ruta, mimetype="image/png")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

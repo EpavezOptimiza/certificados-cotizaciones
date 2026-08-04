@@ -781,24 +781,68 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     page.wait_for_timeout(1000)
                 except: pass
 
+            def en_listado_empresas():
+                """True si la página actual es el 'Administrador de Empresas'."""
+                try:
+                    if page.locator("text=Administrador de Empresas").count() > 0:
+                        return True
+                except: pass
+                try:
+                    return page.locator("tr:has-text('Ingresar')").count() > 1
+                except:
+                    return False
+
             def ir_a_empresas():
-                """Hace click en el menú/tile Empresas desde la página actual."""
+                """Deja la página en el listado de empresas, venga de donde venga.
+
+                El menú 'Empresas' sólo existe en el portal: una vez dentro de una
+                empresa hay que salir primero (Volver / logo) para recuperarlo.
+                """
+                if en_listado_empresas():
+                    return True
+
                 if page.locator("text=Elemento no encontrado").count() > 0:
                     log("⚠ PreviRed mostró error — volviendo al inicio...")
                     ir_a_inicio()
                     page.wait_for_timeout(1000)
 
-                for sel in ["li#empresa > a", "li#empresa", "a:has-text('Empresas')", "span:has-text('Empresas')"]:
-                    try:
-                        el = page.locator(sel).first
-                        if el.count() > 0:
-                            el.scroll_into_view_if_needed()
-                            el.click()
-                            log(f"✓ Click en Empresas: {sel}")
-                            page.wait_for_timeout(2000)
-                            return
-                    except: pass
-                log("⚠ No se encontró el botón Empresas")
+                rutas = [
+                    ("menú Empresas", ["li#empresa > a", "li#empresa",
+                                       "a:has-text('Empresas')", "span:has-text('Empresas')"]),
+                    ("botón Volver",  ["a:has-text('Volver')", "button:has-text('Volver')",
+                                       "input[value='Volver']"]),
+                ]
+                for intento in range(3):
+                    for nombre, sels in rutas:
+                        for sel in sels:
+                            try:
+                                el = page.locator(sel).first
+                                if el.count() > 0:
+                                    el.scroll_into_view_if_needed()
+                                    el.click()
+                                    page.wait_for_timeout(2000)
+                                    if en_listado_empresas():
+                                        log(f"✓ En el listado de empresas ({nombre})")
+                                        return True
+                            except: pass
+                    ir_a_inicio()
+                    page.wait_for_timeout(1500)
+                    if en_listado_empresas():
+                        log("✓ En el listado de empresas (vía inicio)")
+                        return True
+
+                # Último recurso: entrar directo al módulo de empresas
+                try:
+                    page.goto("https://www.previred.com/wEmpresas/CtrlFce",
+                              wait_until='domcontentloaded', timeout=15000)
+                    page.wait_for_timeout(2000)
+                    if en_listado_empresas():
+                        log("✓ En el listado de empresas (navegación directa)")
+                        return True
+                except: pass
+
+                log("⚠ No se pudo volver al listado de empresas")
+                return False
 
             # ── Procesar cada trabajador ───────────────────────────────────────
             for w in workers:
@@ -815,22 +859,24 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 log(f"causa={w.get('causa')} | es_ausentismo={es_ausentismo} | periodos_sel={w.get('periodos_sel')} | periodos_parsed={periodos_parsed}")
 
                 log(f"Procesando {w['nombre']} ({w['rut_trabajador']})...")
-                ir_a_empresas()
+                if not ir_a_empresas():
+                    save_screenshot(f'bot_noemp_{job_id[:8]}.png')
+                    job['resultados'][w['rut_trabajador']] = 'error_empresa'
+                    continue
                 save_screenshot(f'bot_empresas_{job_id[:8]}.png')
-                log(f"URL empresas: {page.url}")
 
                 # Buscar empresa — nuevo UI: botón "Ingresar" en tabla.
                 # La tabla muestra el RUT con puntos (53.331.589-5), así que hay
                 # que comparar sin puntos por ambos lados.
                 ingresado = False
-                url_listado = page.url
                 ruts_vistos = []
                 try:
                     filas = page.locator("tr").all()
                     for fila in filas:
                         txt = fila.inner_text() or ''
+                        # Sin puntos para comparar; con espacios para diagnosticar
                         txt_norm = re.sub(r'[.\s]', '', txt)
-                        m = re.search(r'\b(\d{7,8})-[\dkK]\b', txt_norm)
+                        m = re.search(r'(\d{7,8}-[\dkK])\b', re.sub(r'\.', '', txt))
                         if m:
                             ruts_vistos.append(m.group(1))
                         if rut_num and rut_num in txt_norm:
@@ -853,22 +899,18 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     job['resultados'][w['rut_trabajador']] = 'error_empresa'
                     continue
 
-                # Esperar a que la navegación salga del listado de empresas
+                # PreviRed no cambia la URL al entrar a la empresa (todo el módulo
+                # cuelga de /wEmpresas/CtrlFce), así que la señal de que cargó es
+                # que aparezca el botón regulariza de esta empresa.
                 try:
                     page.wait_for_load_state('domcontentloaded', timeout=15000)
                 except: pass
-                for _ in range(10):
-                    if page.url != url_listado:
-                        break
-                    page.wait_for_timeout(1000)
+                try:
+                    page.locator(f"[id*='regulariza#{rut_num}']").first.wait_for(
+                        state='visible', timeout=15000)
+                except: pass
 
                 save_screenshot(f'bot_dentro_empresa_{job_id[:8]}.png')
-                log(f"URL dentro empresa: {page.url}")
-
-                if page.url == url_listado:
-                    log(f"⚠ El click en Ingresar no cargó la empresa {rut_e} (sigue en el listado)")
-                    job['resultados'][w['rut_trabajador']] = 'error_empresa'
-                    continue
 
                 # Click en botón Regulariza con ID exacto: regulariza#RUTNUM#00
                 mov_clicked = False

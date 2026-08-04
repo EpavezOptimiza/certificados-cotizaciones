@@ -575,6 +575,10 @@ def destacar_pdf(pdf_bytes, workers, resaltar_fila=True):
     return out, stats
 
 # ── Bot PreviRed (headless) ───────────────────────────────────────────────────
+class CredencialesPreviRed(Exception):
+    """PreviRed rechazó el RUT/clave del bot."""
+
+
 def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
     """Corre el bot de PreviRed en un thread separado."""
     job = _jobs[job_id]
@@ -696,12 +700,8 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 except Exception as se:
                     log(f"(sin captura: {se})")
 
-            page.goto("https://www.previred.com/wPortal/login/login.jsp", wait_until='domcontentloaded')
-            page.wait_for_timeout(2000)
-            log(f"URL actual: {page.url}")
-            save_screenshot(f'bot_login_{job_id[:8]}.png')
-
             # Selectores del formulario de login de PreviRed
+            LOGIN_URL  = "https://www.previred.com/wPortal/login/login.jsp"
             RUT_SELS   = ['[name="web_rut2"]', '#web_rut', '[name="web_rut"]', 'input[type="text"]']
             CLAVE_SELS = ['[name="web_password"]', '#web_clave', '[name="web_clave"]', 'input[type="password"]']
             BTN_SELS   = [
@@ -712,6 +712,11 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 'button[type="submit"]',
                 'input[type="submit"]',
             ]
+            # Tope de seguridad: el re-login solo ocurre cuando la sesión se cerró
+            # de verdad, pero si algo la cortara una y otra vez esto detiene la
+            # corrida antes de que PreviRed lo tome por un ataque y bloquee la cuenta.
+            MAX_LOGINS = 15
+            _logins = {'n': 0}
 
             def try_fill(sels, value, campo):
                 for sel in sels:
@@ -725,45 +730,91 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 log(f"⚠ No se encontró campo {campo}")
                 return False
 
-            try_fill(RUT_SELS, rut_login, 'RUT')
-            try_fill(CLAVE_SELS, clave, 'clave')
+            def hacer_login(motivo=""):
+                """Inicia sesión. Se llama UNA VEZ al comenzar; después solo si se
+                detecta que PreviRed cerró la sesión (nunca de forma preventiva)."""
+                _logins['n'] += 1
+                if _logins['n'] > MAX_LOGINS:
+                    raise Exception(
+                        f"La sesión se cerró {MAX_LOGINS} veces en esta corrida. Se detiene "
+                        "para no arriesgar el bloqueo de la cuenta en PreviRed. Vuelve a "
+                        "lanzarla más tarde.")
+                if motivo:
+                    log(f"⚠ {motivo} (reconexión {_logins['n']})")
 
-            btn_clicked = False
-            for sel in BTN_SELS:
-                try:
-                    el = page.locator(sel).first
-                    el.wait_for(state='visible', timeout=3000)
-                    el.click()
-                    btn_clicked = True
-                    log(f"✓ Click en botón login: {sel}")
-                    break
-                except: pass
+                page.goto(LOGIN_URL, wait_until='domcontentloaded')
+                page.wait_for_timeout(2000)
+                save_screenshot(f'bot_login_{job_id[:8]}.png')
 
-            if not btn_clicked:
-                # Último recurso: Enter en el campo clave
-                for sel in CLAVE_SELS:
+                try_fill(RUT_SELS, rut_login, 'RUT')
+                try_fill(CLAVE_SELS, clave, 'clave')
+
+                btn_clicked = False
+                for sel in BTN_SELS:
                     try:
-                        page.locator(sel).first.press('Enter')
+                        el = page.locator(sel).first
+                        el.wait_for(state='visible', timeout=3000)
+                        el.click()
                         btn_clicked = True
-                        log("✓ Login via Enter en campo clave")
+                        log(f"✓ Click en botón login: {sel}")
                         break
                     except: pass
 
-            if not btn_clicked:
-                save_screenshot(f'bot_nologin_{job_id[:8]}.png')
-                raise Exception("No se encontró el botón de login en PreviRed. Ver captura para diagnóstico.")
+                if not btn_clicked:
+                    # Último recurso: Enter en el campo clave
+                    for sel in CLAVE_SELS:
+                        try:
+                            page.locator(sel).first.press('Enter')
+                            btn_clicked = True
+                            log("✓ Login via Enter en campo clave")
+                            break
+                        except: pass
 
-            page.wait_for_timeout(2000)
-            save_screenshot(f'bot_postlogin_{job_id[:8]}.png')
-            log(f"URL post-login: {page.url}")
+                if not btn_clicked:
+                    save_screenshot(f'bot_nologin_{job_id[:8]}.png')
+                    raise Exception("No se encontró el botón de login en PreviRed. Ver captura para diagnóstico.")
 
-            if 'login' in page.url.lower() or page.locator('text=Ingresa tu RUT').count() > 0:
-                job['status'] = 'error'
-                job['error'] = 'Credenciales PreviRed incorrectas'
-                browser.close()
-                return
+                page.wait_for_timeout(2000)
+                save_screenshot(f'bot_postlogin_{job_id[:8]}.png')
+                log(f"URL post-login: {page.url}")
 
-            log("Login OK")
+                if 'login' in page.url.lower() or page.locator('text=Ingresa tu RUT').count() > 0:
+                    raise CredencialesPreviRed("Credenciales PreviRed incorrectas")
+
+                log("Login OK")
+                return True
+
+            def sesion_expirada():
+                """True si PreviRed muestra la pantalla de sesión expirada/cerrada.
+
+                OJO: 'Su CLAVE ha expirado' NO es esto — eso es cuenta bloqueada."""
+                try:
+                    if 'login' in page.url.lower():
+                        return True
+                    return bool(page.evaluate("""() => {
+                        const t = (document.body ? document.body.innerText : '')
+                            .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+                        if (t.includes('clave ha expirado') || t.includes('encuentra bloqueado'))
+                            return false;
+                        return t.includes('sesion expirada') || t.includes('sesion ha expirado') ||
+                               t.includes('sesion ha caducado') || t.includes('sesion caducada') ||
+                               t.includes('sesion ha finalizado') || t.includes('sesion finalizada') ||
+                               t.includes('sesion ha sido cerrada') || t.includes('vuelva a iniciar sesion') ||
+                               t.includes('debe iniciar sesion') || t.includes('sesion no valida') ||
+                               t.includes('su sesion ha');
+                    }"""))
+                except Exception:
+                    return False
+
+            def reconectar_si_cerro():
+                """Reconecta SOLO si la sesión se cayó. True si reconectó."""
+                if not sesion_expirada():
+                    return False
+                save_screenshot(f'bot_expirada_{job_id[:8]}.png')
+                hacer_login(motivo="PreviRed cerró la sesión — reconectando")
+                return True
+
+            hacer_login()
 
             def ir_a_inicio():
                 """Vuelve a la página principal clickeando el logo de PreviRed."""
@@ -775,7 +826,8 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                             page.wait_for_timeout(1500)
                             return
                     except: pass
-                # Si nada funciona, volver atrás en historial
+                # Si nada funciona, volver atrás en historial. Ojo: en este portal
+                # el historial también puede caer en la pantalla de sesión expirada.
                 try:
                     page.go_back(wait_until='domcontentloaded', timeout=8000)
                     page.wait_for_timeout(1000)
@@ -813,6 +865,10 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                                        "input[value='Volver']"]),
                 ]
                 for intento in range(3):
+                    # Si PreviRed cortó la sesión, volver a entrar antes de seguir
+                    # buscando: el menú no va a aparecer nunca en esa pantalla.
+                    if reconectar_si_cerro():
+                        page.wait_for_timeout(1500)
                     for nombre, sels in rutas:
                         for sel in sels:
                             try:
@@ -831,16 +887,8 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         log("✓ En el listado de empresas (vía inicio)")
                         return True
 
-                # Último recurso: entrar directo al módulo de empresas
-                try:
-                    page.goto("https://www.previred.com/wEmpresas/CtrlFce",
-                              wait_until='domcontentloaded', timeout=15000)
-                    page.wait_for_timeout(2000)
-                    if en_listado_empresas():
-                        log("✓ En el listado de empresas (navegación directa)")
-                        return True
-                except: pass
-
+                # NO navegar por URL: el portal es por sesión y un goto directo
+                # a /wEmpresas/CtrlFce desloguea (pantalla "su sesión ha expirado").
                 log("⚠ No se pudo volver al listado de empresas")
                 return False
 

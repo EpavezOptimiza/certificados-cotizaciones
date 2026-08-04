@@ -2,7 +2,7 @@
 Módulo Cartas Previsionales — Blueprint Flask
 Integra con la app de Certificados de Cotizaciones
 """
-import os, json, threading, uuid, tempfile, shutil
+import os, re, json, threading, uuid, tempfile, shutil
 from datetime import datetime
 from flask import (Blueprint, render_template, request, jsonify,
                    send_file, session, current_app, make_response)
@@ -819,40 +819,56 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 save_screenshot(f'bot_empresas_{job_id[:8]}.png')
                 log(f"URL empresas: {page.url}")
 
-                # Buscar empresa — nuevo UI: botón "Ingresar" en tabla
-                # Intentar fila que contenga el RUT
+                # Buscar empresa — nuevo UI: botón "Ingresar" en tabla.
+                # La tabla muestra el RUT con puntos (53.331.589-5), así que hay
+                # que comparar sin puntos por ambos lados.
                 ingresado = False
-                rut_formateado = rut_e.replace('.','').split('-')[0]  # 78383289
+                url_listado = page.url
+                ruts_vistos = []
                 try:
-                    # Buscar fila con el RUT y hacer click en su botón Ingresar
                     filas = page.locator("tr").all()
                     for fila in filas:
-                        if rut_formateado in (fila.inner_text() or ''):
+                        txt = fila.inner_text() or ''
+                        txt_norm = re.sub(r'[.\s]', '', txt)
+                        m = re.search(r'\b(\d{7,8})-[\dkK]\b', txt_norm)
+                        if m:
+                            ruts_vistos.append(m.group(1))
+                        if rut_num and rut_num in txt_norm:
                             btn = fila.locator("button:has-text('Ingresar'), input[value='Ingresar'], a:has-text('Ingresar')")
                             if btn.count() > 0:
                                 btn.first.click()
                                 log(f"✓ Click Ingresar en fila con RUT {rut_e}")
                                 ingresado = True
                                 break
-                except: pass
+                except Exception as e:
+                    log(f"⚠ Error buscando la fila de la empresa: {e}")
 
                 if not ingresado:
-                    # Fallback: primer botón Ingresar de la página
-                    btn = page.locator("button:has-text('Ingresar'), input[value='Ingresar'], a:has-text('Ingresar')").first
-                    if btn.count() > 0:
-                        btn.click()
-                        log("✓ Click en primer botón Ingresar")
-                        ingresado = True
-
-                if not ingresado:
+                    # Sin fallback a "el primer Ingresar": entrar a otra empresa
+                    # haría la regularización sobre la empresa equivocada.
                     save_screenshot(f'bot_noemp_{job_id[:8]}.png')
-                    log(f"⚠ No se encontró botón Ingresar para empresa {rut_e}")
+                    log(f"⚠ La empresa {rut_e} no está en el listado. "
+                        f"RUTs visibles ({len(ruts_vistos)}): {', '.join(ruts_vistos[:15])}"
+                        + (" ..." if len(ruts_vistos) > 15 else ""))
                     job['resultados'][w['rut_trabajador']] = 'error_empresa'
                     continue
 
-                page.wait_for_timeout(1500)
+                # Esperar a que la navegación salga del listado de empresas
+                try:
+                    page.wait_for_load_state('domcontentloaded', timeout=15000)
+                except: pass
+                for _ in range(10):
+                    if page.url != url_listado:
+                        break
+                    page.wait_for_timeout(1000)
+
                 save_screenshot(f'bot_dentro_empresa_{job_id[:8]}.png')
                 log(f"URL dentro empresa: {page.url}")
+
+                if page.url == url_listado:
+                    log(f"⚠ El click en Ingresar no cargó la empresa {rut_e} (sigue en el listado)")
+                    job['resultados'][w['rut_trabajador']] = 'error_empresa'
+                    continue
 
                 # Click en botón Regulariza con ID exacto: regulariza#RUTNUM#00
                 mov_clicked = False
@@ -872,7 +888,10 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
 
                 if not mov_clicked:
                     save_screenshot(f'bot_nomov_{job_id[:8]}.png')
-                    raise Exception(f"No se encontró botón regulariza#{rut_num}#00. Ver captura.")
+                    log(f"⚠ No se encontró el botón regulariza#{rut_num}#00 para "
+                        f"{w['nombre']}. Ver captura. Se continúa con el siguiente.")
+                    job['resultados'][w['rut_trabajador']] = 'error_regulariza'
+                    continue
 
                 page.wait_for_timeout(1500)
                 save_screenshot(f'bot_mov_personal_{job_id[:8]}.png')

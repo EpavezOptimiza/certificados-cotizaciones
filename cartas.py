@@ -754,6 +754,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 page.goto(LOGIN_URL, wait_until='domcontentloaded')
                 page.wait_for_timeout(2000)
                 save_screenshot(f'bot_login_{job_id[:8]}.png')
+                abortar_si_no_atiende("al abrir la página de login")
 
                 try_fill(RUT_SELS, rut_login, 'RUT')
                 try_fill(CLAVE_SELS, clave, 'clave')
@@ -786,6 +787,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 page.wait_for_timeout(2000)
                 save_screenshot(f'bot_postlogin_{job_id[:8]}.png')
                 log(f"URL post-login: {page.url}")
+                abortar_si_no_atiende("justo después de enviar el login")
 
                 if 'login' in page.url.lower() or page.locator('text=Ingresa tu RUT').count() > 0:
                     raise CredencialesPreviRed("Credenciales PreviRed incorrectas")
@@ -815,8 +817,40 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                 except Exception:
                     return False
 
+            def servicio_no_disponible():
+                """True si PreviRed responde con su pantalla genérica de rechazo
+                ('En estos Momentos no lo podemos Atender').
+
+                No es sesión expirada ni cuenta bloqueada: es el portal negándose
+                a atender la petición. Reintentar aquí solo empeora las cosas."""
+                try:
+                    return bool(page.evaluate("""() => {
+                        const t = (document.body ? document.body.innerText : '')
+                            .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+                        return t.includes('no lo podemos atender') ||
+                               t.includes('no podemos atenderlo') ||
+                               t.includes('servicio no disponible') ||
+                               t.includes('intente mas tarde');
+                    }"""))
+                except Exception:
+                    return False
+
+            def abortar_si_no_atiende(donde=""):
+                """Corta la corrida en seco si PreviRed no está atendiendo."""
+                if not servicio_no_disponible():
+                    return False
+                save_screenshot(f'bot_noatiende_{job_id[:8]}.png')
+                raise Exception(
+                    "PreviRed respondió 'En estos Momentos no lo podemos Atender'"
+                    + (f" ({donde})" if donde else "") +
+                    ". Se detiene la corrida para no insistir. Si entrando a mano sí "
+                    "funciona, revisa: (1) que no haya una sesión tuya abierta con el "
+                    "mismo RUT, (2) que no haya otra corrida del bot en curso, "
+                    "(3) espera unos minutos antes de reintentar.")
+
             def reconectar_si_cerro():
                 """Reconecta SOLO si la sesión se cayó. True si reconectó."""
+                abortar_si_no_atiende("al revisar la sesión")
                 if not sesion_expirada():
                     return False
                 save_screenshot(f'bot_expirada_{job_id[:8]}.png')

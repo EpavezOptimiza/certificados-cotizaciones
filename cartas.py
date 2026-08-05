@@ -39,6 +39,11 @@ except Exception:
 # ── Estado de jobs (en memoria, Railway reinicia limpia) ──────────────────────
 _jobs = {}  # job_id -> {status, log, result, worker_rut}
 
+# Solo una corrida del bot a la vez: dos navegadores entrando en paralelo con
+# la MISMA cuenta de PreviRed es la forma más rápida de que la bloqueen.
+_bot_lock   = threading.Lock()
+_bot_activo = {'job_id': None}
+
 def get_job(job_id):
     return _jobs.get(job_id)
 
@@ -715,7 +720,10 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
             # Tope de seguridad: el re-login solo ocurre cuando la sesión se cerró
             # de verdad, pero si algo la cortara una y otra vez esto detiene la
             # corrida antes de que PreviRed lo tome por un ataque y bloquee la cuenta.
-            MAX_LOGINS = 15
+            # Deliberadamente bajo: antes este bot hacía UN solo login por corrida,
+            # así que 3 ya es holgado y evita ráfagas de reconexión.
+            MAX_LOGINS = 3
+            ESPERA_RELOGIN_MS = 5000   # respirar antes de reintentar
             _logins = {'n': 0}
 
             def try_fill(sels, value, campo):
@@ -741,6 +749,7 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                         "lanzarla más tarde.")
                 if motivo:
                     log(f"⚠ {motivo} (reconexión {_logins['n']})")
+                    page.wait_for_timeout(ESPERA_RELOGIN_MS)
 
                 page.goto(LOGIN_URL, wait_until='domcontentloaded')
                 page.wait_for_timeout(2000)
@@ -864,11 +873,13 @@ def run_bot_previred(job_id, rut_login, clave, workers, firma_data):
                     ("botón Volver",  ["a:has-text('Volver')", "button:has-text('Volver')",
                                        "input[value='Volver']"]),
                 ]
+                # Una sola verificación de sesión, FUERA del bucle: si esto se
+                # llamara en cada intento, una pantalla que se lea mal como
+                # "expirada" dispararía una ráfaga de logins contra PreviRed.
+                if reconectar_si_cerro():
+                    page.wait_for_timeout(1500)
+
                 for intento in range(3):
-                    # Si PreviRed cortó la sesión, volver a entrar antes de seguir
-                    # buscando: el menú no va a aparecer nunca en esa pantalla.
-                    if reconectar_si_cerro():
-                        page.wait_for_timeout(1500)
                     for nombre, sels in rutas:
                         for sel in sels:
                             try:
@@ -1505,14 +1516,25 @@ def iniciar_bot():
     if not workers:
         return jsonify({"error": "Sin trabajadores"}), 400
 
-    job_id = str(uuid.uuid4())
-    _jobs[job_id] = {
-        'status': 'running',
-        'log': [],
-        'resultados': {},
-        'error': None,
-        'creado': datetime.now().isoformat(),
-    }
+    with _bot_lock:
+        activo = _bot_activo.get('job_id')
+        if activo and (_jobs.get(activo) or {}).get('status') == 'running':
+            return jsonify({
+                "error": "Ya hay una corrida del bot en curso. Espera a que termine "
+                         "antes de lanzar otra: dos sesiones simultáneas con la misma "
+                         "cuenta de PreviRed pueden hacer que la bloqueen.",
+                "job_id": activo,
+            }), 409
+
+        job_id = str(uuid.uuid4())
+        _jobs[job_id] = {
+            'status': 'running',
+            'log': [],
+            'resultados': {},
+            'error': None,
+            'creado': datetime.now().isoformat(),
+        }
+        _bot_activo['job_id'] = job_id
 
     t = threading.Thread(
         target=run_bot_previred,

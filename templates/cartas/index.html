@@ -1196,19 +1196,11 @@ function initSel(w) {
   };
 }
 
-// Asegura que exista una seleccion para el trabajador, y si ya existia,
-// resincroniza sus periodos_sel con el filtro de motivo activo (evita quedar
-// con una seleccion vieja de antes de aplicar/cambiar el filtro)
+// Asegura que exista una seleccion para el trabajador
 function asegurarSel(w) {
   const rut = w.rut_trabajador;
   if (!seleccionados[rut]) {
     seleccionados[rut] = initSel(w);
-  } else if (!seleccionados[rut].periodosCustomizados) {
-    // Solo resincronizar con el filtro si el usuario NO ha tocado manualmente
-    // los períodos de este trabajador (para no pisar su selección manual)
-    const fMotivo = document.getElementById('filtro-motivo')?.value || '';
-    const fEstatus = document.getElementById('filtro-estatus')?.value || '';
-    if (fMotivo || fEstatus) seleccionados[rut].periodos_sel = [...periodosParaMotivoActivo(w)];
   }
   return seleccionados[rut];
 }

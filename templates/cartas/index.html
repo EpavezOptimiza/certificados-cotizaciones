@@ -1185,7 +1185,7 @@ function refreshDependientes() {
 function initSel(w) {
   return {
     checked: false,
-    periodos_sel: [],
+    periodos_sel: [...(w.periodos || [])],
     periodos_extra: '',
     causa: w.causa || 'Otros Movimientos (Ausentismo)',
     salud: w.salud || 'FONASA',

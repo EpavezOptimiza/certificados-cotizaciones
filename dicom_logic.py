@@ -545,6 +545,19 @@ def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None):
                 _captura(" (pantalla del error)")
                 _dump_campos(page, log)
                 raise
+
+            # Click en botón "Ingresar" para acceder a Reportes Interactivos
+            try:
+                btn = page.locator('[data-test-id="appTypeButton"], button:has-text("Ingresar")').first
+                if btn.count() > 0:
+                    btn.click()
+                    page.wait_for_load_state('domcontentloaded', timeout=15000)
+                    log("✓ Click en botón 'Ingresar'", "ok")
+                else:
+                    log("⚠ No se encontró botón 'Ingresar'", "warn")
+            except Exception as e:
+                log(f"⚠ Error al hacer click en 'Ingresar': {e}", "warn")
+
             # Dejar constancia de dónde quedó y qué se ve
             info = {"url": page.url, "titulo": ""}
             try:

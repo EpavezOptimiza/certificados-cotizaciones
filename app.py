@@ -3210,6 +3210,144 @@ def dicom_captura(nombre):
     return send_file(ruta, mimetype="image/png")
 
 
+@app.route("/api/dicom/analisis", methods=["POST"])
+@api_login_required
+def dicom_analisis():
+    from base_madre_logic import obtener_clientes
+    import re
+
+    try:
+        import PyPDF2
+    except ImportError:
+        return jsonify({"error": "PyPDF2 no instalado"}), 500
+
+    def extraer_razon_social_pdf(ruta_pdf):
+        try:
+            with open(ruta_pdf, 'rb') as f:
+                lector = PyPDF2.PdfReader(f)
+                texto = ''
+                for pagina in lector.pages:
+                    texto += pagina.extract_text()
+                # Buscar patrón: línea con texto después de "RUT:" que contenga letras
+                lineas = texto.split('\n')
+                for i, linea in enumerate(lineas):
+                    if 'AGENCIA' in linea.upper() or 'S.A' in linea.upper() or 'LIMITADA' in linea.upper():
+                        return linea.strip()
+                # Si no, tomar la primera línea que no esté vacía
+                for linea in lineas:
+                    if linea.strip() and len(linea.strip()) > 5:
+                        return linea.strip()
+                return None
+        except Exception as e:
+            return None
+
+    def buscar_grupo_por_razon(razon_social):
+        columnas, filas, _, _ = obtener_clientes()
+        if not filas:
+            return None
+
+        # Normalizar búsqueda
+        razon_norm = razon_social.upper().strip()
+
+        for fila in filas:
+            for col in columnas:
+                if 'razon' in col.lower() and 'social' in col.lower():
+                    val = (fila.get(col) or '').upper().strip()
+                    if razon_norm in val or val in razon_norm:
+                        # Encontrado, buscar el grupo
+                        for col_grupo in columnas:
+                            if col_grupo.lower().startswith('2 grupo') or 'grupo' in col_grupo.lower():
+                                return fila.get(col_grupo)
+        return None
+
+    tipo = request.form.get('tipo', 'manual')
+    procesados = 0
+    organizados = 0
+    errores = []
+
+    try:
+        if tipo == 'carpeta':
+            ruta = request.json.get('ruta', '').strip()
+            if not ruta or not os.path.isdir(ruta):
+                return jsonify({"error": "Ruta de carpeta inválida"}), 400
+
+            archivos = [f for f in os.listdir(ruta) if f.lower().endswith('.pdf')]
+            procesados = len(archivos)
+
+            for archivo in archivos:
+                ruta_pdf = os.path.join(ruta, archivo)
+                razon = extraer_razon_social_pdf(ruta_pdf)
+                if not razon:
+                    errores.append(f"{archivo}: no se pudo extraer razón social")
+                    continue
+
+                grupo = buscar_grupo_por_razon(razon)
+                if not grupo:
+                    errores.append(f"{archivo}: razón social no encontrada en BASE MADRE")
+                    continue
+
+                # Crear carpeta del grupo
+                carpeta_grupo = os.path.join(ruta, grupo.strip())
+                os.makedirs(carpeta_grupo, exist_ok=True)
+
+                # Mover archivo
+                try:
+                    ruta_nueva = os.path.join(carpeta_grupo, archivo)
+                    if os.path.exists(ruta_nueva):
+                        os.remove(ruta_nueva)
+                    os.rename(ruta_pdf, ruta_nueva)
+                    organizados += 1
+                except Exception as e:
+                    errores.append(f"{archivo}: error al mover archivo - {str(e)[:50]}")
+
+        elif tipo == 'manual':
+            archivos = request.files.getlist('archivos')
+            procesados = len(archivos)
+
+            # Carpeta temporal
+            carpeta_temp = os.path.join(_EXCELS_DIR, 'dicom_analisis_temp')
+            os.makedirs(carpeta_temp, exist_ok=True)
+
+            for archivo in archivos:
+                if not archivo.filename.lower().endswith('.pdf'):
+                    errores.append(f"{archivo.filename}: no es un PDF")
+                    continue
+
+                ruta_temp = os.path.join(carpeta_temp, archivo.filename)
+                archivo.save(ruta_temp)
+
+                razon = extraer_razon_social_pdf(ruta_temp)
+                if not razon:
+                    errores.append(f"{archivo.filename}: no se pudo extraer razón social")
+                    os.remove(ruta_temp)
+                    continue
+
+                grupo = buscar_grupo_por_razon(razon)
+                if not grupo:
+                    errores.append(f"{archivo.filename}: razón social no encontrada en BASE MADRE")
+                    os.remove(ruta_temp)
+                    continue
+
+                # Crear carpeta del grupo
+                carpeta_grupo = os.path.join(carpeta_temp, grupo.strip())
+                os.makedirs(carpeta_grupo, exist_ok=True)
+
+                # Mover archivo
+                try:
+                    ruta_nueva = os.path.join(carpeta_grupo, archivo.filename)
+                    if os.path.exists(ruta_nueva):
+                        os.remove(ruta_nueva)
+                    os.rename(ruta_temp, ruta_nueva)
+                    organizados += 1
+                except Exception as e:
+                    errores.append(f"{archivo.filename}: error al mover archivo - {str(e)[:50]}")
+
+        return jsonify({"procesados": procesados, "organizados": organizados, "errores": errores})
+
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

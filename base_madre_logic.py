@@ -185,3 +185,62 @@ def obtener_clientes(forzar=False):
         except Exception as e:
             _CACHE["error"] = str(e)
         return _CACHE["columnas"], _CACHE["filas"], _CACHE["ts"], _CACHE["error"]
+
+
+def obtener_datos_dicom():
+    """Obtiene datos para DICOM: RUT vigentes agrupados por GRUPO."""
+    columnas, filas, _, error = obtener_clientes()
+    if error or not filas:
+        return {"error": error or "No hay datos", "grupos": {}, "todos_ruts": [], "razones_sociales": []}
+
+    def encontrar_col(terms):
+        for col in columnas:
+            cn = _norm_estatus(col)
+            if all(t in cn for t in terms):
+                return col
+        return None
+
+    col_rut = encontrar_col(["rut"])
+    col_grupo = encontrar_col(["grupo"])
+    col_razon = encontrar_col(["razon", "social"])
+    col_estatus = encontrar_col(["estatus", "cliente"])
+
+    grupos = {}
+    todos_ruts = set()
+    todas_razones = set()
+
+    for fila in filas:
+        if col_estatus:
+            estatus = _norm_estatus(fila.get(col_estatus, ""))
+            if not (estatus == "vigente" or estatus.startswith("vigente")):
+                continue
+
+        rut = (fila.get(col_rut) or "").strip()
+        grupo = (fila.get(col_grupo) or "").strip()
+        razon = (fila.get(col_razon) or "").strip()
+
+        if not rut:
+            continue
+
+        todos_ruts.add(rut)
+        if razon:
+            todas_razones.add(razon)
+
+        if grupo:
+            if grupo not in grupos:
+                grupos[grupo] = {"razones_sociales": set(), "ruts": set()}
+            grupos[grupo]["ruts"].add(rut)
+            if razon:
+                grupos[grupo]["razones_sociales"].add(razon)
+
+    resultado = {
+        "grupos": {
+            g: {"razones_sociales": sorted(list(d["razones_sociales"])),
+                "ruts": sorted(list(d["ruts"]))}
+            for g, d in grupos.items()
+        },
+        "todos_ruts": sorted(list(todos_ruts)),
+        "razones_sociales": sorted(list(todas_razones))
+    }
+
+    return resultado

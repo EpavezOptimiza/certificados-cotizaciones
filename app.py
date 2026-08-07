@@ -3278,8 +3278,13 @@ def dicom_analisis():
     try:
         if tipo == 'carpeta':
             ruta = request.json.get('ruta', '').strip()
+            rutaDestino = request.json.get('rutaDestino', '').strip()
             if not ruta or not os.path.isdir(ruta):
-                return jsonify({"error": "Ruta de carpeta inválida"}), 400
+                return jsonify({"error": "Ruta de carpeta origen inválida"}), 400
+            if not rutaDestino:
+                return jsonify({"error": "Ruta de carpeta destino requerida"}), 400
+
+            os.makedirs(rutaDestino, exist_ok=True)
 
             archivos = [f for f in os.listdir(ruta) if f.lower().endswith('.pdf')]
             procesados = len(archivos)
@@ -3296,8 +3301,8 @@ def dicom_analisis():
                     errores.append(f"{archivo}: razón social no encontrada en BASE MADRE")
                     continue
 
-                # Crear carpeta del grupo
-                carpeta_grupo = os.path.join(ruta, grupo.strip())
+                # Crear carpeta del grupo en DESTINO
+                carpeta_grupo = os.path.join(rutaDestino, grupo.strip())
                 os.makedirs(carpeta_grupo, exist_ok=True)
 
                 # Mover archivo
@@ -3312,9 +3317,15 @@ def dicom_analisis():
 
         elif tipo == 'manual':
             archivos = request.files.getlist('archivos')
+            rutaDestino = request.form.get('rutaDestino', '').strip()
             procesados = len(archivos)
 
-            # Carpeta temporal
+            if not rutaDestino:
+                return jsonify({"error": "Ruta de carpeta destino requerida"}), 400
+
+            os.makedirs(rutaDestino, exist_ok=True)
+
+            # Carpeta temporal para procesar
             carpeta_temp = os.path.join(_EXCELS_DIR, 'dicom_analisis_temp')
             os.makedirs(carpeta_temp, exist_ok=True)
 
@@ -3338,8 +3349,8 @@ def dicom_analisis():
                     os.remove(ruta_temp)
                     continue
 
-                # Crear carpeta del grupo
-                carpeta_grupo = os.path.join(carpeta_temp, grupo.strip())
+                # Crear carpeta del grupo en DESTINO
+                carpeta_grupo = os.path.join(rutaDestino, grupo.strip())
                 os.makedirs(carpeta_grupo, exist_ok=True)
 
                 # Mover archivo

@@ -226,25 +226,45 @@ let _datosBase = null;
 async function cargarDatos(){
   try{
     const r = await fetch('/api/dicom/datos');
-    if (!r.ok) return;
+    if (!r.ok) {
+      console.error('Error fetching datos:', r.status);
+      return;
+    }
     _datosBase = await r.json();
-    if (_datosBase.error) return;
+    console.log('Datos cargados:', _datosBase);
+    if (_datosBase.error) {
+      console.error('Error en datos:', _datosBase.error);
+      return;
+    }
+
+    // Llenar grupos
     const sgGrupo = document.getElementById('select-grupo');
-    Object.keys(_datosBase.grupos).sort().forEach(g => {
-      const opt = document.createElement('option');
-      opt.value = g;
-      const cnt = _datosBase.grupos[g].ruts.length;
-      opt.textContent = g + ' (' + cnt + ' RUT)';
-      sgGrupo.appendChild(opt);
-    });
+    if (sgGrupo && _datosBase.grupos) {
+      const grupos = Object.keys(_datosBase.grupos).sort();
+      console.log('Grupos:', grupos);
+      grupos.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        const cnt = _datosBase.grupos[g].ruts.length;
+        opt.textContent = g + ' (' + cnt + ' RUT)';
+        sgGrupo.appendChild(opt);
+      });
+    }
+
+    // Llenar razones sociales
     const sgRazon = document.getElementById('select-razon');
-    (_datosBase.razones_sociales || []).sort().forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r;
-      opt.textContent = r;
-      sgRazon.appendChild(opt);
-    });
-  }catch(e){}
+    if (sgRazon && _datosBase.razones_sociales) {
+      console.log('Razones:', _datosBase.razones_sociales.length);
+      _datosBase.razones_sociales.sort().forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        sgRazon.appendChild(opt);
+      });
+    }
+  }catch(e){
+    console.error('Error en cargarDatos:', e);
+  }
 }
 
 function agregarRutsManual(){

@@ -3116,12 +3116,13 @@ def dicom_probar_login():
     d = request.json or {}
     correo = (d.get("correo") or "").strip() or _dicom_cfg("correo")
     clave  = (d.get("clave") or "").strip() or _dicom_cfg("clave")
+    ruts = d.get("ruts") or []
     if not correo or not clave:
         return jsonify({"error": "Faltan el correo y la contraseña de DICOM"}), 400
 
     tid = uuid.uuid4().hex[:12]
     _dicom_tareas[tid] = {"logs": [], "done": False, "error": False, "captura": None,
-                          "esperando_codigo": False, "codigo": None}
+                          "esperando_codigo": False, "codigo": None, "ruts": ruts}
 
     def _pedir_codigo():
         """Marca que se espera el código y aguarda a que la persona lo escriba
@@ -3148,7 +3149,8 @@ def dicom_probar_login():
                 probar_login(correo, clave,
                              log=lambda m, t="info": _dicom_log(tid, m, t),
                              ruta_captura=ruta,
-                             obtener_codigo=_pedir_codigo)
+                             obtener_codigo=_pedir_codigo,
+                             ruts=_dicom_tareas[tid].get("ruts", []))
                 if os.path.exists(ruta):
                     _dicom_tareas[tid]["captura"] = os.path.basename(ruta)
                 _dicom_log(tid, "✓ Acceso confirmado", "ok")

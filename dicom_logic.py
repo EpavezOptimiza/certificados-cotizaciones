@@ -484,7 +484,7 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
     return True
 
 
-def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None):
+def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None, ruts=None):
     """Entra al portal, confirma el acceso y guarda una captura de pantalla.
 
     Equifax detecta navegadores automatizados: en modo invisible (headless)

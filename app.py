@@ -3109,6 +3109,14 @@ def dicom_config():
                     "tiene_clave": bool(_dicom_cfg("clave"))})
 
 
+@app.route("/api/dicom/datos", methods=["GET"])
+@api_login_required
+def dicom_datos():
+    from base_madre_logic import obtener_datos_dicom
+    datos = obtener_datos_dicom()
+    return jsonify(datos)
+
+
 @app.route("/api/dicom/probar_login", methods=["POST"])
 @api_login_required
 def dicom_probar_login():

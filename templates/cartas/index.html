@@ -2653,11 +2653,11 @@ async function unificarTodos() {
       let cartaHandle = null, movHandle = null;
 
       for await (const [name, handle] of _dirHandle.entries()) {
-        if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
+        if (handle.kind !== 'file') continue;
         const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
         if (!nameNorm.includes(rutNorm)) continue;
         if (/carta/i.test(name)) cartaHandle = handle;
-        else if (/mov[_\s-]?per|movimiento|comprobante|planilla|previred|^pl[_\s.\-]/i.test(name)) movHandle = handle;
+        else movHandle = handle;
       }
 
       if (!cartaHandle && !movHandle) {

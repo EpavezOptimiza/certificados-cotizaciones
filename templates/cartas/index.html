@@ -724,6 +724,7 @@ textarea{resize:vertical;min-height:70px}
           <div style="margin-left:auto;display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="marcarTodosEstado()">☑ Marcar todos</button>
             <button class="btn btn-primary btn-sm" onclick="unificarTodos()" style="background:#7c3aed;border-color:#7c3aed">📎 Unificar Todos</button>
+            <button class="btn btn-primary btn-sm" onclick="descargarUnificadosPorInstitucion()" style="background:#8b5cf6;border-color:#8b5cf6">📦 Por Institución</button>
             <button class="btn btn-success btn-sm" onclick="marcarEnGestion()">✅ Marcar En gestión</button>
           </div>
         </div>
@@ -2698,6 +2699,102 @@ async function unificarTodos() {
   alert(msg);
 }
 
+async function descargarUnificadosPorInstitucion() {
+  if (!_dirHandle) {
+    alert('Primero selecciona la carpeta de archivos PDF.');
+    return;
+  }
+
+  const checks = document.querySelectorAll('.estado-check:checked');
+  if (checks.length === 0) {
+    alert('Marca al menos un trabajador para descargar.');
+    return;
+  }
+
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  const btnText = btn.textContent;
+  btn.textContent = '⏳ Procesando...';
+
+  try {
+    // Agrupar marcados por institución
+    const grupos = {};
+    for (const trab of marcados) {
+      if (!Array.from(checks).some(c => c.dataset.rut === trab.rut_trabajador)) continue;
+      const inst = trab.institucion || 'SIN_INSTITUCION';
+      if (!grupos[inst]) grupos[inst] = [];
+      grupos[inst].push(trab);
+    }
+
+    // Usar JSZip si está disponible
+    if (typeof JSZip === 'undefined') {
+      alert('Se necesita la librería JSZip. Por favor, recarga la página.');
+      btn.disabled = false;
+      btn.textContent = btnText;
+      return;
+    }
+
+    const zip = new JSZip();
+    let totalProcesados = 0;
+
+    for (const [institucion, trabajadores] of Object.entries(grupos)) {
+      const carpetaInst = institucion.replace(/[^a-z0-9]/gi, '_');
+      let procInst = 0;
+
+      for (const trab of trabajadores) {
+        const rut = trab.rut_trabajador;
+        const rutNorm = rut.replace(/[.\-\s]/g, '').toLowerCase();
+        let cartaHandle = null, movHandle = null;
+
+        for await (const [name, handle] of _dirHandle.entries()) {
+          if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
+          const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
+          if (!nameNorm.includes(rutNorm)) continue;
+          if (/carta/i.test(name)) cartaHandle = handle;
+          else if (/mov[_\s-]?per|movimiento|comprobante|planilla|previred|^pl[_\s.\-]/i.test(name)) movHandle = handle;
+        }
+
+        if (!cartaHandle && !movHandle) continue;
+
+        const formData = new FormData();
+        formData.append('rut', rut);
+        if (cartaHandle) formData.append('carta', await cartaHandle.getFile(), cartaHandle.name);
+        if (movHandle) formData.append('movimiento', await movHandle.getFile(), movHandle.name);
+
+        const res = await fetch('/cartas/api/unificar', { method: 'POST', body: formData });
+        if (!res.ok) continue;
+
+        const arrBuf = await res.arrayBuffer();
+        const rutClean = rut.replace(/[.\-\s]/g, '');
+        const fileName = `Caso_${rutClean}.pdf`;
+        zip.folder(carpetaInst).file(fileName, arrBuf);
+        procInst++;
+        totalProcesados++;
+      }
+    }
+
+    btn.textContent = '📦 Generando ZIP...';
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Unificados_${new Date().toISOString().split('T')[0]}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    btn.disabled = false;
+    btn.textContent = btnText;
+    alert(`✅ Descargado: ${totalProcesados} PDF unificados por institución`);
+  } catch(e) {
+    console.error(e);
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = btnText;
+  }
+}
+
 // ── Microsoft Graph / OAuth2 PKCE ────────────────────────────────────────────
 let _msToken = null; // {access_token, refresh_token, expires_at}
 
@@ -3164,6 +3261,9 @@ document.addEventListener('click',function(e){
   }
 });
 </script>
+
+<!-- JSZip para crear ZIP -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <!-- Opti Full Panel -->
 <div id="opti-full-panel">

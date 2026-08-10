@@ -723,6 +723,7 @@ textarea{resize:vertical;min-height:70px}
         <div class="card-title"><span class="card-title-icon">✅</span> Estado de Trabajadores
           <div style="margin-left:auto;display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="marcarTodosEstado()">☑ Marcar todos</button>
+            <button class="btn btn-primary btn-sm" onclick="unificarTodos()" style="background:#7c3aed;border-color:#7c3aed">📎 Unificar Todos</button>
             <button class="btn btn-success btn-sm" onclick="marcarEnGestion()">✅ Marcar En gestión</button>
           </div>
         </div>
@@ -2624,6 +2625,77 @@ async function unificarPDF(rut) {
     alert('Error al unificar: ' + e.message);
     btn.disabled = false; btn.textContent = '📎 Unificar';
   }
+}
+
+async function unificarTodos() {
+  if (!_dirHandle) {
+    alert('Primero selecciona la carpeta de archivos PDF.');
+    return;
+  }
+
+  const checks = document.querySelectorAll('.estado-check:checked');
+  if (checks.length === 0) {
+    alert('Marca al menos un trabajador para unificar.');
+    return;
+  }
+
+  const ruts = Array.from(checks).map(c => c.dataset.rut);
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  const btnText = btn.textContent;
+  let completados = 0, errores = 0;
+
+  for (const rut of ruts) {
+    btn.textContent = `⏳ ${completados}/${ruts.length}`;
+    try {
+      const rutNorm = rut.replace(/[.\-\s]/g, '').toLowerCase();
+      let cartaHandle = null, movHandle = null;
+
+      for await (const [name, handle] of _dirHandle.entries()) {
+        if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
+        const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
+        if (!nameNorm.includes(rutNorm)) continue;
+        if (/carta/i.test(name)) cartaHandle = handle;
+        else if (/mov[_\s-]?per|movimiento|comprobante|planilla|previred|^pl[_\s.\-]/i.test(name)) movHandle = handle;
+      }
+
+      if (!cartaHandle && !movHandle) {
+        console.log(`⚠ RUT ${rut}: no encontrado`);
+        errores++;
+        continue;
+      }
+
+      const formData = new FormData();
+      formData.append('rut', rut);
+      if (cartaHandle) formData.append('carta', await cartaHandle.getFile(), cartaHandle.name);
+      if (movHandle) formData.append('movimiento', await movHandle.getFile(), movHandle.name);
+
+      const res = await fetch('/cartas/api/unificar', { method: 'POST', body: formData });
+      if (!res.ok) {
+        console.log(`⚠ RUT ${rut}: error en API`);
+        errores++;
+        continue;
+      }
+
+      const arrBuf = await res.arrayBuffer();
+      const rutClean = rut.replace(/[.\-\s]/g, '');
+      const outName = `Caso_${rutClean}.pdf`;
+
+      const outHandle = await _dirHandle.getFileHandle(outName, { create: true });
+      const writable = await outHandle.createWritable();
+      await writable.write(arrBuf);
+      await writable.close();
+      completados++;
+    } catch(e) {
+      console.log(`⚠ RUT ${rut}: ${e.message}`);
+      errores++;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = btnText;
+  const msg = `✅ Unificados: ${completados}/${ruts.length}` + (errores > 0 ? ` (⚠ ${errores} error)` : '');
+  alert(msg);
 }
 
 // ── Microsoft Graph / OAuth2 PKCE ────────────────────────────────────────────

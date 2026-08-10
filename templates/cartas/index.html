@@ -2765,7 +2765,7 @@ async function descargarUnificadosPorInstitucion() {
             const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
             if (!nameNorm.includes(rutNorm)) continue;
             if (/carta/i.test(name)) cartaHandle = handle;
-            else cartaHandle = null, movHandle = handle;
+            else if (!movHandle) movHandle = handle;
           }
         } catch (e) {
           console.log(`⚠ Error leyendo carpeta para ${rut}`);

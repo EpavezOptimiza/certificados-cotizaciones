@@ -2717,10 +2717,11 @@ async function descargarUnificadosPorInstitucion() {
   btn.textContent = '⏳ Procesando...';
 
   try {
+    const marcados = trabajadoresMarcados();
+
     // Agrupar marcados por institución
     const grupos = {};
     for (const trab of marcados) {
-      if (!Array.from(checks).some(c => c.dataset.rut === trab.rut_trabajador)) continue;
       const inst = trab.institucion || 'SIN_INSTITUCION';
       if (!grupos[inst]) grupos[inst] = [];
       grupos[inst].push(trab);

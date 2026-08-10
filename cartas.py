@@ -233,8 +233,14 @@ def parsear_excel(file_bytes):
 
     return datos
 
+def normalizar_rut(rut):
+    """Normaliza un RUT quitando puntos, espacios y convirtiendo a mayúsculas."""
+    if not rut:
+        return ''
+    return str(rut).replace('.', '').replace(' ', '').upper()
+
 def agrupar_por_trabajador(datos):
-    """Agrupa filas por trabajador, coleccionando períodos."""
+    """Agrupa filas por trabajador (normalizando RUT), coleccionando períodos."""
     MESES_MAP = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
                  'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12}
 
@@ -248,21 +254,23 @@ def agrupar_por_trabajador(datos):
 
     grupos = {}
     for d in datos:
-        k = d['rut_trabajador']
-        if k not in grupos:
-            grupos[k] = {**d, 'periodos': [], 'periodo_motivos': {}, 'periodo_estatus': {}, 'periodo_analisis': {}, 'detalles': []}
-            grupos[k].pop('detalle', None)
+        rut_norm = normalizar_rut(d['rut_trabajador'])
+        if not rut_norm:
+            continue
+        if rut_norm not in grupos:
+            grupos[rut_norm] = {**d, 'periodos': [], 'periodo_motivos': {}, 'periodo_estatus': {}, 'periodo_analisis': {}, 'detalles': []}
+            grupos[rut_norm].pop('detalle', None)
         # Ficha completa: todas las columnas del Excel de cada fila del trabajador
         if d.get('detalle'):
-            grupos[k]['detalles'].append(d['detalle'])
+            grupos[rut_norm]['detalles'].append(d['detalle'])
         p = d['periodo']
-        if p and p not in grupos[k]['periodos']:
-            grupos[k]['periodos'].append(p)
+        if p and p not in grupos[rut_norm]['periodos']:
+            grupos[rut_norm]['periodos'].append(p)
         # Cada período puede tener su propio motivo, estatus y analisis
         if p:
-            grupos[k]['periodo_motivos'][p] = d.get('motivo', '')
-            grupos[k]['periodo_estatus'][p] = d.get('estatus', '')
-            grupos[k]['periodo_analisis'][p] = d.get('analisis', '')
+            grupos[rut_norm]['periodo_motivos'][p] = d.get('motivo', '')
+            grupos[rut_norm]['periodo_estatus'][p] = d.get('estatus', '')
+            grupos[rut_norm]['periodo_analisis'][p] = d.get('analisis', '')
 
     # Ordenar períodos de menor a mayor
     for k in grupos:

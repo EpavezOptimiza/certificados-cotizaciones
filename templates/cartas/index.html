@@ -2714,80 +2714,76 @@ async function descargarUnificadosPorInstitucion() {
   const btn = event.currentTarget;
   btn.disabled = true;
   const btnText = btn.textContent;
-  btn.textContent = '⏳ Procesando...';
 
   try {
     const marcados = trabajadoresMarcados();
-
-    // Agrupar marcados por institución
     const grupos = {};
     for (const trab of marcados) {
-      const inst = trab.institucion || 'SIN_INSTITUCION';
+      const inst = (trab.institucion || 'SIN_INSTITUCION').replace(/[^a-z0-9\s]/gi, '').trim().replace(/\s+/g, '_');
       if (!grupos[inst]) grupos[inst] = [];
       grupos[inst].push(trab);
     }
 
-    // Usar JSZip si está disponible
-    if (typeof JSZip === 'undefined') {
-      alert('Se necesita la librería JSZip. Por favor, recarga la página.');
-      btn.disabled = false;
-      btn.textContent = btnText;
-      return;
-    }
-
-    const zip = new JSZip();
     let totalProcesados = 0;
 
-    for (const [institucion, trabajadores] of Object.entries(grupos)) {
-      const carpetaInst = institucion.replace(/[^a-z0-9]/gi, '_');
-      let procInst = 0;
+    for (const [carpetaNombre, trabajadores] of Object.entries(grupos)) {
+      btn.textContent = `📦 ${carpetaNombre}...`;
+
+      let carpetaHandle;
+      try {
+        carpetaHandle = await _dirHandle.getDirectoryHandle(carpetaNombre, { create: true });
+      } catch (e) {
+        console.log(`⚠ No se pudo crear carpeta ${carpetaNombre}, guardando en raíz`);
+        carpetaHandle = _dirHandle;
+      }
 
       for (const trab of trabajadores) {
         const rut = trab.rut_trabajador;
         const rutNorm = rut.replace(/[.\-\s]/g, '').toLowerCase();
         let cartaHandle = null, movHandle = null;
 
-        for await (const [name, handle] of _dirHandle.entries()) {
-          if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
-          const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
-          if (!nameNorm.includes(rutNorm)) continue;
-          if (/carta/i.test(name)) cartaHandle = handle;
-          else if (/mov[_\s-]?per|movimiento|comprobante|planilla|previred|^pl[_\s.\-]/i.test(name)) movHandle = handle;
+        try {
+          for await (const [name, handle] of _dirHandle.entries()) {
+            if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
+            const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
+            if (!nameNorm.includes(rutNorm)) continue;
+            if (/carta/i.test(name)) cartaHandle = handle;
+            else if (/mov[_\s-]?per|movimiento|comprobante|planilla|previred/i.test(name)) movHandle = handle;
+          }
+        } catch (e) {
+          console.log(`⚠ Error leyendo carpeta para ${rut}`);
+          continue;
         }
 
         if (!cartaHandle && !movHandle) continue;
 
-        const formData = new FormData();
-        formData.append('rut', rut);
-        if (cartaHandle) formData.append('carta', await cartaHandle.getFile(), cartaHandle.name);
-        if (movHandle) formData.append('movimiento', await movHandle.getFile(), movHandle.name);
+        try {
+          const formData = new FormData();
+          formData.append('rut', rut);
+          if (cartaHandle) formData.append('carta', await cartaHandle.getFile(), cartaHandle.name);
+          if (movHandle) formData.append('movimiento', await movHandle.getFile(), movHandle.name);
 
-        const res = await fetch('/cartas/api/unificar', { method: 'POST', body: formData });
-        if (!res.ok) continue;
+          const res = await fetch('/cartas/api/unificar', { method: 'POST', body: formData });
+          if (!res.ok) continue;
 
-        const arrBuf = await res.arrayBuffer();
-        const rutClean = rut.replace(/[.\-\s]/g, '');
-        const fileName = `Caso_${rutClean}.pdf`;
-        zip.folder(carpetaInst).file(fileName, arrBuf);
-        procInst++;
-        totalProcesados++;
+          const arrBuf = await res.arrayBuffer();
+          const rutClean = rut.replace(/[.\-\s]/g, '');
+          const fileName = `Caso_${rutClean}.pdf`;
+
+          const fileHandle = await carpetaHandle.getFileHandle(fileName, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(arrBuf);
+          await writable.close();
+          totalProcesados++;
+        } catch (e) {
+          console.log(`⚠ Error procesando ${rut}: ${e.message}`);
+        }
       }
     }
 
-    btn.textContent = '📦 Generando ZIP...';
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(zipBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Unificados_${new Date().toISOString().split('T')[0]}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
     btn.disabled = false;
     btn.textContent = btnText;
-    alert(`✅ Descargado: ${totalProcesados} PDF unificados por institución`);
+    alert(`✅ Guardado: ${totalProcesados} PDF en carpetas por institución`);
   } catch(e) {
     console.error(e);
     alert('Error: ' + e.message);

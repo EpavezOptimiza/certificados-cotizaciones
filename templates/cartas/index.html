@@ -2652,30 +2652,13 @@ async function unificarTodos() {
       const rutNorm = rut.replace(/[.\-\s]/g, '').toLowerCase();
       let cartaHandle = null, movHandle = null;
 
-      // Buscar recursivamente en carpetas
-      const buscarPorRUT = async (dirHandle, rut) => {
-        let carta = null, mov = null;
-        try {
-          for await (const [name, handle] of dirHandle.entries()) {
-            const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
-            if (!nameNorm.includes(rut)) continue;
-            if (handle.kind === 'file') {
-              if (/carta/i.test(name)) carta = handle;
-              else mov = handle;
-            } else if (handle.kind === 'directory') {
-              // Buscar en subcarpetas
-              const sub = await buscarPorRUT(handle, rut);
-              if (sub.carta && !carta) carta = sub.carta;
-              if (sub.mov && !mov) mov = sub.mov;
-            }
-          }
-        } catch(e) {}
-        return { carta, mov };
-      };
-
-      const found = await buscarPorRUT(_dirHandle, rutNorm);
-      cartaHandle = found.carta;
-      movHandle = found.mov;
+      for await (const [name, handle] of _dirHandle.entries()) {
+        if (handle.kind !== 'file') continue;
+        const nameNorm = name.replace(/[.\-\s]/g, '').toLowerCase();
+        if (!nameNorm.includes(rutNorm)) continue;
+        if (/carta/i.test(name)) cartaHandle = handle;
+        else if (!movHandle) movHandle = handle;
+      }
 
       if (!cartaHandle && !movHandle) {
         console.log(`⚠ RUT ${rut}: no encontrado`);

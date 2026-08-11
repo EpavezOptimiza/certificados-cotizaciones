@@ -687,42 +687,53 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
         # El click funcionó pero no se abrió ventana nueva: asumir que el
         # modal quedó en la misma página (fallback)
         page.on("response", _capturar_respuesta)
-        log("Modal de impresión abierto", "info")
+        if not pdf_capturado:
+            log("Modal de impresión abierto", "info")
 
     try:
-        time.sleep(2)
-
-        # Seleccionar "Total Empresa"
-        try:
-            radio = modal.locator("input[type='radio'][value*='total']").first
-            if radio.count() > 0 and not radio.is_checked():
-                radio.click()
-            time.sleep(1)
-        except Exception:
-            pass
-
-        # Click en Imprimir si el botón aparece — best-effort: si no
-        # aparece, no se corta el flujo, porque el PDF puede llegar solo
-        # por la captura de red/descarga ya armada arriba.
-        try:
-            modal.wait_for_selector("#aceptar_modal", state="visible", timeout=15000)
-            modal.click("#aceptar_modal")
-            log("Imprimir clickeado", "info")
-        except Exception as e_imp:
-            log(f"Botón Imprimir no apareció ({e_imp.__class__.__name__}) — "
-                f"esperando captura por red...", "warn")
-            _dump_modal_impresion(modal, log)
-
-        # Esperar a que llegue el PDF (por red o descarga) o el aviso de
-        # "planilla muy grande, se enviará por email"
         email_dialog = False
-        for _ in range(15):
-            if pdf_capturado:
-                break
-            if _hay_dialogo_email(modal):
-                email_dialog = True
-                break
-            time.sleep(1)
+
+        # Algunos casos (ej. una sola institución) descargan el PDF directo
+        # al hacer click, sin abrir ventana emergente ni modal — el listener
+        # de 'download' ya lo capturó arriba. Si es así, no hay nada más
+        # que esperar ni clickear.
+        if pdf_capturado:
+            log("PDF descargado directo (sin modal intermedio)", "info")
+        else:
+            time.sleep(2)
+
+            # Seleccionar "Total Empresa"
+            try:
+                radio = modal.locator("input[type='radio'][value*='total']").first
+                if radio.count() > 0 and not radio.is_checked():
+                    radio.click()
+                time.sleep(1)
+            except Exception:
+                pass
+
+            # Click en Imprimir si el botón aparece — best-effort: si no
+            # aparece, no se corta el flujo, porque el PDF puede llegar solo
+            # por la captura de red/descarga ya armada arriba.
+            if not pdf_capturado:
+                try:
+                    modal.wait_for_selector("#aceptar_modal", state="visible", timeout=15000)
+                    modal.click("#aceptar_modal")
+                    log("Imprimir clickeado", "info")
+                except Exception as e_imp:
+                    if not pdf_capturado:
+                        log(f"Botón Imprimir no apareció ({e_imp.__class__.__name__}) — "
+                            f"esperando captura por red...", "warn")
+                        _dump_modal_impresion(modal, log)
+
+            # Esperar a que llegue el PDF (por red o descarga) o el aviso de
+            # "planilla muy grande, se enviará por email"
+            for _ in range(15):
+                if pdf_capturado:
+                    break
+                if _hay_dialogo_email(modal):
+                    email_dialog = True
+                    break
+                time.sleep(1)
 
         if email_dialog:
             log("Planilla muy grande — Previred pide envío por email. "

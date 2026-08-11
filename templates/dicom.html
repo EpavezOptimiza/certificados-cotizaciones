@@ -547,16 +547,8 @@ async function analizarPdfs() {
   const numeroDicom = document.getElementById('numero-dicom').value.trim();
   const rutaDestino = document.getElementById('ruta-destino-dicom').value.trim();
 
-  if (!numeroDicom) {
-    alert('Ingresa el número de DICOM');
-    return;
-  }
-  if (_pdfsDicomOrigen.length === 0) {
-    alert('Selecciona la carpeta origen con PDFs');
-    return;
-  }
-  if (!rutaDestino) {
-    alert('Ingresa la carpeta destino');
+  if (!numeroDicom || _pdfsDicomOrigen.length === 0 || !rutaDestino) {
+    alert('Completa: Número DICOM, Carpeta origen y Carpeta destino');
     return;
   }
 

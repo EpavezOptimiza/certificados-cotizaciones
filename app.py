@@ -3223,13 +3223,20 @@ def dicom_captura(nombre):
 @app.route("/api/dicom/analizar", methods=["POST"])
 @api_login_required
 def dicom_analizar():
-    """Procesa Boletin Laboral PDFs y genera Excel con análisis DICOM."""
+    """Procesa PDFs, organiza en carpetas por grupo y genera Excel DICOM."""
     from dicom_logic import extraer_datos_pdf, generar_excel_analisis
     from base_madre_logic import obtener_datos_dicom
 
     archivos = request.files.getlist("archivos")
+    numero_dicom = request.form.get("numero_dicom", "").strip()
+    destino = request.form.get("destino", "").strip()
+
     if not archivos:
         return jsonify({"error": "No se enviaron archivos"}), 400
+    if not numero_dicom:
+        return jsonify({"error": "Falta número de DICOM"}), 400
+    if not destino:
+        return jsonify({"error": "Falta carpeta destino"}), 400
 
     # Obtener grupos de BASE MADRE
     datos_base = obtener_datos_dicom()
@@ -3237,12 +3244,13 @@ def dicom_analizar():
     for grupo, info in datos_base.get("grupos", {}).items():
         for rut in info.get("ruts", []):
             rut_norm = rut.replace(".", "").replace(" ", "")
-            grupos_dict[rut_norm] = {"grupo": grupo, "razon_social": ""}
+            grupos_dict[rut_norm] = {"grupo": grupo}
 
-    # Procesar cada PDF
+    # Procesar cada PDF: extraer datos y organizar en carpetas
     datos_pdfs = []
     errores = []
-    carpeta_temp = os.path.join(ADJUNTOS, "dicom_temp")
+    organizados = 0
+    carpeta_temp = os.path.join(ADJUNTOS, "dicom_proc")
     os.makedirs(carpeta_temp, exist_ok=True)
 
     for archivo in archivos:
@@ -3251,10 +3259,34 @@ def dicom_analizar():
             continue
 
         try:
+            # Guardar temporalmente
             ruta_temp = os.path.join(carpeta_temp, archivo.filename)
             archivo.save(ruta_temp)
+
+            # Extraer datos
             datos = extraer_datos_pdf(ruta_temp)
             datos_pdfs.append(datos)
+
+            # Organizar en carpeta por grupo
+            if datos.get("rut"):
+                rut_norm = datos["rut"].replace(".", "").replace(" ", "")
+                grupo_info = grupos_dict.get(rut_norm, {})
+                grupo = grupo_info.get("grupo", "SIN GRUPO")
+
+                # Crear carpeta del grupo en destino
+                carpeta_grupo = os.path.join(destino, grupo)
+                os.makedirs(carpeta_grupo, exist_ok=True)
+
+                # Mover archivo
+                try:
+                    ruta_nueva = os.path.join(carpeta_grupo, archivo.filename)
+                    if os.path.exists(ruta_nueva):
+                        os.remove(ruta_nueva)
+                    shutil.copy2(ruta_temp, ruta_nueva)
+                    organizados += 1
+                except Exception as e:
+                    errores.append(f"{archivo.filename}: error moviendo - {str(e)[:40]}")
+
             try:
                 os.remove(ruta_temp)
             except:
@@ -3262,21 +3294,29 @@ def dicom_analizar():
         except Exception as e:
             errores.append(f"{archivo.filename}: {str(e)[:50]}")
 
-    # Generar Excel
+    # Generar UN SOLO Excel con todos los datos
     excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
     if not excel_bytes:
         return jsonify({"error": "Error generando Excel"}), 500
 
-    # Guardar archivo temporal
-    nombre_archivo = f"Analisis_DICOM_{_time.time():.0f}.xlsx"
-    ruta_archivo = os.path.join(carpeta_temp, nombre_archivo)
-    with open(ruta_archivo, "wb") as f:
+    # Guardar Excel en destino con nombre: Dicom_<numero>.xlsx
+    nombre_archivo = f"Dicom_{numero_dicom}.xlsx"
+    ruta_excel = os.path.join(destino, nombre_archivo)
+    with open(ruta_excel, "wb") as f:
+        f.write(excel_bytes)
+
+    # Guardar copia en temp para descarga
+    carpeta_temp_download = os.path.join(ADJUNTOS, "dicom_downloads")
+    os.makedirs(carpeta_temp_download, exist_ok=True)
+    ruta_download = os.path.join(carpeta_temp_download, nombre_archivo)
+    with open(ruta_download, "wb") as f:
         f.write(excel_bytes)
 
     return jsonify({
         "ok": True,
         "archivo": nombre_archivo,
-        "procesados": len(datos_pdfs),
+        "procesados": len(archivos),
+        "organizados": organizados,
         "errores": errores
     })
 
@@ -3285,8 +3325,8 @@ def dicom_analizar():
 @api_login_required
 def dicom_descargar(nombre):
     """Descarga el Excel generado."""
-    carpeta_temp = os.path.join(ADJUNTOS, "dicom_temp")
-    return send_from_directory(carpeta_temp, nombre, as_attachment=True)
+    carpeta_download = os.path.join(ADJUNTOS, "dicom_downloads")
+    return send_from_directory(carpeta_download, nombre, as_attachment=True)
 
 
 @app.route("/api/dicom/analisis", methods=["POST"])

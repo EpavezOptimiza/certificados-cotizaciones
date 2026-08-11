@@ -518,17 +518,23 @@ function procesarCaretaDestino() {
   const count = document.getElementById('destino-count');
 
   if (files.length > 0) {
+    // Si hay archivos, capturar la carpeta base
     const primerPath = files[0].webkitRelativePath || '';
     const carpetaBase = primerPath.split('/')[0];
     if (carpetaBase) {
       count.textContent = '✓ Carpeta: ' + carpetaBase;
       document.getElementById('ruta-destino-dicom').value = carpetaBase;
-    } else {
-      count.textContent = '✓ Carpeta seleccionada';
     }
   } else {
-    count.textContent = 'Sin carpeta seleccionada';
-    document.getElementById('ruta-destino-dicom').value = '';
+    // Si la carpeta está vacía, pedir que escriba la ruta
+    const ruta = prompt('Ingresa la ruta completa donde guardar:\n(ej: C:/DICOM/Procesados)');
+    if (ruta && ruta.trim()) {
+      document.getElementById('ruta-destino-dicom').value = ruta.trim();
+      count.textContent = '✓ Ruta: ' + ruta.trim();
+    } else {
+      count.textContent = 'Sin carpeta seleccionada';
+      document.getElementById('ruta-destino-dicom').value = '';
+    }
   }
   actualizarBtnAnalizar();
 }

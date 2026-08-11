@@ -582,6 +582,14 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
     except Exception as e_imp:
         log(f"Botón Imprimir no apareció: {e_imp.__class__.__name__}", "err")
         _dump_modal_impresion(page, log)
+        try:
+            nombre_captura = "debug_modal_impresion.png"
+            page.screenshot(path=os.path.join(carpeta_temp, nombre_captura))
+            tid = os.path.basename(os.path.normpath(carpeta_temp))
+            url_captura = f"/api/previred/captura/{tid}/{nombre_captura}"
+            log(f"Captura de pantalla: <a href='{url_captura}' target='_blank'>ver imagen</a>", "warn")
+        except Exception:
+            pass
         return False
 
     descargado = False

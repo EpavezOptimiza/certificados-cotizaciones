@@ -1893,6 +1893,20 @@ def previred_tarea(tid):
         "zip":     bool(t.get("zip")),
     })
 
+@app.route("/api/previred/captura/<tid>/<nombre>")
+@api_login_required
+def previred_captura(tid, nombre):
+    """Sirve una captura de pantalla de depuración guardada durante una
+    tarea (ej. cuando el bot no encuentra un botón esperado en Previred)."""
+    nombre = os.path.basename(nombre)
+    if not nombre.endswith(".png"):
+        return jsonify({"error": "Nombre inválido"}), 400
+    ruta = os.path.join(_TEMP_DIR, os.path.basename(tid), nombre)
+    if not os.path.exists(ruta):
+        return jsonify({"error": "Captura no encontrada"}), 404
+    return send_file(ruta, mimetype="image/png")
+
+
 @app.route("/api/previred/descargar-zip/<tid>")
 @api_login_required
 def previred_descargar_zip(tid):

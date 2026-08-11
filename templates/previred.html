@@ -356,6 +356,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <span id="estado-badge" class="badge-running" style="display:none">
             <div class="spinner"></div> Procesando...
           </span>
+          <button id="btn-detener" class="btn-dl-excel" style="background:#dc2626;display:none" onclick="detenerTarea()">⏹ Detener</button>
           <button id="btn-zip"   class="btn-dl-excel" style="background:#1D9E75" onclick="descargarZip()">⬇ Bajar PDFs (ZIP)</button>
           <button id="btn-guardar-carpeta" class="btn-dl-excel" style="background:#0f766e" onclick="guardarEnCarpeta(_taskId)">📁 Guardar en carpeta</button>
           <button id="btn-excel" class="btn-dl-excel" onclick="descargarExcel()">⬇ Bajar Excel</button>
@@ -805,10 +806,27 @@ async function accion(tipo){
   _logSince = 0;
   _pollRunning = false;
   document.getElementById('estado-badge').style.display = 'inline-flex';
+  if(tipo === 'descargar' || tipo === 'ambos'){
+    document.getElementById('btn-detener').style.display = 'inline-flex';
+  }
   document.getElementById('btn-excel').classList.remove('show');
   document.getElementById('btn-guardar-carpeta').classList.remove('show');
   clearInterval(_polling);
   _polling  = setInterval(pollLogs, 1200);
+}
+
+async function detenerTarea(){
+  if(!_taskId) return;
+  const btn = document.getElementById('btn-detener');
+  btn.disabled = true;
+  btn.textContent = '⏳ Deteniendo...';
+  try {
+    await fetch(`/api/previred/detener/${_taskId}`, {method:'POST'});
+  } catch(e) {
+    toast('No se pudo enviar la solicitud de detener');
+    btn.disabled = false;
+    btn.textContent = '⏹ Detener';
+  }
 }
 
 async function pollLogs(){
@@ -824,13 +842,18 @@ async function pollLogs(){
       clearInterval(_polling);
       _polling = null;
       document.getElementById('estado-badge').style.display = 'none';
+      const btnDet = document.getElementById('btn-detener');
+      btnDet.style.display = 'none';
+      btnDet.disabled = false;
+      btnDet.textContent = '⏹ Detener';
       setBotones(true);
       if(data.zip){
         document.getElementById('btn-zip').classList.add('show');
         if(_dirHandle) document.getElementById('btn-guardar-carpeta').classList.add('show');
       }
       if(data.archivo) document.getElementById('btn-excel').classList.add('show');
-      toast(data.error ? 'Proceso terminó con errores' : 'Proceso completado exitosamente');
+      toast(data.cancelado ? 'Proceso detenido por el usuario'
+            : data.error ? 'Proceso terminó con errores' : 'Proceso completado exitosamente');
     }
   } catch(e) {
     console.error(e);

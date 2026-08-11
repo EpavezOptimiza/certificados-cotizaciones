@@ -490,37 +490,52 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
-        # 1. Click en ícono planilla → modal aparece en página principal
+        # 1. Click en ícono planilla → Previred abre una VENTANA EMERGENTE
+        # nueva con el modal (mismo comportamiento que "Descargar Planillas
+        # Masivas"); hay que capturarla, si no el bot espera en la página
+        # equivocada y el botón "Imprimir" nunca aparece.
+        modal = page
         try:
-            page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
+            with page.context.expect_page(timeout=6000) as popup_info:
+                page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
+            modal = popup_info.value
+            modal.wait_for_load_state("domcontentloaded")
+        except PWTimeout:
+            # El click funcionó pero no se abrió ventana nueva: asumir que
+            # el modal quedó en la misma página (fallback)
+            pass
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
             continue
 
-        # 2. Esperar modal en página principal
+        # 2. Esperar modal
         try:
-            page.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
+            modal.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
         except Exception:
             log(f"inst{inst_num} ({nombre_inst}): modal no apareció", "warn")
-            _dump_modal_impresion(page, log)
+            _dump_modal_impresion(modal, log)
+            if modal is not page:
+                try:
+                    modal.close()
+                except Exception:
+                    pass
             time.sleep(1)
             continue
 
         # 3. Seleccionar Total Empresa si no está marcado
         try:
-            radio = page.locator("input[type='radio'][value*='total']").first
+            radio = modal.locator("input[type='radio'][value*='total']").first
             if radio.count() > 0 and not radio.is_checked():
                 radio.click()
-            page.wait_for_timeout(500)
+            modal.wait_for_timeout(500)
         except Exception:
             pass
 
-        # 4. Click Imprimir — igual que el flujo normal: el evento download
-        # se captura en la página principal independiente de que abra pestaña nueva.
+        # 4. Click Imprimir
         guardado = False
         try:
-            with page.expect_download(timeout=20000) as dl_info:
-                page.click("#aceptar_modal")
+            with modal.expect_download(timeout=20000) as dl_info:
+                modal.click("#aceptar_modal")
                 log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
             dl = dl_info.value
             dl.save_as(ruta_dest)
@@ -562,14 +577,26 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
             except Exception:
                 pass
 
-    # Abrir modal de impresión
-    page.click("button[id^='planillas_masivas']")
-    log("Modal de impresión abierto", "info")
+    # Abrir modal de impresión. Previred lo abre en una VENTANA EMERGENTE
+    # nueva (el propio sitio explica cómo destrabar el bloqueador de popups
+    # con "Ctrl+Alt+Click" cuando no se abre) — hay que capturar esa pestaña
+    # nueva, porque el botón "Imprimir" real vive ahí, no en `page`.
+    modal = page
+    try:
+        with page.context.expect_page(timeout=8000) as popup_info:
+            page.click("button[id^='planillas_masivas']")
+        modal = popup_info.value
+        modal.wait_for_load_state("domcontentloaded")
+        log("Modal de impresión abierto (ventana emergente)", "info")
+    except PWTimeout:
+        # El click funcionó pero no se abrió ventana nueva: asumir que el
+        # modal quedó en la misma página (fallback)
+        log("Modal de impresión abierto", "info")
     time.sleep(2)
 
     # Seleccionar "Total Empresa"
     try:
-        radio = page.locator("input[type='radio'][value*='total']").first
+        radio = modal.locator("input[type='radio'][value*='total']").first
         if radio.count() > 0 and not radio.is_checked():
             radio.click()
         time.sleep(1)
@@ -578,27 +605,32 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
 
     # Esperar que el botón Imprimir sea visible
     try:
-        page.wait_for_selector("#aceptar_modal", state="visible", timeout=20000)
+        modal.wait_for_selector("#aceptar_modal", state="visible", timeout=20000)
     except Exception as e_imp:
         log(f"Botón Imprimir no apareció: {e_imp.__class__.__name__}", "err")
-        _dump_modal_impresion(page, log)
+        _dump_modal_impresion(modal, log)
         try:
             nombre_captura = "debug_modal_impresion.png"
-            page.screenshot(path=os.path.join(carpeta_temp, nombre_captura))
+            modal.screenshot(path=os.path.join(carpeta_temp, nombre_captura))
             tid = os.path.basename(os.path.normpath(carpeta_temp))
             url_captura = f"/api/previred/captura/{tid}/{nombre_captura}"
             log(f"Captura de pantalla: <a href='{url_captura}' target='_blank'>ver imagen</a>", "warn")
         except Exception:
             pass
+        if modal is not page:
+            try:
+                modal.close()
+            except Exception:
+                pass
         return False
 
     descargado = False
     try:
-        with page.expect_download(timeout=30000) as dl_info:
-            page.click("#aceptar_modal")
+        with modal.expect_download(timeout=30000) as dl_info:
+            modal.click("#aceptar_modal")
             log("Imprimir clickeado", "info")
             time.sleep(3)
-            if _hay_dialogo_email(page):
+            if _hay_dialogo_email(modal):
                 raise RuntimeError("email_dialog")
 
         dl = dl_info.value
@@ -688,11 +720,19 @@ def volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, 
             ir_a_planillas_pagadas(page, log)
 
 
+class DetenidoPorUsuario(Exception):
+    """Se lanza cuando el usuario pide detener la tarea desde la interfaz."""
+
+
 def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
               periodos: list, carpeta_dest: str, carpeta_temp: str, log,
-              razon_social: str = ""):
+              razon_social: str = "", debe_cancelar=None):
     os.makedirs(carpeta_dest, exist_ok=True)
     os.makedirs(carpeta_temp, exist_ok=True)
+
+    def _chequear_cancelacion():
+        if debe_cancelar is not None and debe_cancelar():
+            raise DetenidoPorUsuario()
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(
@@ -721,6 +761,7 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
             log(f"Períodos a procesar: {len(periodos)}", "info")
 
             for (mes, anio) in periodos:
+                _chequear_cancelacion()
                 mes_nombre = MESES_NOMBRE.get(mes, str(mes))
                 log(f"── Período: {mes_nombre} {anio}", "info")
 
@@ -742,6 +783,7 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                 log(f"Nóminas ({len(nominas)}): {', '.join(nominas)}", "info")
 
                 for nombre_nomina in nominas:
+                    _chequear_cancelacion()
                     log(f"Procesando: {nombre_nomina}", "info")
                     try:
                         hay = buscar_planilla(page, mes, anio, nombre_nomina)
@@ -760,6 +802,9 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                             pass
 
             log("Descarga completada", "ok")
+        except DetenidoPorUsuario:
+            log("Detenido por el usuario", "warn")
+            raise
         except Exception as e:
             log(f"Error inesperado: {e}", "err")
             raise

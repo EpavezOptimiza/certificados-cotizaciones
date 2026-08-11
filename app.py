@@ -1868,7 +1868,8 @@ def previred_config_set():
 
 def _nueva_tarea() -> str:
     tid = uuid.uuid4().hex[:10]
-    _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None, "zip": None, "zip_bytes": None, "zip_name": None}
+    _tareas[tid] = {"logs": [], "done": False, "error": False, "archivo": None, "zip": None,
+                    "zip_bytes": None, "zip_name": None, "cancelar": False, "cancelado": False}
     return tid
 
 def _log(tid: str, msg: str, tipo: str = "info"):
@@ -1886,12 +1887,29 @@ def previred_tarea(tid):
         return jsonify({"error": "Tarea no encontrada"}), 404
     since = int(request.args.get("since", 0))
     return jsonify({
-        "logs":    t["logs"][since:],
-        "done":    t["done"],
-        "error":   t["error"],
-        "archivo": t["archivo"],
-        "zip":     bool(t.get("zip")),
+        "logs":      t["logs"][since:],
+        "done":      t["done"],
+        "error":     t["error"],
+        "archivo":   t["archivo"],
+        "zip":       bool(t.get("zip")),
+        "cancelado": bool(t.get("cancelado")),
     })
+
+
+@app.route("/api/previred/detener/<tid>", methods=["POST"])
+@api_login_required
+def previred_detener(tid):
+    """Pide detener una tarea de Previred en curso. El bot revisa esta
+    bandera entre período/nómina/empresa y corta apenas puede — no es
+    instantáneo, pero evita tener que refrescar la página para cortarlo."""
+    t = _tareas.get(tid)
+    if not t:
+        return jsonify({"error": "Tarea no encontrada"}), 404
+    if t["done"]:
+        return jsonify({"ok": True, "ya_terminada": True})
+    t["cancelar"] = True
+    _log(tid, "Solicitud de detener recibida — cortará en el próximo punto seguro...", "warn")
+    return jsonify({"ok": True})
 
 @app.route("/api/previred/captura/<tid>/<nombre>")
 @api_login_required
@@ -2008,9 +2026,13 @@ def previred_iniciar():
                     _tareas[tid]["done"]  = True
                     return
                 from previred_logic import (descargar, CuentaBloqueada,
-                                            CredencialesInvalidas)
+                                            CredencialesInvalidas, DetenidoPorUsuario)
                 todas_rutas_pdf = []
                 for emp in empresas:
+                    if _tareas[tid].get("cancelar"):
+                        _log(tid, "Detenido por el usuario", "warn")
+                        _tareas[tid]["cancelado"] = True
+                        break
                     rut_empresa  = (emp.get("rut") or "").strip()
                     razon_social = (emp.get("razon") or "").strip()
                     if not rut_empresa:
@@ -2023,7 +2045,11 @@ def previred_iniciar():
                     try:
                         descargar(rut_usr, cont_usr, rut_empresa, periodos,
                                   carpeta_emp, carpeta_temp_tarea, lambda m, t: _log(tid, m, t),
-                                  razon_social=razon_social)
+                                  razon_social=razon_social,
+                                  debe_cancelar=lambda: _tareas[tid].get("cancelar", False))
+                    except DetenidoPorUsuario:
+                        _tareas[tid]["cancelado"] = True
+                        break
                     except CuentaBloqueada as e_bloq:
                         _log(tid, "⛔ PROCESO DETENIDO — cuenta de PreviRed bloqueada "
                                   "o clave expirada", "err")

@@ -22,6 +22,32 @@ def rut_a_btn_id(rut: str, razon_social: str = "") -> str:
     return f"empresa#{num}#{sub_id}#false"
 
 
+def _dump_modal_impresion(page, log):
+    """Cuando el botón #aceptar_modal no aparece, vuelca en el log los
+    botones/inputs realmente visibles para saber si Previred cambió el id
+    o el modal no se abrió como se esperaba."""
+    try:
+        info = page.evaluate("""() => {
+            const out = [];
+            for (const e of document.querySelectorAll(
+                    'button, input[type="submit"], input[type="button"], a.button, .ui-dialog button')) {
+                if (e.offsetParent === null) continue;
+                out.push({
+                    tag: e.tagName.toLowerCase(), id: e.id || '',
+                    clase: (e.className || '').toString().slice(0, 60),
+                    texto: (e.innerText || e.value || '').trim().slice(0, 40)
+                });
+            }
+            const dialogAbierto = document.querySelectorAll('.ui-dialog:not([style*="display: none"])').length;
+            return {botones: out.slice(0, 15), dialogos_abiertos: dialogAbierto};
+        }""")
+        log(f"  [debug] diálogos abiertos: {info['dialogos_abiertos']}", "warn")
+        for b in info["botones"]:
+            log(f"    {b['tag']} id={b['id']!r} clase={b['clase']!r} texto={b['texto']!r}", "warn")
+    except Exception as e:
+        log(f"  [debug] no se pudo volcar el modal: {type(e).__name__}", "warn")
+
+
 def _click_texto(page, texto: str, timeout: int = 15000) -> bool:
     """Hace click en el primer elemento visible que contenga 'texto'."""
     # Primer intento: esperar que el elemento esté visible (respeta timeout)
@@ -476,6 +502,7 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
             page.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
         except Exception:
             log(f"inst{inst_num} ({nombre_inst}): modal no apareció", "warn")
+            _dump_modal_impresion(page, log)
             time.sleep(1)
             continue
 
@@ -551,9 +578,10 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
 
     # Esperar que el botón Imprimir sea visible
     try:
-        page.wait_for_selector("#aceptar_modal", state="visible", timeout=10000)
+        page.wait_for_selector("#aceptar_modal", state="visible", timeout=20000)
     except Exception as e_imp:
         log(f"Botón Imprimir no apareció: {e_imp.__class__.__name__}", "err")
+        _dump_modal_impresion(page, log)
         return False
 
     descargado = False

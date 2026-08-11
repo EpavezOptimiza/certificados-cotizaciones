@@ -1529,6 +1529,54 @@ def previred_empresas_list():
     start = (page - 1) * per_page
     return jsonify({"items": items[start:start+per_page], "total": total, "grupos": grupos, "page": page})
 
+
+@app.route("/api/previred/empresas_base_madre")
+@api_login_required
+def previred_empresas_base_madre():
+    """Lista de empresas para el selector de Previred, tomada de BASE MADRE
+    (la base de clientes) en vez de la tabla local previred_empresas —
+    esa tabla la siguen usando /empresas y otros módulos (Base Deudas, MiDT)
+    para su propio CRUD, así que se deja intacta."""
+    from base_madre_logic import obtener_clientes
+
+    q = request.args.get("q", "").strip().lower()
+    grupo = request.args.get("grupo", "").strip()
+
+    columnas, filas, _, error = obtener_clientes()
+
+    def encontrar_col(terms):
+        import unicodedata
+        def norm(s):
+            return unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().strip().lower()
+        for col in (columnas or []):
+            cn = norm(col)
+            if all(t in cn for t in terms):
+                return col
+        return None
+
+    col_rut   = encontrar_col(["rut"])
+    col_grupo = encontrar_col(["grupo"])
+    col_razon = encontrar_col(["razon", "social"])
+
+    items = []
+    if not error and filas and col_rut:
+        for fila in filas:
+            rut = (fila.get(col_rut) or "").strip()
+            if not rut:
+                continue
+            items.append({
+                "rut": rut,
+                "grupo": (fila.get(col_grupo) or "").strip() if col_grupo else "",
+                "razon_social": (fila.get(col_razon) or "").strip() if col_razon else "",
+            })
+
+    if q:
+        items = [i for i in items if q in i["rut"].lower() or q in i["grupo"].lower() or q in i["razon_social"].lower()]
+    if grupo:
+        items = [i for i in items if i["grupo"] == grupo]
+    grupos = sorted(set(i["grupo"] for i in items if i["grupo"]))
+    return jsonify({"items": items, "total": len(items), "grupos": grupos, "error": error})
+
 @app.route("/api/previred/empresas", methods=["POST"])
 @api_login_required
 def previred_empresa_crear():

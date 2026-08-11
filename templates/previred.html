@@ -554,9 +554,12 @@ function togglePanel(){
 
 // ── Empresas ──────────────────────────────────────────────
 async function cargarEmpresas(){
-  const res  = await fetch('/api/previred/empresas?per_page=500');
+  const res  = await fetch('/api/previred/empresas_base_madre');
   const data = await res.json();
   _empresas  = data.items || [];
+  if(data.error && !_empresas.length){
+    toast('No se pudo conectar con BASE MADRE: ' + data.error);
+  }
   renderEmpresas(_empresas);
 }
 

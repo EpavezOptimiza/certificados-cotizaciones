@@ -2134,7 +2134,13 @@ def previred_iniciar():
                 from pdf_excel_logic import generar_excel_bytes
                 rut_empresa  = (empresas[0].get("rut")   if empresas else "") or ""
                 razon_social = (empresas[0].get("razon") if empresas else "") or ""
-                if tipo == "ambos" and empresas:
+                if empresas:
+                    # Los PDFs descargados quedan en una subcarpeta por
+                    # empresa (_oi["base"]/<rut_sin_puntos>/*.pdf) — antes
+                    # "Solo convertir a Excel" (tipo == 'convertir' sin
+                    # 'ambos') buscaba directo en _oi["base"] y nunca
+                    # encontraba nada ahí, aunque hubiera empresas
+                    # seleccionadas con PDFs ya descargados.
                     rutas = []
                     for emp in empresas:
                         rut_e = (emp.get("rut") or "").replace(".", "").replace("-", "")

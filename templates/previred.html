@@ -1090,6 +1090,43 @@ function addLogLine(msg, tipo, hora){
     _friendlyEmpresa(empresaMatch[2] || empresaMatch[1]);
   }
 
+  // Flujo "Solo convertir a Excel" / "Descargar y convertir": no emite los
+  // marcadores __ARCHIVO_OK__ etc. (esos son solo del flujo de descarga),
+  // así que sin esto la vista amigable quedaba vacía todo el proceso.
+  const convirtiendoMatch = msg.match(/^Convirtiendo (\d+) PDF/);
+  if(convirtiendoMatch){
+    _friendlyLimpiarVacio();
+    const el = document.getElementById('friendly-body');
+    const div = document.createElement('div');
+    div.className = 'friendly-line';
+    div.innerHTML = `<div class="friendly-icon" style="background:#dbeafe;color:#185FA5">⏳</div>
+      <div class="friendly-text">Convirtiendo ${esc(convirtiendoMatch[1])} PDF(s) a Excel...</div>`;
+    el.appendChild(div);
+  }
+  const trabajadorMatch = msg.match(/^\[(\d+)\/(\d+)\]\s+(.+?)\s+→\s+(\d+)\s+trabajador/);
+  if(trabajadorMatch){
+    const [, i, total, archivo, n] = trabajadorMatch;
+    _friendlyArchivo(Number(n) > 0, archivo, `${i} de ${total} · ${n} trabajador(es) encontrados`);
+  }
+  if(msg.startsWith('Excel listo:')){
+    _friendlyLimpiarVacio();
+    const el = document.getElementById('friendly-body');
+    const div = document.createElement('div');
+    div.className = 'friendly-line';
+    div.innerHTML = `<div class="friendly-icon ok">✓</div>
+      <div class="friendly-text">Excel generado<div class="friendly-sub">${esc(msg.replace('Excel listo: ',''))}</div></div>`;
+    el.appendChild(div);
+  }
+  if(msg.startsWith('No hay PDFs en la carpeta para convertir') || msg.startsWith('Carpeta no existe:')){
+    _friendlyLimpiarVacio();
+    const el = document.getElementById('friendly-body');
+    const div = document.createElement('div');
+    div.className = 'friendly-line';
+    div.innerHTML = `<div class="friendly-icon err">✕</div>
+      <div class="friendly-text">${esc(msg)}</div>`;
+    el.appendChild(div);
+  }
+
   const el    = document.getElementById('log-body');
   const empty = el.querySelector('.log-empty');
   if(empty) empty.remove();

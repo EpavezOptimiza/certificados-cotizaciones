@@ -514,19 +514,19 @@ function procesarCaretaOrigen() {
 
 async function seleccionarCarpetaDestino() {
   try {
-    // Usar File System Access API (Chrome/Edge 86+, Firefox)
+    if (!window.showDirectoryPicker) {
+      alert('Tu navegador no soporta esta función. Escribe la ruta manualmente.');
+      return;
+    }
     const dirHandle = await window.showDirectoryPicker();
     const nombre = dirHandle.name;
-    document.getElementById('ruta-destino-dicom').value = nombre;
-    document.getElementById('destino-count').textContent = '✓ Carpeta: ' + nombre;
-    actualizarBtnAnalizar();
-  } catch (err) {
-    if (err.name === 'NotAllowedError') {
-      // Usuario canceló
-    } else {
-      // Fallback para navegadores sin soporte
-      document.getElementById('destino-count').textContent = 'Selecciona manualmente en el campo';
+    if (nombre) {
+      document.getElementById('ruta-destino-dicom').value = nombre;
+      document.getElementById('destino-count').textContent = '✓ Carpeta: ' + nombre;
+      actualizarBtnAnalizar();
     }
+  } catch (err) {
+    console.log('Error al seleccionar carpeta:', err.name);
   }
 }
 

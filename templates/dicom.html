@@ -66,7 +66,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="field">
       <label>Contraseña</label>
-      <input type="password" id="clave" placeholder="••••••••" autocomplete="new-password">
+      <div style="position:relative">
+        <input type="password" id="clave" placeholder="••••••••" autocomplete="new-password" style="width:100%;padding-right:38px">
+        <button type="button" onclick="toggleClave(this)" title="Mostrar/ocultar contraseña"
+                style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;padding:4px;line-height:1">👁️</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
       <button class="btn" id="btn-probar" onclick="probar()">▶ Probar acceso</button>
@@ -128,6 +132,13 @@ let _tid = null, _since = 0, _poll = null;
 
 const esc = s => (s ?? '').toString()
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function toggleClave(btn){
+  const input = document.getElementById('clave');
+  const mostrando = input.type === 'text';
+  input.type = mostrando ? 'password' : 'text';
+  btn.textContent = mostrando ? '👁️' : '🙈';
+}
 
 async function cargarCfg(){
   try{

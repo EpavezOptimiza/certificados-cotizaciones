@@ -504,6 +504,22 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         });
     }""")
     log(f"Categorías de institución encontradas: {len(categorias)}", "info")
+    if len(categorias) <= 1:
+        # Diagnóstico: si solo aparece 1 categoría (o ninguna), puede que
+        # esta página (a la que se llega tras "Nueva Búsqueda" en el
+        # flujo de "planilla muy grande") ya venga directo mostrando una
+        # sola institución en vez de las 7 colapsadas. Volcar el texto de
+        # las filas de institución visibles para confirmar qué hay.
+        try:
+            filas = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('td, th'))
+                    .map(e => (e.innerText || '').trim())
+                    .filter(t => t.length > 0 && t.length < 40)
+                    .slice(0, 20);
+            }""")
+            log(f"  [debug] texto de celdas visibles: {filas}", "warn")
+        except Exception:
+            pass
 
     def _click_categoria(cat_id):
         page.evaluate(
@@ -538,32 +554,43 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         log("No se encontraron iconos planillas.gif", "warn")
         return 0
 
-    for i in range(total_iconos):
+    # Previred genera estos PDFs en una cola en su servidor: el primero
+    # puede llegar al instante, pero cada uno siguiente tarda cada vez más
+    # (visto en producción: instantáneo, 7s, 90s+...). Esperar institución
+    # por institución (clickear → esperar su PDF → recién pasar a la
+    # siguiente) hacía que los que demoraban más se perdieran: el archivo
+    # SÍ llegaba (quedaba capturado en memoria), pero ya se había pasado a
+    # la institución siguiente y nadie volvía a revisarlo, así que nunca se
+    # guardaba a disco.
+    #
+    # Ahora se clickean TODAS las instituciones seguidas, sin esperar a que
+    # cada una termine, y recién al final se espera UNA vez por todas las
+    # que sigan pendientes -- ningún archivo se descarta por timing.
+    capturas = {}      # img_id -> {'pdf': [bytes], 'ruta': str, 'nombre_inst': str}
+    listeners_page = []  # [(evento, callback), ...] registrados en `page`, para limpiar al final
+
+    for i, img_id in enumerate(ids_info):
         inst_num = i + 1
-        img_id = ids_info[i] if i < len(ids_info) else ''
         partes_id = img_id.split('#')
         nombre_inst = partes_id[-1] if len(partes_id) > 1 else f"inst{inst_num:02d}"
         nombre_dest = f"{prefijo}-{nombre_inst}.pdf"
         ruta_dest = os.path.join(carpeta_dest, nombre_dest)
 
-        # 1. Click en ícono planilla → Previred abre una VENTANA EMERGENTE
-        # nueva con el modal (mismo comportamiento que "Descargar Planillas
-        # Masivas"). Igual que en descargar_planilla(), se captura el PDF
-        # por red/descarga en vez de depender solo de encontrar el botón.
         pdf_capturado = []
+        capturas[img_id] = {"pdf": pdf_capturado, "ruta": ruta_dest, "nombre_inst": nombre_inst}
 
-        def _capturar_respuesta(response):
+        def _capturar_respuesta(response, _pdf=pdf_capturado):
             try:
                 ct = (response.headers or {}).get("content-type", "")
                 if "pdf" not in ct.lower():
                     return
                 body = response.body()
                 if body and len(body) > 500:
-                    pdf_capturado.append(body)
+                    _pdf.append(body)
             except Exception:
                 pass
 
-        def _capturar_download(dl):
+        def _capturar_download(dl, _pdf=pdf_capturado):
             try:
                 import tempfile as _tf
                 tmp = _tf.mktemp(suffix=".pdf")
@@ -572,130 +599,83 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
                     b = fh.read()
                 os.remove(tmp)
                 if b and len(b) > 500:
-                    pdf_capturado.append(b)
+                    _pdf.append(b)
             except Exception:
                 pass
 
-        modal = page
         page.on("download", _capturar_download)
+        page.on("response", _capturar_respuesta)
+        listeners_page.append(("download", _capturar_download))
+        listeners_page.append(("response", _capturar_respuesta))
+
         try:
-            with page.expect_popup(timeout=6000) as popup_info:
+            with page.expect_popup(timeout=4000) as popup_info:
                 page.evaluate(
                     "(id) => { const el = document.querySelector('[id=\"' + id + '\"]'); if (el) el.click(); }",
                     img_id)
-            modal = popup_info.value
-            modal.wait_for_load_state("domcontentloaded")
-            modal.on("download", _capturar_download)
-            modal.on("response", _capturar_respuesta)
+            popup = popup_info.value
+            popup.wait_for_load_state("domcontentloaded")
+            popup.on("download", _capturar_download)
+            popup.on("response", _capturar_respuesta)
         except PWTimeout:
-            # El click funcionó pero no se abrió ventana nueva: asumir que
-            # el modal quedó en la misma página (fallback)
-            page.on("response", _capturar_respuesta)
+            pass
         except Exception as ec:
             log(f"inst{inst_num} ({nombre_inst}): click falló {ec.__class__.__name__}", "warn")
-            try:
-                page.remove_listener("download", _capturar_download)
-            except Exception:
-                pass
             continue
 
-        # 2. Click Imprimir si el botón aparece (best-effort)
         try:
-            modal.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
+            page.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
             if i == 0:
-                # Diagnóstico solo para la primera institución: ver cómo
-                # queda la pantalla justo antes y después del click, por si
-                # "#aceptar_modal" no es el botón correcto en este flujo
-                # (el usuario sospecha que el botón "1 por 1" es distinto
-                # al de "Descargar Planillas Masivas").
-                _dump_modal_impresion(modal, log)
+                # Diagnóstico solo para la primera institución
+                _dump_modal_impresion(page, log)
                 try:
                     nombre_antes = "debug_antes_click_individual.png"
-                    modal.screenshot(path=os.path.join(carpeta_temp, nombre_antes))
+                    page.screenshot(path=os.path.join(carpeta_temp, nombre_antes))
                     tid = os.path.basename(os.path.normpath(carpeta_temp))
                     log(f"Captura ANTES del click: "
                         f"<a href='/api/previred/captura/{tid}/{nombre_antes}' target='_blank'>ver imagen</a>",
                         "warn")
                 except Exception:
                     pass
-            modal.click("#aceptar_modal")
+            page.click("#aceptar_modal")
             log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
-            if i == 0:
-                modal.wait_for_timeout(1500)
-                try:
-                    nombre_despues = "debug_despues_click_individual.png"
-                    modal.screenshot(path=os.path.join(carpeta_temp, nombre_despues))
-                    tid = os.path.basename(os.path.normpath(carpeta_temp))
-                    log(f"Captura DESPUÉS del click: "
-                        f"<a href='/api/previred/captura/{tid}/{nombre_despues}' target='_blank'>ver imagen</a>",
-                        "warn")
-                except Exception:
-                    pass
-                _dump_modal_impresion(modal, log)
         except Exception:
             log(f"inst{inst_num} ({nombre_inst}): modal no apareció, "
                 f"esperando captura por red...", "warn")
-            _dump_modal_impresion(modal, log)
+            if i == 0:
+                _dump_modal_impresion(page, log)
 
-        # 3. Seleccionar Total Empresa si no está marcado (por si el radio
-        # aparece después del click, algunos flujos lo muestran recién ahí)
-        try:
-            radio = modal.locator("input[type='radio'][value*='total']").first
-            if radio.count() > 0 and not radio.is_checked():
-                radio.click()
-            modal.wait_for_timeout(500)
-        except Exception:
-            pass
+        # Respiro corto antes de pasar a la siguiente institución -- NO se
+        # espera aquí a que este PDF termine de generarse, eso pasa después
+        # para todas juntas.
+        page.wait_for_timeout(1500)
 
-        # 4. Esperar a que llegue el PDF por red o descarga. Confirmado con
-        # capturas reales: el botón "Imprimir" (#aceptar_modal) es el
-        # correcto, pero Previred genera estos PDFs en cola en su servidor
-        # -- la primera institución puede llegar al instante, pero las
-        # siguientes tardan cada vez más (visto: instantáneo, 33s...).
-        # Se espera hasta 90s por archivo, con avisos cada 15s para que no
-        # parezca colgado.
-        guardado = False
-        for i_espera in range(90):
-            if pdf_capturado:
+    # Esperar UNA vez por todos los PDFs que sigan pendientes
+    faltantes = [k for k, c in capturas.items() if not c["pdf"]]
+    if faltantes:
+        log(f"Esperando que Previred termine de generar {len(faltantes)} PDF(s) pendiente(s)...", "info")
+        for i_espera in range(180):
+            faltantes = [k for k, c in capturas.items() if not c["pdf"]]
+            if not faltantes:
                 break
-            if i_espera > 0 and i_espera % 15 == 0:
-                log(f"inst{inst_num} ({nombre_inst}): esperando generación en Previred... ({i_espera}s)", "info")
+            if i_espera > 0 and i_espera % 20 == 0:
+                log(f"Todavía faltan {len(faltantes)} de {total_iconos}... ({i_espera}s)", "info")
             time.sleep(1)
-        if pdf_capturado:
-            with open(ruta_dest, "wb") as f:
-                f.write(pdf_capturado[0])
-            guardado = True
-        else:
-            log(f"inst{inst_num} ({nombre_inst}): descarga falló (sin PDF capturado)", "warn")
 
+    for cb_evento, cb_fn in listeners_page:
         try:
-            page.remove_listener("download", _capturar_download)
-        except Exception:
-            pass
-        try:
-            page.remove_listener("response", _capturar_respuesta)
-        except Exception:
-            pass
-        if modal is not page:
-            try:
-                modal.close()
-            except Exception:
-                pass
-
-        # 6. Cerrar modal si quedó abierto
-        try:
-            cerrar = page.locator("button:has-text('Cerrar')").first
-            if cerrar.is_visible():
-                cerrar.click()
-            page.wait_for_timeout(500)
+            page.remove_listener(cb_evento, cb_fn)
         except Exception:
             pass
 
-        if guardado:
-            log(f"Guardado: {nombre_dest}", "ok")
+    for img_id, c in capturas.items():
+        if c["pdf"]:
+            with open(c["ruta"], "wb") as f:
+                f.write(c["pdf"][0])
+            log(f"Guardado: {os.path.basename(c['ruta'])}", "ok")
             descargados += 1
-
-        time.sleep(1)
+        else:
+            log(f"{c['nombre_inst']}: no llegó ningún PDF", "err")
 
     return descargados
 

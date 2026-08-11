@@ -573,9 +573,12 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         except Exception:
             pass
 
-        # 4. Esperar a que llegue el PDF por red o descarga
+        # 4. Esperar a que llegue el PDF por red o descarga. Estas planillas
+        # entran por este flujo justo porque Previred las marcó "muy
+        # grandes": la generación real toma ~17-18s por institución
+        # (medido en producción), así que el margen tiene que ser generoso.
         guardado = False
-        for _ in range(10):
+        for _ in range(25):
             if pdf_capturado:
                 break
             time.sleep(1)

@@ -601,14 +601,19 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         except Exception:
             pass
 
-        # 4. Esperar a que llegue el PDF por red o descarga. Estas planillas
-        # entran por este flujo justo porque Previred las marcó "muy
-        # grandes": la generación real toma ~17-18s por institución
-        # (medido en producción), así que el margen tiene que ser generoso.
+        # 4. Esperar a que llegue el PDF por red o descarga. Confirmado con
+        # capturas reales: el botón "Imprimir" (#aceptar_modal) es el
+        # correcto, pero Previred genera estos PDFs en cola en su servidor
+        # -- la primera institución puede llegar al instante, pero las
+        # siguientes tardan cada vez más (visto: instantáneo, 33s...).
+        # Se espera hasta 90s por archivo, con avisos cada 15s para que no
+        # parezca colgado.
         guardado = False
-        for _ in range(25):
+        for i_espera in range(90):
             if pdf_capturado:
                 break
+            if i_espera > 0 and i_espera % 15 == 0:
+                log(f"inst{inst_num} ({nombre_inst}): esperando generación en Previred... ({i_espera}s)", "info")
             time.sleep(1)
         if pdf_capturado:
             with open(ruta_dest, "wb") as f:

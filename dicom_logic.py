@@ -503,93 +503,122 @@ def extraer_rut_de_nombre(nombre_archivo):
     return f"{m.group(1)}-{m.group(2).upper()}"
 
 
+import re as _re
+
+# Encabezado de la tabla "Motivo Institución Boletín Pág. Fecha Infracción
+# Cotizaciones Meses Monto $ Fiscalizador Resolución" tal como lo entrega
+# pypdf (los acentos suelen salir como U+FFFD, por eso se usa "." comodín).
+_HEADER_TABLA_RE = _re.compile(
+    r'Motivo\s*Instituci.n\s*Bolet.n\s*P.g\.\s*Fecha\s*Infracci.n'
+    r'\s*Cotizaciones\s*Meses\s*Monto\s*\$\s*Fiscalizador\s*Resoluci.n'
+)
+_TRABAJADOR_RE = _re.compile(
+    r'((?:\d{2}/\d{4}\s+\$[\d.,]+\s+\d{1,3},\d{2}\s*\n?)+)'
+    r'(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s?([A-ZÑÁÉÍÓÚ \n]+?)\nTotal Trabajador:\s*(\d{1,3},\d{2})'
+)
+_PERIODO_RE = _re.compile(r'(\d{2}/\d{4})\s+\$([\d.,]+)\s+(\d{1,3},\d{2})')
+# El texto extraído pega el motivo directo con el nombre de la institución
+# (ej. "...DeclaradasAFP. CUPRUM"); se inserta un espacio antes de estas
+# marcas conocidas para que quede legible en el Excel.
+_SEPARAR_INSTITUCION_RE = _re.compile(
+    r'(?<=\S)(AFP|CCAF|C\.C\.A\.F|DIRECCION DEL TRABAJO|ADM DE FONDOS|MUTUAL|ISL)'
+)
+
+
+def _extraer_bloques_institucion(texto_pag1):
+    """Divide el texto de la página 1 en un bloque por cada institución con
+    deuda o multa (el Boletin Laboral repite la tabla de encabezado una vez
+    por cada institución cuando hay más de una)."""
+    bloques = []
+    for chunk in _HEADER_TABLA_RE.split(texto_pag1)[1:]:
+        m = _re.match(r'\s*(.+?)\s*\d{3}\s*-\s*\d{2}/\d{2}/\d{4}', chunk, _re.S)
+        institucion = ' '.join(m.group(1).split()) if m else 'Sin especificar'
+        institucion = _SEPARAR_INSTITUCION_RE.sub(r' \1', institucion)
+
+        trabajadores = []
+        for tm in _TRABAJADOR_RE.finditer(chunk):
+            periodos_raw, rut_t, nombre_t, _total_t = tm.groups()
+            nombre_t = ' '.join(nombre_t.split())
+            for fecha, monto_pesos, _utm in _PERIODO_RE.findall(periodos_raw):
+                trabajadores.append({
+                    'rut': rut_t,
+                    'nombre': nombre_t,
+                    'periodo': fecha,
+                    'monto': int(_re.sub(r'[^\d]', '', monto_pesos.split(',')[0])),
+                })
+
+        tipo_correo = 'DT' if ('DIRECCION DEL TRABAJO' in institucion.upper()
+                                or 'MULTA' in institucion.upper()) else 'Previsional'
+        bloques.append({'institucion': institucion, 'tipo_correo': tipo_correo,
+                         'trabajadores': trabajadores})
+    return bloques
+
+
 def extraer_datos_pdf(ruta_pdf, nombre_archivo=None):
     """Extrae datos de un PDF Boletin Laboral: RUT empresa, razón social,
-    deudas previsionales, multas, monto, trabajadores e institución.
+    deudas previsionales, multas, monto UTM total e instituciones con deuda
+    (cada una con su lista de trabajadores/periodos si aplica).
 
     El RUT se obtiene primero del NOMBRE DE ARCHIVO (formato fijo que
     trae el portal Equifax) porque es mucho más confiable que buscarlo
-    en el texto del PDF, que puede venir escaneado o con formato irregular.
-    Si no viene en el nombre, se intenta como respaldo desde el texto.
+    en el texto del PDF. La razón social es la primera línea del PDF.
 
     Retorna dict con estructura:
     {
       'rut': 'xx.xxx.xxx-x',
       'razon_social': 'NOMBRE EMPRESA',
-      'deudas': 0,  # count
-      'multas': 0,  # count
-      'monto': 0,   # total en pesos
-      'trabajadores': [{'rut': '...', 'nombre': '...', 'periodo': '...', 'monto': 0}],
-      'institucion': 'AFP Cuprum' o 'Previsional' o similar
+      'deudas': 0,       # cantidad de Deudas Previsionales (del resumen)
+      'multas': 0,       # cantidad de Multas (del resumen)
+      'monto_utm': 0.0,  # Monto Total UTM (del resumen)
+      'instituciones': [
+          {'institucion': str, 'tipo_correo': 'Previsional'|'DT',
+           'trabajadores': [{'rut','nombre','periodo','monto'}, ...]},
+          ...
+      ]
     }
     """
+    detalles = {
+        'rut': '', 'razon_social': '', 'deudas': 0, 'multas': 0,
+        'monto_utm': 0.0, 'instituciones': []
+    }
     try:
         import pypdf
-        detalles = {
-            'rut': '',
-            'razon_social': '',
-            'deudas': 0,
-            'multas': 0,
-            'monto': 0,
-            'trabajadores': [],
-            'institucion': 'Sin especificar'
-        }
 
         if nombre_archivo:
             detalles['rut'] = extraer_rut_de_nombre(nombre_archivo)
 
         with open(ruta_pdf, 'rb') as f:
             reader = pypdf.PdfReader(f)
-            texto = ""
-            for page in reader.pages:
-                texto += page.extract_text() or ""
+            texto_pag1 = reader.pages[0].extract_text() or ""
+            texto_completo = texto_pag1
+            for page in reader.pages[1:]:
+                texto_completo += page.extract_text() or ""
 
-        texto = texto.replace('\n', ' ').replace('\r', ' ')
-
-        # Respaldo: si no vino del nombre, buscar RUT con puntos en el texto
-        import re
         if not detalles['rut']:
-            ruts = re.findall(r'\b\d{1,2}\.\d{3}\.\d{3}-[\dKk]\b', texto)
+            ruts = _re.findall(r'\b\d{1,2}\.\d{3}\.\d{3}-[\dKk]\b', texto_completo)
             if ruts:
                 detalles['rut'] = ruts[0]
 
-        # Extraer razón social (después de "Razón Social" o similar)
-        if 'razón social' in texto.lower():
-            idx = texto.lower().find('razón social')
-            segmento = texto[idx:idx+200]
-            palabras = segmento.split()
-            if len(palabras) > 3:
-                detalles['razon_social'] = ' '.join(palabras[3:7]).strip()
+        primera_linea = texto_pag1.split('\n', 1)[0].strip()
+        detalles['razon_social'] = primera_linea
 
-        # Contar deudas y multas
-        detalles['deudas'] = texto.lower().count('deuda')
-        detalles['multas'] = texto.lower().count('multa')
+        m = _re.search(r'([\d]+,\d+)\s*Monto Total UTM', texto_completo)
+        if m:
+            detalles['monto_utm'] = float(m.group(1).replace(',', '.'))
 
-        # Extraer monto (buscar números grandes con formato de dinero)
-        montos = re.findall(r'\$?\s*[\d.,]+', texto)
-        if montos:
-            try:
-                for m in montos[-3:]:
-                    clean = re.sub(r'[^\d]', '', m)
-                    if len(clean) > 5:
-                        detalles['monto'] = int(clean)
-                        break
-            except:
-                pass
+        m = _re.search(r'Deudas Previsionales\s*:\s*(\d+)', texto_completo)
+        if m:
+            detalles['deudas'] = int(m.group(1))
 
-        # Extraer institución (AFP, Previsional, CCAF, etc.)
-        for inst in ['AFP CUPRUM', 'AFP INTEGRA', 'AFP PROVIDA', 'PREVISIONAL',
-                     'CCAF', 'Cred. No Enterado', 'DT']:
-            if inst in texto.upper():
-                detalles['institucion'] = inst.title()
-                break
+        m = _re.search(r'Multas\s*:\s*(\d+)', texto_completo)
+        if m:
+            detalles['multas'] = int(m.group(1))
+
+        detalles['instituciones'] = _extraer_bloques_institucion(texto_pag1)
 
         return detalles
-    except Exception as e:
-        return {
-            'rut': '', 'razon_social': '', 'deudas': 0, 'multas': 0,
-            'monto': 0, 'trabajadores': [], 'institucion': 'Error'
-        }
+    except Exception:
+        return detalles
 
 
 def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
@@ -607,66 +636,47 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
         wb = Workbook()
         wb.remove(wb.active)
 
-        # Sheet 1: Resumen
+        # Sheet 1: Resumen — una fila por cada institución con deuda/multa;
+        # si la empresa no tiene ninguna, una única fila "Sin Dicom".
         ws1 = wb.create_sheet('Resumen Analisis', 0)
         ws1.append(['RUT Empresa', 'GRUPO', 'Empresa', 'Tiene DICOM', 'Institucion', 'Tipo Correo'])
 
-        for datos in datos_por_pdf:
-            if not datos.get('rut'):
-                continue
-
-            rut_clean = datos['rut'].replace('.', '').replace(' ', '')
-            grupo_info = grupos_base_madre.get(rut_clean, {})
-            grupo = grupo_info.get('grupo', 'SIN GRUPO')
-
-            # Tiene DICOM: SI si deudas > 0 OR multas > 0 OR monto > 0
-            tiene_dicom = 'Si' if (datos.get('deudas', 0) > 0 or
-                                   datos.get('multas', 0) > 0 or
-                                   datos.get('monto', 0) > 0) else 'No'
-
-            # Si tiene_dicom = No, ambas columnas van "Sin Dicom"
-            institucion = 'Sin Dicom' if tiene_dicom == 'No' else datos.get('institucion', 'Sin especificar')
-            tipo_correo = 'Sin Dicom' if tiene_dicom == 'No' else datos.get('institucion', 'Sin especificar')
-
-            ws1.append([
-                datos['rut'],
-                grupo,
-                datos.get('razon_social', ''),
-                tiene_dicom,
-                institucion,
-                tipo_correo
-            ])
-
-        # Sheet 2: Deuda Previsional (sin detalles de trabajadores por ahora, solo estructura)
+        # Sheet 2: Deuda Previsional — una fila por cada trabajador/periodo
         ws2 = wb.create_sheet('Deuda Previsional', 1)
         ws2.append(['Grupo', 'Rut Emp', 'Empresa', 'Rut Trabj', 'Nombre Trabj',
                    'Institucion', 'Periodo', 'Monto nominal', 'Analisis',
                    'Solicitud documentos', 'Motivo', 'Gestion'])
 
-        # Por ahora deja las 4 últimas columnas en blanco (consultor las llena)
         for datos in datos_por_pdf:
             if not datos.get('rut'):
                 continue
+
             rut_clean = datos['rut'].replace('.', '').replace(' ', '')
             grupo_info = grupos_base_madre.get(rut_clean, {})
             grupo = grupo_info.get('grupo', 'SIN GRUPO')
+            empresa = datos.get('razon_social', '')
+            instituciones = datos.get('instituciones', [])
 
-            # Una fila por cada institución con deuda
-            if datos.get('monto', 0) > 0:
-                ws2.append([
-                    grupo,
-                    datos['rut'],
-                    datos.get('razon_social', ''),
-                    '',  # Rut trabajador (vacío)
-                    '',  # Nombre trabajador (vacío)
-                    datos.get('institucion', 'Sin especificar'),
-                    '',  # Periodo (vacío)
-                    datos.get('monto', 0),
-                    '',  # Analisis (vacío - consultor llena)
-                    '',  # Solicitud documentos (vacío)
-                    '',  # Motivo (vacío)
-                    ''   # Gestion (vacío)
+            tiene_dicom = 'Si' if (datos.get('deudas', 0) > 0 or
+                                   datos.get('multas', 0) > 0 or
+                                   datos.get('monto_utm', 0) > 0) else 'No'
+
+            if tiene_dicom == 'No' or not instituciones:
+                ws1.append([datos['rut'], grupo, empresa, 'No', 'Sin Dicom', 'Sin Dicom'])
+                continue
+
+            for bloque in instituciones:
+                ws1.append([
+                    datos['rut'], grupo, empresa, 'Si',
+                    bloque['institucion'], bloque['tipo_correo']
                 ])
+                for trab in bloque.get('trabajadores', []):
+                    ws2.append([
+                        grupo, datos['rut'], empresa,
+                        trab['rut'], trab['nombre'], bloque['institucion'],
+                        trab['periodo'], trab['monto'],
+                        '', '', '', ''  # Analisis/Solicitud/Motivo/Gestion: consultor
+                    ])
 
         # Auto-adjust column widths
         for ws in [ws1, ws2]:

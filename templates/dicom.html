@@ -87,6 +87,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="analisis-resultado" style="margin-top:16px;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;display:none;font-size:12px;color:#166534;max-height:200px;overflow-y:auto"></div>
   </div>
 
+  <div class="card">
+    <div class="card-title">📊 Análisis de DICOM — Generar Excel</div>
+    <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Seleccionar carpeta con PDFs de Boletin Laboral</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="document.getElementById('dicom-pdf-picker').click()">📁 Seleccionar carpeta de PDFs</button><input type="file" id="dicom-pdf-picker" webkitdirectory mozdirectory style="display:none" multiple accept=".pdf" onchange="procesarCaretPdfs()"><span id="pdf-count" style="font-size:11px;color:#64748b">Sin PDFs seleccionados</span></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="btn-analizar" onclick="analizarPdfs()" disabled>▶ Procesar y generar Excel</button></div>
+    <div id="dicom-resultado" style="margin-top:16px;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;display:none;font-size:12px;color:#166534;max-height:250px;overflow-y:auto"></div>
+  </div>
+
   <div class="card" id="codigo-card"
        style="display:none;border-color:#f59e0b;background:#fffbeb">
     <div class="card-title" style="color:#92400e">📧 Código de verificación</div>
@@ -490,6 +497,68 @@ function procesarPdfsCargados(){
     resultado.style.borderColor = '#fca5a5';
     resultado.style.color = '#991b1b';
   });
+}
+
+let _pdfsCargados = [];
+
+function procesarCaretPdfs() {
+  const input = document.getElementById('dicom-pdf-picker');
+  const files = Array.from(input.files || []).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  _pdfsCargados = files;
+  const count = document.getElementById('pdf-count');
+  count.textContent = files.length + ' PDF(s) seleccionado(s)';
+  document.getElementById('btn-analizar').disabled = files.length === 0;
+}
+
+async function analizarPdfs() {
+  if (_pdfsCargados.length === 0) {
+    alert('Selecciona PDFs primero');
+    return;
+  }
+
+  const btn = document.getElementById('btn-analizar');
+  btn.disabled = true;
+  btn.textContent = '⏳ Procesando...';
+
+  const formData = new FormData();
+  _pdfsCargados.forEach(f => formData.append('archivos', f));
+
+  const resultado = document.getElementById('dicom-resultado');
+  resultado.style.display = '';
+  resultado.innerHTML = 'Procesando...';
+
+  try {
+    const r = await fetch('/api/dicom/analizar', {
+      method: 'POST',
+      body: formData
+    });
+    const d = await r.json();
+
+    if (d.error) {
+      resultado.innerHTML = '❌ Error: ' + d.error;
+      resultado.style.background = '#fee2e2';
+      resultado.style.borderColor = '#fca5a5';
+      resultado.style.color = '#991b1b';
+    } else {
+      let html = '✓ Procesados: ' + d.procesados + ' archivos<br>';
+      if (d.errores && d.errores.length > 0) {
+        html += 'Errores: ' + d.errores.join(', ') + '<br>';
+      }
+      html += '<br><a href="/api/dicom/descargar/' + d.archivo + '" style="color:#2563eb;text-decoration:underline">📥 Descargar Excel: ' + d.archivo + '</a>';
+      resultado.innerHTML = html;
+      resultado.style.background = '#f0fdf4';
+      resultado.style.borderColor = '#86efac';
+      resultado.style.color = '#166534';
+    }
+  } catch (e) {
+    resultado.innerHTML = '❌ Error: ' + e;
+    resultado.style.background = '#fee2e2';
+    resultado.style.borderColor = '#fca5a5';
+    resultado.style.color = '#991b1b';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Procesar y generar Excel';
+  }
 }
 
 cargarCfg();

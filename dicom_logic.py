@@ -484,6 +484,184 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
     return True
 
 
+def extraer_datos_pdf(ruta_pdf):
+    """Extrae datos de un PDF Boletin Laboral: RUT empresa, razón social,
+    deudas previsionales, multas, monto, trabajadores e institución.
+
+    Retorna dict con estructura:
+    {
+      'rut': 'xx.xxx.xxx-x',
+      'razon_social': 'NOMBRE EMPRESA',
+      'deudas': 0,  # count
+      'multas': 0,  # count
+      'monto': 0,   # total en pesos
+      'trabajadores': [{'rut': '...', 'nombre': '...', 'periodo': '...', 'monto': 0}],
+      'institucion': 'AFP Cuprum' o 'Previsional' o similar
+    }
+    """
+    try:
+        import PyPDF2
+        detalles = {
+            'rut': '',
+            'razon_social': '',
+            'deudas': 0,
+            'multas': 0,
+            'monto': 0,
+            'trabajadores': [],
+            'institucion': 'Sin especificar'
+        }
+
+        with open(ruta_pdf, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            texto = ""
+            for page in reader.pages:
+                texto += page.extract_text() or ""
+
+        texto = texto.replace('\n', ' ').replace('\r', ' ')
+
+        # Extraer RUT empresa (formato con puntos: xx.xxx.xxx-x)
+        import re
+        ruts = re.findall(r'\b\d{1,2}\.\d{3}\.\d{3}-[\dKk]\b', texto)
+        if ruts:
+            detalles['rut'] = ruts[0]
+
+        # Extraer razón social (después de "Razón Social" o similar)
+        if 'razón social' in texto.lower():
+            idx = texto.lower().find('razón social')
+            segmento = texto[idx:idx+200]
+            palabras = segmento.split()
+            if len(palabras) > 3:
+                detalles['razon_social'] = ' '.join(palabras[3:7]).strip()
+
+        # Contar deudas y multas
+        detalles['deudas'] = texto.lower().count('deuda')
+        detalles['multas'] = texto.lower().count('multa')
+
+        # Extraer monto (buscar números grandes con formato de dinero)
+        montos = re.findall(r'\$?\s*[\d.,]+', texto)
+        if montos:
+            try:
+                for m in montos[-3:]:
+                    clean = re.sub(r'[^\d]', '', m)
+                    if len(clean) > 5:
+                        detalles['monto'] = int(clean)
+                        break
+            except:
+                pass
+
+        # Extraer institución (AFP, Previsional, CCAF, etc.)
+        for inst in ['AFP CUPRUM', 'AFP INTEGRA', 'AFP PROVIDA', 'PREVISIONAL',
+                     'CCAF', 'Cred. No Enterado', 'DT']:
+            if inst in texto.upper():
+                detalles['institucion'] = inst.title()
+                break
+
+        return detalles
+    except Exception as e:
+        return {
+            'rut': '', 'razon_social': '', 'deudas': 0, 'multas': 0,
+            'monto': 0, 'trabajadores': [], 'institucion': 'Error'
+        }
+
+
+def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
+    """Genera Excel con dos hojas a partir de datos de PDFs.
+
+    datos_por_pdf: list de dicts retornados por extraer_datos_pdf()
+    grupos_base_madre: dict {rut: {'grupo': '...', 'razon_social': '...'}}
+
+    Retorna bytes del Excel o None si error.
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+
+        wb = Workbook()
+        wb.remove(wb.active)
+
+        # Sheet 1: Resumen
+        ws1 = wb.create_sheet('Resumen Analisis', 0)
+        ws1.append(['RUT Empresa', 'GRUPO', 'Empresa', 'Tiene DICOM', 'Institucion', 'Tipo Correo'])
+
+        for datos in datos_por_pdf:
+            if not datos.get('rut'):
+                continue
+
+            rut_clean = datos['rut'].replace('.', '').replace(' ', '')
+            grupo_info = grupos_base_madre.get(rut_clean, {})
+            grupo = grupo_info.get('grupo', 'SIN GRUPO')
+
+            # Tiene DICOM: SI si deudas > 0 OR multas > 0 OR monto > 0
+            tiene_dicom = 'Si' if (datos.get('deudas', 0) > 0 or
+                                   datos.get('multas', 0) > 0 or
+                                   datos.get('monto', 0) > 0) else 'No'
+
+            # Si tiene_dicom = No, ambas columnas van "Sin Dicom"
+            institucion = 'Sin Dicom' if tiene_dicom == 'No' else datos.get('institucion', 'Sin especificar')
+            tipo_correo = 'Sin Dicom' if tiene_dicom == 'No' else datos.get('institucion', 'Sin especificar')
+
+            ws1.append([
+                datos['rut'],
+                grupo,
+                datos.get('razon_social', ''),
+                tiene_dicom,
+                institucion,
+                tipo_correo
+            ])
+
+        # Sheet 2: Deuda Previsional (sin detalles de trabajadores por ahora, solo estructura)
+        ws2 = wb.create_sheet('Deuda Previsional', 1)
+        ws2.append(['Grupo', 'Rut Emp', 'Empresa', 'Rut Trabj', 'Nombre Trabj',
+                   'Institucion', 'Periodo', 'Monto nominal', 'Analisis',
+                   'Solicitud documentos', 'Motivo', 'Gestion'])
+
+        # Por ahora deja las 4 últimas columnas en blanco (consultor las llena)
+        for datos in datos_por_pdf:
+            if not datos.get('rut'):
+                continue
+            rut_clean = datos['rut'].replace('.', '').replace(' ', '')
+            grupo_info = grupos_base_madre.get(rut_clean, {})
+            grupo = grupo_info.get('grupo', 'SIN GRUPO')
+
+            # Una fila por cada institución con deuda
+            if datos.get('monto', 0) > 0:
+                ws2.append([
+                    grupo,
+                    datos['rut'],
+                    datos.get('razon_social', ''),
+                    '',  # Rut trabajador (vacío)
+                    '',  # Nombre trabajador (vacío)
+                    datos.get('institucion', 'Sin especificar'),
+                    '',  # Periodo (vacío)
+                    datos.get('monto', 0),
+                    '',  # Analisis (vacío - consultor llena)
+                    '',  # Solicitud documentos (vacío)
+                    '',  # Motivo (vacío)
+                    ''   # Gestion (vacío)
+                ])
+
+        # Auto-adjust column widths
+        for ws in [ws1, ws2]:
+            for col in ws.columns:
+                max_len = 0
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_len:
+                            max_len = len(str(cell.value))
+                    except:
+                        pass
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 30)
+
+        # Retornar bytes
+        import io
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        return out.getvalue()
+    except Exception as e:
+        return None
+
+
 def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None, ruts=None):
     """Entra al portal, confirma el acceso y guarda una captura de pantalla.
 

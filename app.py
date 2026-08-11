@@ -2712,11 +2712,11 @@ def base_madre_resumen():
 @app.route("/api/base_madre/datos")
 @api_login_required
 def base_madre_datos():
-    from base_madre_logic import obtener_clientes, url_guardada, filtrar_permitidos
+    from base_madre_logic import obtener_clientes, url_guardada
     forzar = request.args.get("refrescar") == "1"
     columnas, filas, ts, error = obtener_clientes(forzar=forzar)
-    # Sólo empresas VIGENTE o ESTUDIO INICIAL (para todos los roles)
-    filas = filtrar_permitidos(columnas, filas)
+    # Vista maestra: se muestran TODOS los clientes sin filtrar por estatus;
+    # el usuario filtra por estatus manualmente con el selector de la página.
 
     # Cruce con la hoja 'Claves AFC' del Excel de subsidios (por RUT).
     # Se copian las filas para no mutar el cache de base madre.

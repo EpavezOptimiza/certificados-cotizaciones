@@ -90,7 +90,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="card-title">📊 Análisis de DICOM — Generar Excel</div>
       <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Número de DICOM</label><input type="text" id="numero-dicom" placeholder="Ej: 12345" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;margin-bottom:8px"></div>
       <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Carpeta ORIGEN (PDFs descargados)</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="document.getElementById('dicom-origen-picker').click()">📁 Seleccionar carpeta origen</button><input type="file" id="dicom-origen-picker" webkitdirectory mozdirectory style="display:none" multiple accept=".pdf" onchange="procesarCaretaOrigen()"><span id="origen-count" style="font-size:11px;color:#64748b">Sin carpeta seleccionada</span></div></div>
-      <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Carpeta DESTINO (donde se crearán grupos + Excel)</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-sec" onclick="document.getElementById('dicom-destino-picker').click()">📁 Seleccionar carpeta</button><input type="file" id="dicom-destino-picker" webkitdirectory mozdirectory style="display:none" onchange="seleccionarCaretaDestino()"></div><input type="text" id="ruta-destino-dicom" placeholder="Ej: C:/DICOM/Procesados" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;margin-bottom:4px" oninput="actualizarBtnAnalizar()"><span style="font-size:11px;color:#64748b">O edita la ruta manualmente</span></div>
+      <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Carpeta DESTINO (donde se crearán grupos + Excel)</label><input type="text" id="ruta-destino-dicom" placeholder="Ej: C:/DICOM/Procesados" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;margin-bottom:8px" oninput="actualizarBtnAnalizar()"><span style="font-size:11px;color:#64748b">Ingresa la ruta completa (ej: C:/Users/tu_usuario/DICOM/Procesados)</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="btn-analizar" onclick="analizarPdfs()" disabled>▶ Procesar, organizar y generar Excel</button></div>
       <div id="dicom-resultado" style="margin-top:16px;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;display:none;font-size:12px;color:#166534;max-height:250px;overflow-y:auto"></div>
     </div>
@@ -510,19 +510,6 @@ function procesarCaretaOrigen() {
   const count = document.getElementById('origen-count');
   count.textContent = files.length + ' PDF(s) seleccionado(s)';
   actualizarBtnAnalizar();
-}
-
-function seleccionarCaretaDestino() {
-  const input = document.getElementById('dicom-destino-picker');
-  if (input.files && input.files.length > 0) {
-    const primerArchivo = input.files[0];
-    const relativePath = primerArchivo.webkitRelativePath || '';
-    const carpeta = relativePath.split('/')[0] || '';
-    if (carpeta) {
-      document.getElementById('ruta-destino-dicom').value = carpeta;
-      actualizarBtnAnalizar();
-    }
-  }
 }
 
 function actualizarBtnAnalizar() {

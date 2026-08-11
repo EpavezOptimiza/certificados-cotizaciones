@@ -15,7 +15,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .back-btn{width:32px;height:32px;border-radius:6px;background:rgba(255,255,255,.08);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;text-decoration:none}
 .back-btn:hover{background:rgba(255,255,255,.15)}
 .nav-cur{color:#fff;font-weight:600;font-size:13px}
-.main-content{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px;max-width:900px;width:100%}
+.main-content{flex:1;overflow-y:auto;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1400px;width:100%}
+@media (max-width:1024px){.main-content{grid-template-columns:1fr}}
+.main-col{display:flex;flex-direction:column;gap:16px}
 .page-header{display:flex;align-items:center;gap:14px}
 .page-icon{width:44px;height:44px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px}
 .page-title{font-size:20px;font-weight:800;letter-spacing:-.4px}
@@ -45,16 +47,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="main-content">
-  <div class="page-header">
-    <div class="page-icon">🔎</div>
-    <div>
-      <div class="page-title">DICOM — Equifax</div>
-      <div class="page-sub">Acceso al portal de informes comerciales</div>
+  <div style="grid-column:1/-1">
+    <div class="page-header">
+      <div class="page-icon">🔎</div>
+      <div>
+        <div class="page-title">DICOM — Equifax</div>
+        <div class="page-sub">Acceso al portal de informes comerciales</div>
+      </div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">🔐 Credenciales del portal</div>
+  <div class="main-col">
+    <div class="card">
+      <div class="card-title">🔐 Credenciales del portal</div>
     <div class="field">
       <label>Username (el correo del usuario)</label>
       <input type="text" id="correo" placeholder="correo@empresa.cl" autocomplete="off">
@@ -86,16 +91,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Ruta DESTINO (donde se crearán las carpetas por grupo)</label><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="ruta-destino" placeholder="Ej: C:/DICOM/Organizados" readonly style="flex:1;min-width:200px;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;background:#f8fafc"><button class="btn btn-sec" onclick="document.getElementById('folder-picker').click()">📁 Seleccionar carpeta</button><input type="file" id="folder-picker" webkitdirectory mozdirectory style="display:none" onchange="seleccionarCarpeta()"><span style="font-size:11px;color:#64748b;align-self:center">Mismo destino para ambas opciones</span></div></div>
     <div id="analisis-resultado" style="margin-top:16px;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;display:none;font-size:12px;color:#166534;max-height:200px;overflow-y:auto"></div>
   </div>
+  </div>
 
-  <div class="card">
-    <div class="card-title">📊 Análisis de DICOM — Generar Excel</div>
+  <div class="main-col">
+    <div class="card">
+      <div class="card-title">📊 Análisis de DICOM — Generar Excel</div>
     <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Seleccionar carpeta con PDFs de Boletin Laboral</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="document.getElementById('dicom-pdf-picker').click()">📁 Seleccionar carpeta de PDFs</button><input type="file" id="dicom-pdf-picker" webkitdirectory mozdirectory style="display:none" multiple accept=".pdf" onchange="procesarCaretPdfs()"><span id="pdf-count" style="font-size:11px;color:#64748b">Sin PDFs seleccionados</span></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="btn-analizar" onclick="analizarPdfs()" disabled>▶ Procesar y generar Excel</button></div>
     <div id="dicom-resultado" style="margin-top:16px;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;display:none;font-size:12px;color:#166534;max-height:250px;overflow-y:auto"></div>
+    </div>
   </div>
 
   <div class="card" id="codigo-card"
-       style="display:none;border-color:#f59e0b;background:#fffbeb">
+       style="display:none;border-color:#f59e0b;background:#fffbeb;grid-column:1/-1">
     <div class="card-title" style="color:#92400e">📧 Código de verificación</div>
     <div style="font-size:12.5px;color:#92400e;line-height:1.5;margin-bottom:12px">
       Equifax envió un código a tu correo. Escríbelo aquí y el proceso continúa solo.
@@ -110,7 +118,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 
-  <div class="card" id="log-card" style="display:none;padding:0">
+  <div class="card" id="log-card" style="display:none;padding:0;grid-column:1/-1">
     <div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:700">
       📋 Resultado
     </div>

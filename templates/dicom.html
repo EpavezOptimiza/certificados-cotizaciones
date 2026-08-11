@@ -392,30 +392,6 @@ function descargarTodosRuts(){
   URL.revokeObjectURL(url);
 }
 
-function seleccionarCarpeta(){
-  // Función antigua - no se usa. Usar seleccionarCarpetaDestino() en su lugar
-  return;
-  /*
-  const picker = document.getElementById('folder-picker');
-  const files = picker.files;
-  if (files.length === 0) return;
-
-  // Extraer la ruta base de los archivos seleccionados
-  let rutaBase = '';
-  if (files[0].webkitRelativePath) {
-    const partes = files[0].webkitRelativePath.split('/');
-    if (partes.length > 1) {
-      rutaBase = partes[0];
-    }
-  }
-
-  if (rutaBase) {
-    document.getElementById('ruta-destino').value = rutaBase;
-  }
-
-  // Limpiar el file picker
-  picker.value = '';
-}
 
 function procesarCarpeta(){
   const ruta = document.getElementById('ruta-carpeta').value.trim();

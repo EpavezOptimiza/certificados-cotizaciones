@@ -90,8 +90,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="card-title">📊 Análisis de DICOM — Generar Excel</div>
       <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Número de DICOM</label><input type="text" id="numero-dicom" placeholder="Ej: 12345" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;margin-bottom:8px"></div>
       <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Carpeta ORIGEN (PDFs descargados)</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="document.getElementById('dicom-origen-picker').click()">📁 Seleccionar carpeta origen</button><input type="file" id="dicom-origen-picker" webkitdirectory mozdirectory style="display:none" multiple onchange="procesarCaretaOrigen()"><span id="origen-count" style="font-size:11px;color:#64748b">Sin carpeta seleccionada</span></div></div>
-      <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Carpeta DESTINO (donde se crearán grupos + Excel)</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><button class="btn" onclick="seleccionarCarpetaDestino()">📁 Seleccionar carpeta destino</button><span id="destino-count" style="font-size:11px;color:#64748b">Sin carpeta seleccionada</span></div><input type="text" id="ruta-destino-dicom" placeholder="Ej: C:/DICOM/Procesados" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit" oninput="actualizarBtnAnalizar()"><span style="font-size:11px;color:#64748b">Se llena automáticamente al seleccionar</span></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="btn-analizar" onclick="analizarPdfs()" disabled>▶ Procesar, organizar y generar Excel</button></div>
+      <div class="aviso" style="margin-bottom:16px">El resultado se descarga como un ZIP (carpetas por grupo + Excel). Tú decides dónde guardarlo y extraerlo en tu equipo.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="btn-analizar" onclick="analizarPdfs()" disabled>▶ Procesar y descargar ZIP</button></div>
       <div id="dicom-resultado" style="margin-top:16px;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;display:none;font-size:12px;color:#166534;max-height:250px;overflow-y:auto"></div>
     </div>
   </div>
@@ -491,40 +491,19 @@ function procesarCaretaOrigen() {
   actualizarBtnAnalizar();
 }
 
-async function seleccionarCarpetaDestino() {
-  try {
-    if (!window.showDirectoryPicker) {
-      alert('Tu navegador no soporta esta función. Escribe la ruta manualmente.');
-      return;
-    }
-    const dirHandle = await window.showDirectoryPicker();
-    const nombre = dirHandle.name;
-    if (nombre) {
-      document.getElementById('ruta-destino-dicom').value = nombre;
-      document.getElementById('destino-count').textContent = '✓ Carpeta: ' + nombre;
-      actualizarBtnAnalizar();
-    }
-  } catch (err) {
-    console.log('Error al seleccionar carpeta:', err.name);
-  }
-}
-
-
 function actualizarBtnAnalizar() {
   const numeroDicom = document.getElementById('numero-dicom').value.trim();
-  const rutaDestino = document.getElementById('ruta-destino-dicom').value.trim();
   const btn = document.getElementById('btn-analizar');
-  btn.disabled = _pdfsDicomOrigen.length === 0 || !numeroDicom || !rutaDestino;
+  btn.disabled = _pdfsDicomOrigen.length === 0 || !numeroDicom;
 }
 
 document.getElementById('numero-dicom').addEventListener('input', actualizarBtnAnalizar);
 
 async function analizarPdfs() {
   const numeroDicom = document.getElementById('numero-dicom').value.trim();
-  const rutaDestino = document.getElementById('ruta-destino-dicom').value.trim();
 
-  if (!numeroDicom || _pdfsDicomOrigen.length === 0 || !rutaDestino) {
-    alert('Completa: Número DICOM, Carpeta origen y Carpeta destino');
+  if (!numeroDicom || _pdfsDicomOrigen.length === 0) {
+    alert('Completa: Número DICOM y Carpeta origen');
     return;
   }
 
@@ -534,7 +513,6 @@ async function analizarPdfs() {
 
   const formData = new FormData();
   formData.append('numero_dicom', numeroDicom);
-  formData.append('destino', rutaDestino);
   _pdfsDicomOrigen.forEach(f => formData.append('archivos', f));
 
   const resultado = document.getElementById('dicom-resultado');
@@ -546,33 +524,45 @@ async function analizarPdfs() {
       method: 'POST',
       body: formData
     });
-    const d = await r.json();
 
-    if (d.error) {
-      resultado.innerHTML = '❌ Error: ' + d.error;
-      resultado.style.background = '#fee2e2';
-      resultado.style.borderColor = '#fca5a5';
-      resultado.style.color = '#991b1b';
-    } else {
-      let html = '✓ Procesados: ' + d.procesados + ' archivos<br>';
-      html += '✓ Organizados: ' + d.organizados + ' archivos<br>';
-      if (d.errores && d.errores.length > 0) {
-        html += 'Errores: ' + d.errores.join(', ') + '<br>';
-      }
-      html += '<br><a href="/api/dicom/descargar/' + d.archivo + '" style="color:#2563eb;text-decoration:underline">📥 Descargar Excel: ' + d.archivo + '</a>';
-      resultado.innerHTML = html;
-      resultado.style.background = '#f0fdf4';
-      resultado.style.borderColor = '#86efac';
-      resultado.style.color = '#166534';
+    if (!r.ok) {
+      let msg = 'Error del servidor (' + r.status + ')';
+      try {
+        const d = await r.json();
+        if (d.error) msg = d.error;
+      } catch (e) {}
+      throw new Error(msg);
     }
+
+    const procesados = r.headers.get('X-Procesados') || _pdfsDicomOrigen.length;
+    const organizados = r.headers.get('X-Organizados') || '0';
+
+    const blob = await r.blob();
+    const nombreZip = 'Dicom_' + numeroDicom + '.zip';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreZip;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    resultado.innerHTML = '✓ Procesados: ' + procesados + ' archivos<br>' +
+      '✓ Organizados: ' + organizados + ' archivos<br>' +
+      '📥 Descargando: ' + nombreZip;
+    resultado.style.background = '#f0fdf4';
+    resultado.style.borderColor = '#86efac';
+    resultado.style.color = '#166534';
   } catch (e) {
-    resultado.innerHTML = '❌ Error: ' + e;
+    resultado.innerHTML = '❌ Error: ' + e.message;
     resultado.style.background = '#fee2e2';
     resultado.style.borderColor = '#fca5a5';
     resultado.style.color = '#991b1b';
   } finally {
-    btn.disabled = true;
-    btn.textContent = '▶ Procesar, organizar y generar Excel';
+    btn.disabled = false;
+    btn.textContent = '▶ Procesar y descargar ZIP';
+    actualizarBtnAnalizar();
   }
 }
 

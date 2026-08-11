@@ -988,15 +988,17 @@ function valoresPorPeriodo(w, mapaKey, campoLegado) {
 }
 
 // Devuelve solo los períodos de un trabajador que coinciden con TODOS los
-// filtros de motivo/estatus activos (o todos los períodos si no hay ninguno)
+// filtros de periodo/motivo/estatus activos (o todos los períodos si no hay ninguno)
 function periodosParaMotivoActivo(w) {
+  const fPer = document.getElementById('filtro-periodo')?.value || '';
   const fMotivo = document.getElementById('filtro-motivo')?.value || '';
   const fEstatus = document.getElementById('filtro-estatus')?.value || '';
   let todos = w.periodos || [];
-  if (!fMotivo && !fEstatus) return todos;
+  if (!fPer && !fMotivo && !fEstatus) return todos;
   const pm = w.periodo_motivos || {};
   const pe = w.periodo_estatus || {};
   const filtrados = todos.filter(p =>
+    (!fPer || p === fPer) &&
     (!fMotivo || (pm[p]||'').trim() === fMotivo) &&
     (!fEstatus || (pe[p]||'').trim() === fEstatus));
   return filtrados.length ? filtrados : todos;
@@ -1187,7 +1189,7 @@ function refreshDependientes() {
 function initSel(w) {
   return {
     checked: false,
-    periodos_sel: [...(w.periodos || [])],
+    periodos_sel: [...periodosParaMotivoActivo(w)],
     periodos_extra: '',
     causa: w.causa || 'Otros Movimientos (Ausentismo)',
     salud: w.salud || 'FONASA',

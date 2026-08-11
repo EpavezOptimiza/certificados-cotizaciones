@@ -27,6 +27,10 @@ def _dump_modal_impresion(page, log):
     botones/inputs realmente visibles para saber si Previred cambió el id
     o el modal no se abrió como se esperaba."""
     try:
+        log(f"  [debug] url = {page.url}", "warn")
+    except Exception as e_url:
+        log(f"  [debug] no se pudo leer la url: {type(e_url).__name__}", "warn")
+    try:
         info = page.evaluate("""() => {
             const out = [];
             for (const e of document.querySelectorAll(
@@ -44,8 +48,16 @@ def _dump_modal_impresion(page, log):
         log(f"  [debug] diálogos abiertos: {info['dialogos_abiertos']}", "warn")
         for b in info["botones"]:
             log(f"    {b['tag']} id={b['id']!r} clase={b['clase']!r} texto={b['texto']!r}", "warn")
+        if not info["botones"]:
+            try:
+                texto = page.evaluate(
+                    "() => (document.body ? document.body.innerText : '')"
+                    ".replace(/\\s+/g, ' ').trim().slice(0, 300)")
+                log(f"  [debug] sin botones visibles — texto de la página: {texto!r}", "warn")
+            except Exception:
+                pass
     except Exception as e:
-        log(f"  [debug] no se pudo volcar el modal: {type(e).__name__}", "warn")
+        log(f"  [debug] no se pudo volcar el modal: {type(e).__name__}: {str(e)[:150]}", "warn")
 
 
 def _click_texto(page, texto: str, timeout: int = 15000) -> bool:
@@ -615,8 +627,8 @@ def descargar_planilla(page, mes: int, anio: int, nombre_nomina: str,
             tid = os.path.basename(os.path.normpath(carpeta_temp))
             url_captura = f"/api/previred/captura/{tid}/{nombre_captura}"
             log(f"Captura de pantalla: <a href='{url_captura}' target='_blank'>ver imagen</a>", "warn")
-        except Exception:
-            pass
+        except Exception as e_shot:
+            log(f"  [debug] no se pudo guardar la captura: {type(e_shot).__name__}: {str(e_shot)[:150]}", "warn")
         if modal is not page:
             try:
                 modal.close()

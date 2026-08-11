@@ -3259,12 +3259,18 @@ def dicom_analizar():
 
     try:
         for archivo in archivos:
-            if not archivo.filename.lower().endswith(".pdf"):
-                errores.append(f"{archivo.filename}: no es PDF")
+            nombre_original = archivo.filename or ""
+            # basename(): un nombre con "/" (p.ej. tomado de una ruta relativa)
+            # haría que os.path.join lo tratara como subcarpeta y fallara al
+            # guardar si esa subcarpeta no existe.
+            nombre_seguro = os.path.basename(nombre_original.replace("\\", "/"))
+
+            if not nombre_seguro.lower().endswith(".pdf"):
+                errores.append(f"{nombre_original}: no es PDF")
                 continue
 
             try:
-                ruta_temp = os.path.join(carpeta_temp, archivo.filename)
+                ruta_temp = os.path.join(carpeta_temp, nombre_seguro)
                 archivo.save(ruta_temp)
 
                 datos = extraer_datos_pdf(ruta_temp)
@@ -3277,7 +3283,7 @@ def dicom_analizar():
                     grupo = grupo_info.get("grupo", "SIN GRUPO")
 
                 with open(ruta_temp, "rb") as f:
-                    pdfs_para_zip.append((f"{grupo}/{archivo.filename}", f.read()))
+                    pdfs_para_zip.append((f"{grupo}/{nombre_seguro}", f.read()))
                 organizados += 1
 
                 try:
@@ -3285,7 +3291,7 @@ def dicom_analizar():
                 except Exception:
                     pass
             except Exception as e:
-                errores.append(f"{archivo.filename}: {str(e)[:50]}")
+                errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
 
         # Generar UN SOLO Excel con todos los datos
         excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
@@ -3308,6 +3314,10 @@ def dicom_analizar():
         resp.headers["X-Procesados"] = str(len(archivos))
         resp.headers["X-Organizados"] = str(organizados)
         resp.headers["X-Errores"] = str(len(errores))
+        if errores:
+            import urllib.parse
+            detalle = " | ".join(errores[:5])
+            resp.headers["X-Error-Detalle"] = urllib.parse.quote(detalle[:400])
         return resp
     except Exception as e:
         return jsonify({"error": str(e)[:200]}), 500

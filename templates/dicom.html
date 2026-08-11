@@ -537,6 +537,8 @@ async function analizarPdfs() {
     const procesados = r.headers.get('X-Procesados') || _pdfsDicomOrigen.length;
     const organizados = r.headers.get('X-Organizados') || '0';
     const conErrores = r.headers.get('X-Errores') || '0';
+    const detalleErrorRaw = r.headers.get('X-Error-Detalle') || '';
+    const detalleError = detalleErrorRaw ? decodeURIComponent(detalleErrorRaw) : '';
 
     const blob = await r.blob();
     const nombreZip = 'Dicom_' + numeroDicom + '.zip';
@@ -551,7 +553,8 @@ async function analizarPdfs() {
 
     resultado.innerHTML = '✓ Procesados: ' + procesados + ' archivos<br>' +
       '✓ Organizados: ' + organizados + ' archivos<br>' +
-      (conErrores !== '0' ? '⚠ Con errores: ' + conErrores + ' archivo(s)<br>' : '') +
+      (conErrores !== '0' ? '⚠ Con errores: ' + conErrores + ' archivo(s)<br>' +
+        (detalleError ? '<span style="font-size:11px">' + esc(detalleError) + '</span><br>' : '') : '') +
       '📥 Descargando: ' + nombreZip;
     resultado.style.background = '#f0fdf4';
     resultado.style.borderColor = '#86efac';

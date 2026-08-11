@@ -484,9 +484,33 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
     return True
 
 
-def extraer_datos_pdf(ruta_pdf):
+def extraer_rut_de_nombre(nombre_archivo):
+    """Extrae el RUT desde el nombre del archivo descargado de Equifax.
+
+    Los Boletin Laboral vienen nombrados como:
+      'Boletin Laboral_59061500-5.pdf'        (con guion)
+      'Boletin Laboral_96400000K_11-06-2026.pdf'  (sin guion, con fecha)
+      'Boletin Laboral_761965476_11-06-2026.pdf'  (sin guion, dv numérico)
+
+    El dígito verificador es siempre el último carácter del bloque de
+    RUT (dígito o K); el resto son el cuerpo. Devuelve 'cuerpo-DV' o ''.
+    """
+    import re
+    base = os.path.splitext(nombre_archivo)[0]
+    m = re.search(r'(\d{7,8})-?([0-9Kk])(?=_|$)', base)
+    if not m:
+        return ''
+    return f"{m.group(1)}-{m.group(2).upper()}"
+
+
+def extraer_datos_pdf(ruta_pdf, nombre_archivo=None):
     """Extrae datos de un PDF Boletin Laboral: RUT empresa, razón social,
     deudas previsionales, multas, monto, trabajadores e institución.
+
+    El RUT se obtiene primero del NOMBRE DE ARCHIVO (formato fijo que
+    trae el portal Equifax) porque es mucho más confiable que buscarlo
+    en el texto del PDF, que puede venir escaneado o con formato irregular.
+    Si no viene en el nombre, se intenta como respaldo desde el texto.
 
     Retorna dict con estructura:
     {
@@ -511,6 +535,9 @@ def extraer_datos_pdf(ruta_pdf):
             'institucion': 'Sin especificar'
         }
 
+        if nombre_archivo:
+            detalles['rut'] = extraer_rut_de_nombre(nombre_archivo)
+
         with open(ruta_pdf, 'rb') as f:
             reader = pypdf.PdfReader(f)
             texto = ""
@@ -519,11 +546,12 @@ def extraer_datos_pdf(ruta_pdf):
 
         texto = texto.replace('\n', ' ').replace('\r', ' ')
 
-        # Extraer RUT empresa (formato con puntos: xx.xxx.xxx-x)
+        # Respaldo: si no vino del nombre, buscar RUT con puntos en el texto
         import re
-        ruts = re.findall(r'\b\d{1,2}\.\d{3}\.\d{3}-[\dKk]\b', texto)
-        if ruts:
-            detalles['rut'] = ruts[0]
+        if not detalles['rut']:
+            ruts = re.findall(r'\b\d{1,2}\.\d{3}\.\d{3}-[\dKk]\b', texto)
+            if ruts:
+                detalles['rut'] = ruts[0]
 
         # Extraer razón social (después de "Razón Social" o similar)
         if 'razón social' in texto.lower():

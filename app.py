@@ -3273,7 +3273,7 @@ def dicom_analizar():
                 ruta_temp = os.path.join(carpeta_temp, nombre_seguro)
                 archivo.save(ruta_temp)
 
-                datos = extraer_datos_pdf(ruta_temp)
+                datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
                 datos_pdfs.append(datos)
 
                 grupo = "SIN GRUPO"

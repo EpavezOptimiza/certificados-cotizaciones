@@ -483,11 +483,55 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
     prefijo = f"{anio}-{str(mes).zfill(2)}-{nombre_limpio}"
     descargados = 0
 
-    ids_info = page.evaluate("""() => {
-        return Array.from(document.querySelectorAll('img[src*="planillas.gif"]')).map(function(img) {
-            return img.id || '';
+    def _iconos_planilla_actuales():
+        return page.evaluate("""() => {
+            return Array.from(document.querySelectorAll('img[src*="planillas.gif"]')).map(function(img) {
+                return img.id || '';
+            });
+        }""")
+
+    # Cada institución (Seguro Social, AFP, Isapre, Mutual, CCAF, IPS/Fonasa,
+    # APV) aparece colapsada detrás de un ícono "+" (mas_nomina.png,
+    # <a id="oculta_nomina|N">) — recién al abrirlo aparecen los íconos
+    # planillas.gif descargables de esa categoría. Antes solo se procesaban
+    # los que YA estuvieran visibles sin abrir nada (en la práctica, solo
+    # AFP aparecía expandida de entrada), perdiendo el resto de categorías.
+    ids_info = list(dict.fromkeys(_iconos_planilla_actuales()))
+
+    categorias = page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('a[id^="oculta_nomina"]')).map(function(a) {
+            return a.id || '';
         });
     }""")
+    log(f"Categorías de institución encontradas: {len(categorias)}", "info")
+
+    def _click_categoria(cat_id):
+        page.evaluate(
+            "(id) => { const el = document.querySelector('[id=\"' + id + '\"]'); if (el) el.click(); }",
+            cat_id)
+        page.wait_for_timeout(1200)
+
+    for cat_id in categorias:
+        antes = set(_iconos_planilla_actuales())
+        try:
+            _click_categoria(cat_id)
+        except Exception as e_cat:
+            log(f"No se pudo abrir categoría {cat_id}: {type(e_cat).__name__}", "warn")
+            continue
+        despues = set(_iconos_planilla_actuales())
+        if len(despues) < len(antes):
+            # El click cerró una categoría que ya estaba abierta (ej. AFP,
+            # que suele venir expandida de entrada): reabrirla para no
+            # perder sus íconos ya capturados en ids_info.
+            try:
+                _click_categoria(cat_id)
+                despues = set(_iconos_planilla_actuales())
+            except Exception:
+                pass
+        for nuevo_id in despues:
+            if nuevo_id and nuevo_id not in ids_info:
+                ids_info.append(nuevo_id)
+
     total_iconos = len(ids_info)
     log(f"Instituciones a descargar: {total_iconos}", "info")
     if total_iconos == 0:
@@ -536,7 +580,9 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         page.on("download", _capturar_download)
         try:
             with page.expect_popup(timeout=6000) as popup_info:
-                page.evaluate(f"document.querySelectorAll('img[src*=\"planillas.gif\"]')[{i}].click()")
+                page.evaluate(
+                    "(id) => { const el = document.querySelector('[id=\"' + id + '\"]'); if (el) el.click(); }",
+                    img_id)
             modal = popup_info.value
             modal.wait_for_load_state("domcontentloaded")
             modal.on("download", _capturar_download)

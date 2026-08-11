@@ -890,11 +890,17 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
             ir_a_planillas_pagadas(page, log)
 
             log(f"Períodos a procesar: {len(periodos)}", "info")
+            log(f"__PROGRESO_TOTAL__:{len(periodos)}", "info")
 
-            for (mes, anio) in periodos:
+            archivos_ok = 0
+            archivos_error = 0
+
+            for idx, (mes, anio) in enumerate(periodos, 1):
                 _chequear_cancelacion()
                 mes_nombre = MESES_NOMBRE.get(mes, str(mes))
-                log(f"── Período: {mes_nombre} {anio}", "info")
+                periodo_label = f"{mes_nombre} {anio}"
+                log(f"── Período: {periodo_label}", "info")
+                log(f"__PROGRESO_AVANCE__:{idx}", "info")
 
                 # Sin re-login preventivo: solo si la sesión expiró de verdad
                 if reconectar_si_expiro(page, rut_usuario, contrasena, log, estado):
@@ -920,18 +926,29 @@ def descargar(rut_usuario: str, contrasena: str, rut_empresa: str,
                         hay = buscar_planilla(page, mes, anio, nombre_nomina)
                         if not hay:
                             log(f"Sin planillas timbradas: {nombre_nomina}", "warn")
+                            log(f"__ARCHIVO_ERROR__:{periodo_label}:{nombre_nomina}:Sin planillas timbradas", "warn")
+                            archivos_error += 1
                             volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log, estado)
                             continue
-                        descargar_planilla(page, mes, anio, nombre_nomina,
-                                           carpeta_temp, carpeta_dest, log)
+                        ok = descargar_planilla(page, mes, anio, nombre_nomina,
+                                                carpeta_temp, carpeta_dest, log)
+                        if ok:
+                            log(f"__ARCHIVO_OK__:{periodo_label}:{nombre_nomina}", "ok")
+                            archivos_ok += 1
+                        else:
+                            log(f"__ARCHIVO_ERROR__:{periodo_label}:{nombre_nomina}:No se pudo descargar", "err")
+                            archivos_error += 1
                         volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log, estado)
                     except Exception as e:
                         log(f"Error '{nombre_nomina}' ({type(e).__name__}): {str(e)[:200]}", "err")
+                        log(f"__ARCHIVO_ERROR__:{periodo_label}:{nombre_nomina}:{type(e).__name__}", "err")
+                        archivos_error += 1
                         try:
                             volver_a_busqueda(page, rut_usuario, contrasena, rut_empresa, razon_social, log, estado)
                         except Exception:
                             pass
 
+            log(f"__RESUMEN__:{archivos_ok}:{archivos_error}", "ok")
             log("Descarga completada", "ok")
         except DetenidoPorUsuario:
             log("Detenido por el usuario", "warn")

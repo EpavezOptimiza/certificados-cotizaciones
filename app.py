@@ -2028,7 +2028,7 @@ def previred_iniciar():
                 from previred_logic import (descargar, CuentaBloqueada,
                                             CredencialesInvalidas, DetenidoPorUsuario)
                 todas_rutas_pdf = []
-                for emp in empresas:
+                for idx_emp, emp in enumerate(empresas, 1):
                     if _tareas[tid].get("cancelar"):
                         _log(tid, "Detenido por el usuario", "warn")
                         _tareas[tid]["cancelado"] = True
@@ -2037,6 +2037,7 @@ def previred_iniciar():
                     razon_social = (emp.get("razon") or "").strip()
                     if not rut_empresa:
                         continue
+                    _log(tid, f"__PROGRESO_EMPRESA__:{idx_emp}:{len(empresas)}", "info")
                     _log(tid, f"── Empresa: {rut_empresa} {('— ' + razon_social) if razon_social else ''}", "info")
                     carpeta_emp = os.path.join(_oi["base"], rut_empresa.replace(".", "").replace("-", ""))
                     os.makedirs(carpeta_emp, exist_ok=True)

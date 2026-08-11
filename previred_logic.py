@@ -556,8 +556,36 @@ def _descargar_pdfs_individuales(page, mes: int, anio: int, nombre_nomina: str,
         # 2. Click Imprimir si el botón aparece (best-effort)
         try:
             modal.wait_for_selector("#aceptar_modal", state="visible", timeout=8000)
+            if i == 0:
+                # Diagnóstico solo para la primera institución: ver cómo
+                # queda la pantalla justo antes y después del click, por si
+                # "#aceptar_modal" no es el botón correcto en este flujo
+                # (el usuario sospecha que el botón "1 por 1" es distinto
+                # al de "Descargar Planillas Masivas").
+                _dump_modal_impresion(modal, log)
+                try:
+                    nombre_antes = "debug_antes_click_individual.png"
+                    modal.screenshot(path=os.path.join(carpeta_temp, nombre_antes))
+                    tid = os.path.basename(os.path.normpath(carpeta_temp))
+                    log(f"Captura ANTES del click: "
+                        f"<a href='/api/previred/captura/{tid}/{nombre_antes}' target='_blank'>ver imagen</a>",
+                        "warn")
+                except Exception:
+                    pass
             modal.click("#aceptar_modal")
             log(f"inst{inst_num} ({nombre_inst}): Imprimir clickeado", "info")
+            if i == 0:
+                modal.wait_for_timeout(1500)
+                try:
+                    nombre_despues = "debug_despues_click_individual.png"
+                    modal.screenshot(path=os.path.join(carpeta_temp, nombre_despues))
+                    tid = os.path.basename(os.path.normpath(carpeta_temp))
+                    log(f"Captura DESPUÉS del click: "
+                        f"<a href='/api/previred/captura/{tid}/{nombre_despues}' target='_blank'>ver imagen</a>",
+                        "warn")
+                except Exception:
+                    pass
+                _dump_modal_impresion(modal, log)
         except Exception:
             log(f"inst{inst_num} ({nombre_inst}): modal no apareció, "
                 f"esperando captura por red...", "warn")

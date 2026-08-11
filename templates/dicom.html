@@ -530,27 +530,6 @@ async function seleccionarCarpetaDestino() {
   }
 }
 
-function procesarCaretaDestino() {
-  const input = document.getElementById('dicom-destino-picker');
-  const files = Array.from(input.files || []);
-  const count = document.getElementById('destino-count');
-
-  if (files.length > 0) {
-    // Capturar la carpeta base del primer archivo
-    const primerPath = files[0].webkitRelativePath || '';
-    const carpetaBase = primerPath.split('/')[0];
-    if (carpetaBase) {
-      count.textContent = '✓ Carpeta seleccionada: ' + carpetaBase;
-      document.getElementById('ruta-destino-dicom').value = carpetaBase;
-    }
-  } else {
-    // Si está vacía, mostrar que se seleccionó pero sin ruta
-    count.textContent = '✓ Carpeta seleccionada (vacía)';
-    // Intentar capturar del nombre del archivo (si hay alguno oculto)
-    // o dejar que el usuario la complete manualmente
-  }
-  actualizarBtnAnalizar();
-}
 
 function actualizarBtnAnalizar() {
   const numeroDicom = document.getElementById('numero-dicom').value.trim();

@@ -500,7 +500,7 @@ def extraer_datos_pdf(ruta_pdf):
     }
     """
     try:
-        import PyPDF2
+        import pypdf
         detalles = {
             'rut': '',
             'razon_social': '',
@@ -512,7 +512,7 @@ def extraer_datos_pdf(ruta_pdf):
         }
 
         with open(ruta_pdf, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
+            reader = pypdf.PdfReader(f)
             texto = ""
             for page in reader.pages:
                 texto += page.extract_text() or ""

@@ -3307,6 +3307,7 @@ def dicom_analizar():
         resp.headers["Content-Disposition"] = f"attachment; filename={nombre_zip}"
         resp.headers["X-Procesados"] = str(len(archivos))
         resp.headers["X-Organizados"] = str(organizados)
+        resp.headers["X-Errores"] = str(len(errores))
         return resp
     except Exception as e:
         return jsonify({"error": str(e)[:200]}), 500
@@ -3319,14 +3320,14 @@ def dicom_analisis():
     import re
 
     try:
-        import PyPDF2
+        import pypdf
     except ImportError:
-        return jsonify({"error": "PyPDF2 no instalado"}), 500
+        return jsonify({"error": "pypdf no instalado"}), 500
 
     def extraer_razon_social_pdf(ruta_pdf):
         try:
             with open(ruta_pdf, 'rb') as f:
-                lector = PyPDF2.PdfReader(f)
+                lector = pypdf.PdfReader(f)
                 texto = ''
                 for pagina in lector.pages:
                     texto += pagina.extract_text()

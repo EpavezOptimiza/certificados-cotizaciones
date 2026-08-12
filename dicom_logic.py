@@ -888,15 +888,37 @@ def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None, rut
 def _abrir_reportes_interactivos(page, log):
     """Click en 'Ingresar' (tarjeta Reportes Interactivos) — abre una
     PESTAÑA NUEVA (Interactive Reports); hay que capturarla con
-    expect_page, igual que el mismo patrón ya resuelto en Previred."""
+    expect_page, igual que el mismo patrón ya resuelto en Previred.
+
+    La pestaña nueva primero pasa por una URL de relay SSO
+    (.../ir/sso/relay?accountId=...) que carga en blanco mientras hace la
+    redirección real hacia /ir/report (la Angular SPA recién bootstrapea
+    ahí). "domcontentloaded" se cumple con esa página en blanco, mucho
+    antes de que el formulario real exista -- por eso hay que esperar
+    explícitamente a que aparezca contenido real (el texto "Producto"),
+    con un margen generoso, en vez de asumir que ya está listo."""
     try:
         with page.context.expect_page(timeout=15000) as popup_info:
             btn = page.locator(
                 '[data-test-id="appTypeButton"], button:has-text("Ingresar")').first
             btn.click(timeout=8000)
         reportes = popup_info.value
-        reportes.wait_for_load_state("domcontentloaded", timeout=30000)
         reportes.set_default_timeout(45000)
+        log(f"Reportes Interactivos abriendo (relay SSO)...", "info")
+
+        try:
+            reportes.get_by_text("Producto", exact=False).first.wait_for(
+                state="visible", timeout=60000)
+        except Exception:
+            # Respaldo: si no aparece "Producto" pero sí "Nuevo Reporte",
+            # igual seguimos -- el formulario podría estar cerrado y haya
+            # que abrirlo con el "+" más adelante.
+            try:
+                reportes.get_by_text("Nuevo Reporte", exact=False).first.wait_for(
+                    state="visible", timeout=10000)
+            except Exception:
+                pass
+
         log(f"Reportes Interactivos abierto: {reportes.url}", "ok")
         return reportes
     except Exception as e:
@@ -910,6 +932,7 @@ def _click_fab(page, log):
     fab = page.locator(
         "button.fab-main-btn, app-fab-options button, "
         "button:has(mat-icon:text('add'))").first
+    fab.wait_for(state="visible", timeout=20000)
     fab.click(timeout=8000)
     page.wait_for_timeout(400)
 

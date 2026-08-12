@@ -264,34 +264,52 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
             "Tras Next no apareció el campo de contraseña. "
             f"El portal muestra: {detalle}")
 
-    # Tras "Next" el portal redirige a su pantalla de acceso (Okta, en español),
-    # que pide NOMBRE DE USUARIO y CONTRASEÑA de nuevo.
-    # Identificadores reales del widget (confirmados en el log)
+    # Tras "Next" el portal redirige a su pantalla de acceso. Equifax rediseñó
+    # este paso como un asistente ("Paso de inicio de sesión 1 de 3"): ya no
+    # es el widget clásico de Okta con usuario+contraseña juntos, sino una
+    # pantalla dedicada SOLO a la contraseña (el usuario ya quedó fijado en
+    # el paso anterior y se muestra como texto "Iniciando sesión como
+    # correo@... Cambiar", sin campo editable). El campo real de contraseña
+    # confirmado en el HTML es id="knowledgeFactor" (nombre en jerga de Okta
+    # Identity Engine para el factor de autenticación por clave).
     _OKTA_USER = "#okta-signin-username, input[name='username']"
-    _OKTA_PASS = "#okta-signin-password, input[name='password']"
+    _OKTA_PASS = "#knowledgeFactor, #okta-signin-password, input[name='password']"
 
-    # Okta suele traer el usuario ya puesto (y el campo bloqueado): solo se
-    # escribe si viene vacío o distinto, para no perder tiempo ni romperlo.
+    # Solo intentar reescribir el usuario si existe un campo EDITABLE de
+    # usuario en esta pantalla (el asistente nuevo no lo tiene: es solo
+    # texto informativo). Antes esto asumía que "no se pudo leer" el valor
+    # equivalía a "hay que escribirlo", lo que generaba un intento de foco
+    # fallido en un campo que ya no existe en el flujo nuevo.
+    hay_campo_usuario = False
     try:
-        actual = page.evaluate(
-            """(sel) => { const e = document.querySelector(sel.split(',')[0].trim())
-                 || document.querySelector("input[name='username']");
-                 return e ? (e.value || '') : null; }""", _OKTA_USER)
+        hay_campo_usuario = page.locator(_OKTA_USER).count() > 0
     except Exception:
-        actual = None
+        pass
 
-    if actual and actual.strip().lower() == correo.strip().lower():
-        log("El usuario ya viene puesto por el portal", "info")
-    else:
-        log("Escribiendo el usuario...", "info")
+    if hay_campo_usuario:
         try:
-            _tipear(page, _OKTA_USER, correo, log)
+            actual = page.evaluate(
+                """(sel) => { const e = document.querySelector(sel.split(',')[0].trim())
+                     || document.querySelector("input[name='username']");
+                     return e ? (e.value || '') : null; }""", _OKTA_USER)
         except Exception:
-            pass
-        time.sleep(0.6)
+            actual = None
+
+        if actual and actual.strip().lower() == correo.strip().lower():
+            log("El usuario ya viene puesto por el portal", "info")
+        else:
+            log("Escribiendo el usuario...", "info")
+            try:
+                _tipear(page, _OKTA_USER, correo, log)
+            except Exception:
+                pass
+            time.sleep(0.6)
+    else:
+        log("Este paso no pide el usuario de nuevo (ya quedó fijado antes)", "info")
 
     log("Escribiendo la contraseña...", "info")
-    _tipear(page, _OKTA_PASS, clave, log)
+    if not _tipear(page, _OKTA_PASS, clave, log):
+        _dump_campos(page, log)
     time.sleep(0.8)
 
     # ¿El botón quedó activo? Si Okta no registró lo escrito, sigue inhabilitado

@@ -1076,12 +1076,20 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
     def _en_respuesta(response):
         try:
             ct = (response.headers or {}).get("content-type", "")
-            if "pdf" not in ct.lower():
-                return
-            body = response.body()
-            if body and len(body) > 500:
-                capturado.append(body)
-                log(f"PDF capturado por red ({len(body)} bytes)", "ok")
+            if "pdf" in ct.lower():
+                body = response.body()
+                if body and len(body) > 500:
+                    capturado.append(body)
+                    log(f"PDF capturado por red ({len(body)} bytes)", "ok")
+                    return
+            # Diagnóstico: mientras no aparece el PDF por ningún método, se
+            # deja un rastro de las respuestas del propio portal (sin
+            # archivos estáticos) para saber qué pasa de verdad por la red
+            # sin depender de abrir DevTools a mano en cada prueba.
+            url = response.url
+            if ("equifax" in url) and not url.endswith(
+                    (".js", ".css", ".woff", ".woff2", ".svg", ".png", ".ico", ".jpg")):
+                log(f"  [red] {response.status} {ct or '(sin content-type)'} {url[:110]}", "info")
         except Exception:
             pass
 

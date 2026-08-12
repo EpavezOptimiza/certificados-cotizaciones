@@ -86,6 +86,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Opción 3: Seleccionar RAZONES SOCIALES (múltiple: Ctrl+Click)</label><input type="text" id="buscar-razon" placeholder="Buscar razón social..." onkeyup="filtrarRazones()" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;margin-bottom:8px"><select id="select-razon" multiple style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;min-height:120px;margin-bottom:8px"><option value="">— Selecciona una o varias razones sociales —</option></select><button class="btn" onclick="agregarRutsPorRazones()">✓ Agregar desde razones sociales</button></div>
     <div style="border-top:1px solid #e2e8f0;padding-top:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Opción 4: Descargar TODOS los RUT vigentes</label><button class="btn btn-sec" onclick="descargarTodosRuts()">📥 Descargar lista completa</button></div>
     <div id="ruts-seleccionados" style="margin-top:16px;padding:10px 12px;background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;display:none;font-size:12px;color:#1e40af;max-height:150px;overflow-y:auto"><strong>RUT seleccionados:</strong><div id="lista-ruts" style="margin-top:8px"></div></div>
+    <div style="border-top:1px solid #e2e8f0;margin-top:16px;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn" id="btn-descargar-dicom" onclick="descargarDicom()" style="background:#7c3aed">📥 Descargar DICOM</button>
+      <button class="btn" id="btn-detener-dicom" onclick="detenerDicom()" style="background:#dc2626;display:none">⏹ Detener</button>
+      <button class="btn btn-sec" id="btn-zip-dicom" onclick="descargarZipDicom()" style="display:none">⬇ Bajar ZIP con los PDF</button>
+      <span style="font-size:11px;color:#64748b">Hace login (incluyendo el código) y descarga el Boletín Laboral de cada RUT seleccionado arriba</span>
+    </div>
   </div>
   </div>
 
@@ -163,12 +169,18 @@ async function guardar(){
   }
 }
 
+let _botonActivoId = 'btn-probar';
+let _botonActivoTexto = '▶ Probar acceso';
+
 async function probar(){
   const btn = document.getElementById('btn-probar');
+  _botonActivoId = 'btn-probar'; _botonActivoTexto = '▶ Probar acceso';
   btn.disabled = true; btn.textContent = '⏳ Entrando…';
   document.getElementById('log-card').style.display = '';
   document.getElementById('log').innerHTML = '';
   document.getElementById('captura-box').style.display = 'none';
+  document.getElementById('btn-zip-dicom').style.display = 'none';
+  document.getElementById('btn-detener-dicom').style.display = 'none';
   try{
     const r = await fetch('/api/dicom/probar_login', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -178,7 +190,7 @@ async function probar(){
     const d = await r.json();
     if (d.error){
       alert(d.error);
-      btn.disabled = false; btn.textContent = '▶ Probar acceso';
+      btn.disabled = false; btn.textContent = _botonActivoTexto;
       return;
     }
     _tid = d.task_id; _since = 0;
@@ -186,8 +198,65 @@ async function probar(){
     _poll = setInterval(consultar, 1500);
   }catch(e){
     alert('Error: ' + e);
-    btn.disabled = false; btn.textContent = '▶ Probar acceso';
+    btn.disabled = false; btn.textContent = _botonActivoTexto;
   }
+}
+
+async function descargarDicom(){
+  const ruts = Array.isArray(_rutSeleccionado) ? _rutSeleccionado : (_rutSeleccionado ? [_rutSeleccionado] : []);
+  if (!ruts.length){
+    alert('Selecciona al menos un RUT arriba antes de descargar');
+    return;
+  }
+  const correo = document.getElementById('correo').value.trim();
+  const clave  = document.getElementById('clave').value.trim();
+  if (!correo || !clave){
+    alert('Ingresa el usuario y la contraseña de DICOM primero');
+    return;
+  }
+  const btn = document.getElementById('btn-descargar-dicom');
+  _botonActivoId = 'btn-descargar-dicom'; _botonActivoTexto = '📥 Descargar DICOM';
+  btn.disabled = true; btn.textContent = '⏳ Procesando…';
+  document.getElementById('btn-detener-dicom').style.display = '';
+  document.getElementById('btn-zip-dicom').style.display = 'none';
+  document.getElementById('log-card').style.display = '';
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('captura-box').style.display = 'none';
+  try{
+    const r = await fetch('/api/dicom/descargar_boletines', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({correo, clave, ruts})});
+    const d = await r.json();
+    if (d.error){
+      alert(d.error);
+      btn.disabled = false; btn.textContent = _botonActivoTexto;
+      document.getElementById('btn-detener-dicom').style.display = 'none';
+      return;
+    }
+    _tid = d.task_id; _since = 0;
+    clearInterval(_poll);
+    _poll = setInterval(consultar, 1500);
+  }catch(e){
+    alert('Error: ' + e);
+    btn.disabled = false; btn.textContent = _botonActivoTexto;
+    document.getElementById('btn-detener-dicom').style.display = 'none';
+  }
+}
+
+async function detenerDicom(){
+  if (!_tid) return;
+  const btn = document.getElementById('btn-detener-dicom');
+  btn.disabled = true; btn.textContent = '⏳ Deteniendo…';
+  try{
+    await fetch(`/api/dicom/detener/${_tid}`, {method:'POST'});
+  }catch(e){
+    alert('No se pudo enviar la solicitud de detener');
+    btn.disabled = false; btn.textContent = '⏹ Detener';
+  }
+}
+
+function descargarZipDicom(){
+  if (_tid) window.open(`/api/dicom/descargar_zip/${_tid}`);
 }
 
 async function enviarCodigo(){
@@ -230,8 +299,12 @@ async function consultar(){
     if (d.done){
       cajaCodigo.style.display = 'none';
       clearInterval(_poll);
-      const btn = document.getElementById('btn-probar');
-      btn.disabled = false; btn.textContent = '▶ Probar acceso';
+      const btn = document.getElementById(_botonActivoId);
+      btn.disabled = false; btn.textContent = _botonActivoTexto;
+      document.getElementById('btn-detener-dicom').style.display = 'none';
+      if (d.zip){
+        document.getElementById('btn-zip-dicom').style.display = '';
+      }
       if (d.captura){
         document.getElementById('captura-img').src =
           '/api/dicom/captura/' + d.captura + '?t=' + Date.now();

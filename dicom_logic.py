@@ -875,3 +875,197 @@ def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None, rut
                 display.stop()
             except Exception:
                 pass
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Búsqueda y descarga real de Boletines Laborales (flujo completo, mapeado
+# a mano navegando el portal real: Productos -> Ingresar (pestaña nueva
+# "Interactive Reports") -> "+" -> Nuevo Reporte -> Producto=Boletin Laboral
+# -> Rut -> Generar Reporte -> "+" -> Generar PDF (descarga directa) ->
+# "+" -> Nuevo Reporte (siguiente RUT).
+# ──────────────────────────────────────────────────────────────────────────
+
+def _abrir_reportes_interactivos(page, log):
+    """Click en 'Ingresar' (tarjeta Reportes Interactivos) — abre una
+    PESTAÑA NUEVA (Interactive Reports); hay que capturarla con
+    expect_page, igual que el mismo patrón ya resuelto en Previred."""
+    try:
+        with page.context.expect_page(timeout=15000) as popup_info:
+            btn = page.locator(
+                '[data-test-id="appTypeButton"], button:has-text("Ingresar")').first
+            btn.click(timeout=8000)
+        reportes = popup_info.value
+        reportes.wait_for_load_state("domcontentloaded", timeout=30000)
+        reportes.set_default_timeout(45000)
+        log(f"Reportes Interactivos abierto: {reportes.url}", "ok")
+        return reportes
+    except Exception as e:
+        raise LoginFallido(
+            f"No se pudo abrir 'Reportes Interactivos': {type(e).__name__}: {e}")
+
+
+def _click_fab(page, log):
+    """Click en el botón flotante rojo '+' que despliega Generar PDF /
+    Nuevo Reporte / Agregar seguimiento."""
+    fab = page.locator(
+        "button.fab-main-btn, app-fab-options button, "
+        "button:has(mat-icon:text('add'))").first
+    fab.click(timeout=8000)
+    page.wait_for_timeout(400)
+
+
+def _seleccionar_boletin_laboral(page, log):
+    """Abre el desplegable 'Producto' (mat-select) y elige 'Boletin
+    Laboral' de la lista de opciones."""
+    page.get_by_label("Producto", exact=False).click(timeout=10000)
+    page.get_by_role("option", name="Boletin Laboral", exact=True).click(timeout=8000)
+
+
+def _generar_reporte(page, rut, log):
+    """Escribe el RUT en el formulario y clickea 'Generar Reporte'; espera
+    a que el overlay 'Cargando...' aparezca y luego desaparezca."""
+    campo = page.get_by_label("Rut", exact=False)
+    campo.click(timeout=8000)
+    try:
+        campo.fill("")
+    except Exception:
+        pass
+    campo.type(rut, delay=40)
+    page.get_by_role("button", name="Generar Reporte").click(timeout=8000)
+    try:
+        page.get_by_text("Cargando", exact=False).wait_for(state="visible", timeout=4000)
+    except Exception:
+        pass
+    page.get_by_text("Cargando", exact=False).wait_for(state="hidden", timeout=60000)
+
+
+def _descargar_pdf_reporte(page, ruta_dest, log):
+    """Click en '+' -> 'Generar PDF' y captura la descarga directa del
+    navegador (confirmado real: el click dispara un download normal,
+    con el botón mostrando 'Descargando PDF' mientras se genera)."""
+    _click_fab(page, log)
+    with page.expect_download(timeout=90000) as dl_info:
+        page.get_by_text("Generar PDF", exact=False).click(timeout=8000)
+    dl = dl_info.value
+    dl.save_as(ruta_dest)
+
+
+def _nuevo_reporte(page, log):
+    """Click en '+' -> 'Nuevo Reporte' para volver al formulario de
+    búsqueda y pedir el siguiente RUT."""
+    _click_fab(page, log)
+    page.get_by_text("Nuevo Reporte", exact=False).click(timeout=8000)
+    page.wait_for_timeout(500)
+
+
+def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
+                        ruta_captura=None, obtener_codigo=None, debe_cancelar=None):
+    """Login completo (incluyendo código de verificación) + descarga el
+    Boletin Laboral de cada RUT en `ruts`, uno por uno, guardando cada PDF
+    en `carpeta_dest`. Devuelve {"descargados": int, "errores": [rut,...]}.
+    """
+    display = None
+    headless = True
+    try:
+        from pyvirtualdisplay import Display
+        display = Display(visible=0, size=(1440, 1000))
+        display.start()
+        headless = False
+        log("Pantalla virtual iniciada — navegador con pantalla", "info")
+    except Exception as e:
+        log(f"Sin pantalla virtual ({str(e)[:40]}); se usará modo invisible", "warn")
+
+    os.makedirs(carpeta_dest, exist_ok=True)
+    descargados = 0
+    errores = []
+
+    try:
+      with sync_playwright() as pw:
+        browser = pw.chromium.launch(
+            headless=headless,
+            args=["--no-sandbox", "--disable-dev-shm-usage",
+                  "--disable-blink-features=AutomationControlled",
+                  "--disable-features=IsolateOrigins,site-per-process"],
+        )
+        ctx = browser.new_context(
+            viewport={"width": 1400, "height": 900},
+            user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"),
+            locale="es-CL",
+            timezone_id="America/Santiago",
+            accept_downloads=True,
+        )
+        ctx.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['es-CL','es','en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+            window.chrome = window.chrome || {runtime: {}};
+        """)
+        page = ctx.new_page()
+        page.set_default_timeout(45000)
+
+        def _captura(etiqueta=""):
+            if not ruta_captura:
+                return
+            try:
+                os.makedirs(os.path.dirname(ruta_captura), exist_ok=True)
+                page.screenshot(path=ruta_captura, full_page=False)
+            except Exception:
+                pass
+
+        try:
+            try:
+                hacer_login(page, correo, clave, log, obtener_codigo=obtener_codigo)
+            except LoginFallido:
+                _captura(" (pantalla del error)")
+                _dump_campos(page, log)
+                raise
+
+            reportes = _abrir_reportes_interactivos(page, log)
+
+            primero = True
+            for idx, rut in enumerate(ruts, 1):
+                if debe_cancelar is not None and debe_cancelar():
+                    log("Detenido por el usuario", "warn")
+                    break
+
+                log(f"── RUT {idx}/{len(ruts)}: {rut}", "info")
+                try:
+                    if not primero:
+                        _nuevo_reporte(reportes, log)
+                    primero = False
+
+                    _seleccionar_boletin_laboral(reportes, log)
+                    _generar_reporte(reportes, rut, log)
+
+                    rut_limpio = rut.replace(".", "").replace(" ", "")
+                    nombre = f"Boletin_Laboral_{rut_limpio}.pdf"
+                    ruta = os.path.join(carpeta_dest, nombre)
+                    _descargar_pdf_reporte(reportes, ruta, log)
+
+                    log(f"Guardado: {nombre}", "ok")
+                    descargados += 1
+                except Exception as e:
+                    log(f"✗ RUT {rut}: {type(e).__name__}: {str(e)[:150]}", "err")
+                    errores.append(rut)
+                    try:
+                        reportes.screenshot(
+                            path=os.path.join(carpeta_dest, f"_error_{rut_limpio}.png"))
+                    except Exception:
+                        pass
+
+            log(f"Descarga completada: {descargados}/{len(ruts)} boletines "
+                f"({len(errores)} con error)", "ok")
+            return {"descargados": descargados, "errores": errores}
+        finally:
+            try:
+                ctx.close()
+            except Exception:
+                pass
+            browser.close()
+    finally:
+        if display:
+            try:
+                display.stop()
+            except Exception:
+                pass

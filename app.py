@@ -3284,7 +3284,8 @@ def dicom_tarea(tid):
     since = int(request.args.get("since", 0))
     return jsonify({"logs": t["logs"][since:], "done": t["done"],
                     "error": t["error"], "captura": t["captura"],
-                    "esperando_codigo": t.get("esperando_codigo", False)})
+                    "esperando_codigo": t.get("esperando_codigo", False),
+                    "zip": t.get("zip")})
 
 
 @app.route("/api/dicom/codigo", methods=["POST"])
@@ -3302,6 +3303,110 @@ def dicom_codigo():
     t["codigo"] = codigo
     _dicom_log(tid, "Código recibido desde la plataforma", "ok")
     return jsonify({"ok": True})
+
+
+@app.route("/api/dicom/descargar_boletines", methods=["POST"])
+@api_login_required
+def dicom_descargar_boletines():
+    """Botón único: login (incl. código de verificación) + descarga el
+    Boletin Laboral de cada RUT seleccionado, uno por uno."""
+    import threading, uuid
+    d = request.json or {}
+    correo = (d.get("correo") or "").strip() or _dicom_cfg("correo")
+    clave  = (d.get("clave") or "").strip() or _dicom_cfg("clave")
+    ruts = [r.strip() for r in (d.get("ruts") or []) if r and r.strip()]
+    if not correo or not clave:
+        return jsonify({"error": "Faltan el correo y la contraseña de DICOM"}), 400
+    if not ruts:
+        return jsonify({"error": "Selecciona al menos un RUT"}), 400
+
+    tid = uuid.uuid4().hex[:12]
+    carpeta_temp = os.path.join(ADJUNTOS, "dicom_boletines", tid)
+    _dicom_tareas[tid] = {"logs": [], "done": False, "error": False, "captura": None,
+                          "esperando_codigo": False, "codigo": None, "ruts": ruts,
+                          "cancelar": False, "carpeta": carpeta_temp, "zip": None}
+
+    def _pedir_codigo():
+        import time as _t
+        _dicom_tareas[tid]["esperando_codigo"] = True
+        _dicom_log(tid, "⏳ Esperando el código de verificación — revisa tu correo "
+                        "y escríbelo aquí abajo", "warn")
+        fin = _t.time() + 300
+        while _t.time() < fin:
+            cod = _dicom_tareas[tid].get("codigo")
+            if cod:
+                _dicom_tareas[tid]["esperando_codigo"] = False
+                return cod
+            _t.sleep(1)
+        _dicom_tareas[tid]["esperando_codigo"] = False
+        return None
+
+    def run_task():
+        ruta_cap = os.path.join(_EXCELS_DIR, f"dicom_boletin_{tid}.png")
+        try:
+            from dicom_logic import descargar_boletines, LoginFallido
+            try:
+                resultado = descargar_boletines(
+                    correo, clave, ruts, carpeta_temp,
+                    log=lambda m, t="info": _dicom_log(tid, m, t),
+                    ruta_captura=ruta_cap,
+                    obtener_codigo=_pedir_codigo,
+                    debe_cancelar=lambda: _dicom_tareas[tid].get("cancelar", False))
+                if os.path.exists(ruta_cap):
+                    _dicom_tareas[tid]["captura"] = os.path.basename(ruta_cap)
+
+                pdfs = [os.path.join(carpeta_temp, f) for f in os.listdir(carpeta_temp)
+                       if f.lower().endswith(".pdf")] if os.path.isdir(carpeta_temp) else []
+                if pdfs:
+                    nombre_zip = f"Boletines_DICOM_{tid}.zip"
+                    ruta_zip = os.path.join(_EXCELS_DIR, nombre_zip)
+                    with zipfile.ZipFile(ruta_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                        for rp in pdfs:
+                            zf.write(rp, os.path.basename(rp))
+                    _dicom_tareas[tid]["zip"] = nombre_zip
+                    _dicom_log(tid, f"ZIP listo con {len(pdfs)} PDF(s)", "ok")
+
+                if resultado.get("errores"):
+                    _dicom_log(tid, f"⚠ {len(resultado['errores'])} RUT con error: "
+                                    f"{', '.join(resultado['errores'])}", "warn")
+                _dicom_log(tid, "✓ Proceso finalizado", "ok")
+            except LoginFallido as e:
+                _dicom_log(tid, f"✗ {e}", "err")
+                if os.path.exists(ruta_cap):
+                    _dicom_tareas[tid]["captura"] = os.path.basename(ruta_cap)
+                _dicom_tareas[tid]["error"] = True
+        except Exception as e:
+            import traceback
+            _dicom_log(tid, f"Error: {e}", "err")
+            _dicom_log(tid, traceback.format_exc()[:300], "err")
+            _dicom_tareas[tid]["error"] = True
+        finally:
+            _dicom_tareas[tid]["done"] = True
+
+    threading.Thread(target=run_task, daemon=True).start()
+    return jsonify({"ok": True, "task_id": tid})
+
+
+@app.route("/api/dicom/detener/<tid>", methods=["POST"])
+@api_login_required
+def dicom_detener(tid):
+    t = _dicom_tareas.get(tid)
+    if not t:
+        return jsonify({"error": "Tarea no encontrada"}), 404
+    if t["done"]:
+        return jsonify({"ok": True, "ya_terminada": True})
+    t["cancelar"] = True
+    _dicom_log(tid, "Solicitud de detener recibida — cortará en el próximo punto seguro...", "warn")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/dicom/descargar_zip/<tid>")
+@api_login_required
+def dicom_descargar_zip(tid):
+    t = _dicom_tareas.get(tid)
+    if not t or not t.get("zip"):
+        return jsonify({"error": "ZIP no disponible"}), 404
+    return send_from_directory(_EXCELS_DIR, t["zip"], as_attachment=True)
 
 
 @app.route("/api/dicom/captura/<nombre>")

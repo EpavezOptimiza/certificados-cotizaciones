@@ -1009,26 +1009,48 @@ def _generar_reporte(page, rut, log):
 
 
 def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
-    """Click en '+' -> 'Generar PDF' y captura la descarga.
+    """Click en '+' -> 'Generar PDF' y captura el archivo.
 
-    Confirmado real: el archivo SÍ se descarga (el usuario lo vio llegar),
-    pero page.expect_download() nunca detectó el evento -- probablemente
-    porque la descarga ocurre en una pestaña/página distinta a `page`
-    (mismo patrón ya visto en Previred: un click puede disparar la
-    descarga en otro contexto). Por eso ahora se escucha 'download' a
-    nivel del BROWSER CONTEXT completo (page.context.on), que capta el
-    evento sin importar en qué página/pestaña ocurra, en vez de esperar
-    solo en la página actual.
+    Confirmado con las DevTools reales (pestaña Network): el PDF NO llega
+    por una descarga nativa del navegador -- se pide con una petición
+    XHR (fetch) de 200 OK y ~19KB, y recién ahí el JS del portal arma el
+    archivo del lado del cliente (blob). Por eso el evento 'download' de
+    Playwright nunca disparaba: no hay ninguna navegación/descarga real
+    que capturar. En vez de depender de ese evento, se intercepta
+    DIRECTAMENTE la respuesta de red que trae los bytes del PDF (mismo
+    patrón ya usado con éxito en Previred y en Cartas Previsionales) --
+    se guarda el 'download' como respaldo adicional por si en algún caso
+    sí dispara uno.
     """
     capturado = []
 
-    def _en_descarga(dl):
+    def _en_respuesta(response):
         try:
-            dl.save_as(ruta_dest)
-            capturado.append(True)
+            ct = (response.headers or {}).get("content-type", "")
+            if "pdf" not in ct.lower():
+                return
+            body = response.body()
+            if body and len(body) > 500:
+                capturado.append(body)
+                log(f"PDF capturado por red ({len(body)} bytes)", "ok")
         except Exception:
             pass
 
+    def _en_descarga(dl):
+        try:
+            import tempfile as _tf
+            tmp = _tf.mktemp(suffix=".pdf")
+            dl.save_as(tmp)
+            with open(tmp, "rb") as fh:
+                b = fh.read()
+            os.remove(tmp)
+            if b and len(b) > 500:
+                capturado.append(b)
+                log(f"PDF capturado por descarga ({len(b)} bytes)", "ok")
+        except Exception:
+            pass
+
+    page.context.on("response", _en_respuesta)
     page.context.on("download", _en_descarga)
     try:
         _click_fab(page, log, ruta_captura)
@@ -1042,12 +1064,19 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
             if capturado:
                 break
             if i_espera > 0 and i_espera % 15 == 0:
-                log(f"  esperando descarga del PDF... ({i_espera}s)", "info")
+                log(f"  esperando el PDF... ({i_espera}s)", "info")
             time.sleep(1)
         if not capturado:
             _dump_reportes_ui(page, log, ruta_captura)
-            raise TimeoutError("No se detectó ninguna descarga en 90s")
+            raise TimeoutError("No se detectó ningún PDF (ni por red ni por descarga) en 90s")
+
+        with open(ruta_dest, "wb") as f:
+            f.write(capturado[0])
     finally:
+        try:
+            page.context.remove_listener("response", _en_respuesta)
+        except Exception:
+            pass
         try:
             page.context.remove_listener("download", _en_descarga)
         except Exception:

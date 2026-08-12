@@ -756,7 +756,7 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
     """Genera Excel con dos hojas a partir de datos de PDFs.
 
     datos_por_pdf: list de dicts retornados por extraer_datos_pdf()
-    grupos_base_madre: dict {rut: {'grupo': '...', 'razon_social': '...'}}
+    grupos_base_madre: dict {rut: {'grupo': '...', 'consultor_deuda': '...'}}
 
     Retorna bytes del Excel o None si error.
     """
@@ -770,7 +770,7 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
         # Sheet 1: Resumen — una fila por cada institución con deuda/multa;
         # si la empresa no tiene ninguna, una única fila "Sin Dicom".
         ws1 = wb.create_sheet('Resumen Analisis', 0)
-        ws1.append(['RUT Empresa', 'GRUPO', 'Empresa', 'Tiene DICOM', 'Institucion',
+        ws1.append(['RUT Empresa', 'GRUPO', 'Empresa', 'DEUDAS', 'Tiene DICOM', 'Institucion',
                     'MOTIVO', 'RESOLUCION', 'MONTO PREVISIONAL',
                     'Tipo Correo', 'Tipo de Correo (Grupo)'])
 
@@ -798,6 +798,7 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
             rut_clean = datos['rut'].replace('.', '').replace(' ', '')
             grupo_info = grupos_base_madre.get(rut_clean, {})
             grupo = grupo_info.get('grupo', 'SIN GRUPO')
+            deudas_consultor = grupo_info.get('consultor_deuda', '') or 'N/A'
             empresa = datos.get('razon_social', '')
             instituciones = datos.get('instituciones', [])
 
@@ -806,13 +807,13 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
                                    datos.get('monto_utm', 0) > 0) else 'No'
 
             if tiene_dicom == 'No' or not instituciones:
-                filas_ws1.append((datos['rut'], grupo, empresa, 'No', 'Sin Dicom',
+                filas_ws1.append((datos['rut'], grupo, empresa, deudas_consultor, 'No', 'Sin Dicom',
                                    '', '', '', 'Sin Dicom'))
                 tipo_correo_grupo.setdefault(grupo, 'Sin Dicom')
                 continue
 
             for bloque in instituciones:
-                filas_ws1.append((datos['rut'], grupo, empresa, 'Si',
+                filas_ws1.append((datos['rut'], grupo, empresa, deudas_consultor, 'Si',
                                    bloque['institucion'], bloque['motivo'],
                                    bloque['resolucion'], bloque['monto'],
                                    bloque['tipo_correo']))
@@ -828,9 +829,9 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
                         '', '', '', ''  # Analisis/Solicitud/Motivo/Gestion: consultor
                     ])
 
-        for (rut, grupo, empresa, tiene_dicom, institucion, motivo, resolucion,
-             monto, tipo_correo) in filas_ws1:
-            ws1.append([rut, grupo, empresa, tiene_dicom, institucion, motivo,
+        for (rut, grupo, empresa, deudas_consultor, tiene_dicom, institucion, motivo,
+             resolucion, monto, tipo_correo) in filas_ws1:
+            ws1.append([rut, grupo, empresa, deudas_consultor, tiene_dicom, institucion, motivo,
                         resolucion, monto, tipo_correo,
                         tipo_correo_grupo.get(grupo, 'Sin Dicom')])
 

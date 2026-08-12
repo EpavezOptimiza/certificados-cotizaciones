@@ -3448,13 +3448,17 @@ def dicom_analizar():
     if not numero_dicom:
         return jsonify({"error": "Falta número de DICOM"}), 400
 
-    # Obtener grupos de BASE MADRE
+    # Obtener grupos y consultor de deuda de BASE MADRE
     datos_base = obtener_datos_dicom()
+    consultores_deuda = datos_base.get("consultores_deuda", {})
     grupos_dict = {}
     for grupo, info in datos_base.get("grupos", {}).items():
         for rut in info.get("ruts", []):
             rut_norm = rut.replace(".", "").replace(" ", "")
-            grupos_dict[rut_norm] = {"grupo": grupo}
+            grupos_dict[rut_norm] = {"grupo": grupo,
+                                      "consultor_deuda": consultores_deuda.get(rut_norm, "")}
+    for rut_norm, consultor in consultores_deuda.items():
+        grupos_dict.setdefault(rut_norm, {"grupo": "SIN GRUPO", "consultor_deuda": consultor})
 
     # Procesar cada PDF: extraer datos y guardar bytes para el ZIP
     datos_pdfs = []

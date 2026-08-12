@@ -1099,6 +1099,19 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
         except Exception:
             pass
 
+    # Respaldo adicional: además de los listeners de red/descarga (que hasta
+    # ahora no dispararon ni una vez, con motivo aún no confirmado), el
+    # navegador queda configurado (ver descargar_boletines) para guardar
+    # cualquier descarga DIRECTO en esta misma carpeta vía CDP
+    # (Browser.setDownloadBehavior) -- así que también se vigila la carpeta
+    # por si aparece el archivo ahí, sin depender de que Playwright "vea"
+    # el evento.
+    carpeta_dest = os.path.dirname(ruta_dest)
+    try:
+        ya_existian = set(os.listdir(carpeta_dest))
+    except Exception:
+        ya_existian = set()
+
     page.context.on("response", _en_respuesta)
     page.context.on("download", _en_descarga)
     try:
@@ -1114,15 +1127,48 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
             _dump_reportes_ui(page, log, ruta_captura)
             raise
 
-        for i_espera in range(90):
+        ruta_archivo_nuevo = None
+        inicio = time.time()
+        ultimo_aviso = inicio
+        fin = inicio + 90
+        while time.time() < fin:
             if capturado:
                 break
-            if i_espera > 0 and i_espera % 15 == 0:
-                log(f"  esperando el PDF... ({i_espera}s)", "info")
+            try:
+                actuales = set(os.listdir(carpeta_dest))
+            except Exception:
+                actuales = set()
+            nuevos = [f for f in actuales - ya_existian
+                      if not f.endswith((".crdownload", ".tmp"))]
+            if nuevos:
+                ruta_archivo_nuevo = os.path.join(carpeta_dest, nuevos[0])
+                break
+            if time.time() - ultimo_aviso > 15:
+                ultimo_aviso = time.time()
+                log(f"  esperando el PDF... ({int(time.time() - inicio)}s)", "info")
             time.sleep(1)
+
+        if ruta_archivo_nuevo:
+            # Esperar a que termine de escribirse (tamaño estable) antes de moverlo
+            tam_previo = -1
+            for _ in range(10):
+                try:
+                    tam = os.path.getsize(ruta_archivo_nuevo)
+                except Exception:
+                    tam = -1
+                if tam == tam_previo and tam > 0:
+                    break
+                tam_previo = tam
+                time.sleep(0.5)
+            log(f"PDF capturado por archivo en disco ({os.path.basename(ruta_archivo_nuevo)})", "ok")
+            if os.path.abspath(ruta_archivo_nuevo) != os.path.abspath(ruta_dest):
+                os.replace(ruta_archivo_nuevo, ruta_dest)
+            return
+
         if not capturado:
             _dump_reportes_ui(page, log, ruta_captura)
-            raise TimeoutError("No se detectó ningún PDF (ni por red ni por descarga) en 90s")
+            raise TimeoutError(
+                "No se detectó ningún PDF (ni por red, ni por descarga, ni en el disco) en 90s")
 
         with open(ruta_dest, "wb") as f:
             f.write(capturado[0])
@@ -1206,6 +1252,26 @@ def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
             Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
             window.chrome = window.chrome || {runtime: {}};
         """)
+
+        # El bot corre en el servidor, no en el computador de quien lo usa --
+        # no existe una "carpeta de Descargas del usuario" a la que este
+        # Chrome pueda escribir. En vez de eso se le indica al navegador, por
+        # CDP (protocolo, no evento de Playwright), que guarde cualquier
+        # descarga DIRECTO en `carpeta_dest`: así el archivo queda listo ahí
+        # mismo para empaquetarlo en el ZIP que se le ofrece a la persona al
+        # final, sin depender de que el evento 'download' de Playwright
+        # dispare (no lo ha hecho hasta ahora, por un motivo aún sin
+        # confirmar).
+        try:
+            cdp = browser.new_browser_cdp_session()
+            cdp.send("Browser.setDownloadBehavior", {
+                "behavior": "allow",
+                "downloadPath": os.path.abspath(carpeta_dest),
+            })
+            log("Descargas del navegador redirigidas a la carpeta del servidor", "info")
+        except Exception as e:
+            log(f"No se pudo forzar la carpeta de descargas: {type(e).__name__}: {e}", "warn")
+
         page = ctx.new_page()
         page.set_default_timeout(45000)
 

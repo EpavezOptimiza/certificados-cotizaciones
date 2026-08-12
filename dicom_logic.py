@@ -716,13 +716,25 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
         # Sheet 1: Resumen — una fila por cada institución con deuda/multa;
         # si la empresa no tiene ninguna, una única fila "Sin Dicom".
         ws1 = wb.create_sheet('Resumen Analisis', 0)
-        ws1.append(['RUT Empresa', 'GRUPO', 'Empresa', 'Tiene DICOM', 'Institucion', 'Tipo Correo'])
+        ws1.append(['RUT Empresa', 'GRUPO', 'Empresa', 'Tiene DICOM', 'Institucion',
+                    'Tipo Correo', 'Tipo de Correo (Grupo)'])
 
         # Sheet 2: Deuda Previsional — una fila por cada trabajador/periodo
         ws2 = wb.create_sheet('Deuda Previsional', 1)
         ws2.append(['Grupo', 'Rut Emp', 'Empresa', 'Rut Trabj', 'Nombre Trabj',
                    'Institucion', 'Periodo', 'Monto nominal', 'Analisis',
                    'Solicitud documentos', 'Motivo', 'Gestion'])
+
+        # "Tipo de Correo (Grupo)": a diferencia de "Tipo Correo" (que es por
+        # institución/fila), esta se calcula sobre TODO el grupo y se repite
+        # en todas sus filas. Prioridad de mayor a menor: si CUALQUIER razón
+        # social del grupo tiene "Previsional", el grupo entero pasa a
+        # "Previsional" (aunque las demás no); si ninguna tiene Previsional
+        # pero alguna tiene "DT", el grupo pasa a "DT"; solo si el grupo
+        # completo es "Sin Dicom" queda como "Sin Dicom".
+        _PRIORIDAD_TIPO_CORREO = {'Sin Dicom': 1, 'DT': 2, 'Previsional': 3}
+        filas_ws1 = []
+        tipo_correo_grupo = {}
 
         for datos in datos_por_pdf:
             if not datos.get('rut'):
@@ -739,14 +751,17 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
                                    datos.get('monto_utm', 0) > 0) else 'No'
 
             if tiene_dicom == 'No' or not instituciones:
-                ws1.append([datos['rut'], grupo, empresa, 'No', 'Sin Dicom', 'Sin Dicom'])
+                filas_ws1.append((datos['rut'], grupo, empresa, 'No', 'Sin Dicom', 'Sin Dicom'))
+                tipo_correo_grupo.setdefault(grupo, 'Sin Dicom')
                 continue
 
             for bloque in instituciones:
-                ws1.append([
-                    datos['rut'], grupo, empresa, 'Si',
-                    bloque['institucion'], bloque['tipo_correo']
-                ])
+                filas_ws1.append((datos['rut'], grupo, empresa, 'Si',
+                                   bloque['institucion'], bloque['tipo_correo']))
+                actual = tipo_correo_grupo.get(grupo, 'Sin Dicom')
+                if _PRIORIDAD_TIPO_CORREO[bloque['tipo_correo']] > _PRIORIDAD_TIPO_CORREO[actual]:
+                    tipo_correo_grupo[grupo] = bloque['tipo_correo']
+
                 for trab in bloque.get('trabajadores', []):
                     ws2.append([
                         grupo, datos['rut'], empresa,
@@ -754,6 +769,10 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
                         trab['periodo'], trab['monto'],
                         '', '', '', ''  # Analisis/Solicitud/Motivo/Gestion: consultor
                     ])
+
+        for rut, grupo, empresa, tiene_dicom, institucion, tipo_correo in filas_ws1:
+            ws1.append([rut, grupo, empresa, tiene_dicom, institucion, tipo_correo,
+                        tipo_correo_grupo.get(grupo, 'Sin Dicom')])
 
         # Auto-adjust column widths
         for ws in [ws1, ws2]:

@@ -1157,7 +1157,11 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
         ruta_archivo_nuevo = None
         inicio = time.time()
         ultimo_aviso = inicio
-        fin = inicio + 90
+        # Confirmado con una respuesta real de red (JSON de
+        # .../reports/{id}) que llegó recién a los ~90s: el backend de
+        # Equifax tarda bastante en preparar el reporte antes del PDF, así
+        # que 90s se quedaba corto justo cuando recién empezaba a responder.
+        fin = inicio + 150
         while time.time() < fin:
             if capturado:
                 break
@@ -1195,7 +1199,7 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
         if not capturado:
             _dump_reportes_ui(page, log, ruta_captura)
             raise TimeoutError(
-                "No se detectó ningún PDF (ni por red, ni por descarga, ni en el disco) en 90s")
+                "No se detectó ningún PDF (ni por red, ni por descarga, ni en el disco) en 150s")
 
         with open(ruta_dest, "wb") as f:
             f.write(capturado[0])

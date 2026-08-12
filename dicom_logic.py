@@ -1023,6 +1023,8 @@ def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
 
             reportes = _abrir_reportes_interactivos(page, log)
 
+            log(f"__PROGRESO_TOTAL__:{len(ruts)}", "info")
+
             primero = True
             for idx, rut in enumerate(ruts, 1):
                 if debe_cancelar is not None and debe_cancelar():
@@ -1030,6 +1032,8 @@ def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
                     break
 
                 log(f"── RUT {idx}/{len(ruts)}: {rut}", "info")
+                log(f"__PROGRESO_AVANCE__:{idx}", "info")
+                rut_limpio = rut.replace(".", "").replace(" ", "")
                 try:
                     if not primero:
                         _nuevo_reporte(reportes, log)
@@ -1038,15 +1042,17 @@ def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
                     _seleccionar_boletin_laboral(reportes, log)
                     _generar_reporte(reportes, rut, log)
 
-                    rut_limpio = rut.replace(".", "").replace(" ", "")
                     nombre = f"Boletin_Laboral_{rut_limpio}.pdf"
                     ruta = os.path.join(carpeta_dest, nombre)
                     _descargar_pdf_reporte(reportes, ruta, log)
 
                     log(f"Guardado: {nombre}", "ok")
+                    log(f"__ARCHIVO_OK__:{rut}:{nombre}", "ok")
                     descargados += 1
                 except Exception as e:
-                    log(f"✗ RUT {rut}: {type(e).__name__}: {str(e)[:150]}", "err")
+                    motivo = f"{type(e).__name__}: {str(e)[:150]}"
+                    log(f"✗ RUT {rut}: {motivo}", "err")
+                    log(f"__ARCHIVO_ERROR__:{rut}:{motivo}", "err")
                     errores.append(rut)
                     try:
                         reportes.screenshot(
@@ -1054,6 +1060,7 @@ def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
                     except Exception:
                         pass
 
+            log(f"__RESUMEN__:{descargados}:{len(errores)}", "ok")
             log(f"Descarga completada: {descargados}/{len(ruts)} boletines "
                 f"({len(errores)} con error)", "ok")
             return {"descargados": descargados, "errores": errores}

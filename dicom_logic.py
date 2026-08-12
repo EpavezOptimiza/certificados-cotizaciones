@@ -594,12 +594,61 @@ _TRABAJADOR_RE = _re.compile(
     r'(\d{1,2}\.\d{3}\.\d{3}-[\dKk])\s?([A-ZÑÁÉÍÓÚ \n]+?)\nTotal Trabajador:\s*(\d{1,3},\d{2})'
 )
 _PERIODO_RE = _re.compile(r'(\d{2}/\d{4})\s+\$([\d.,]+)\s+(\d{1,3},\d{2})')
+
 # El texto extraído pega el motivo directo con el nombre de la institución
-# (ej. "...DeclaradasAFP. CUPRUM"); se inserta un espacio antes de estas
-# marcas conocidas para que quede legible en el Excel.
-_SEPARAR_INSTITUCION_RE = _re.compile(
-    r'(?<=\S)(AFP|CCAF|C\.C\.A\.F|DIRECCION DEL TRABAJO|ADM DE FONDOS|MUTUAL|ISL)'
+# (ej. "MULTA EN UTM DIRECCION DEL TRABAJO" o "Declaraciones no Canceladas
+# AFP PROVIDA") sin ningún separador. Como los nombres de institución
+# siempre empiezan con una de estas marcas conocidas, se usa esa marca como
+# punto de corte para separar Motivo de Institución.
+_MARCA_INSTITUCION_RE = _re.compile(
+    r'(AFP|CCAF|C\.C\.A\.F\.?|DIRECCION DEL TRABAJO|ADM(?:INISTRADORA)? DE FONDOS(?: DE CESANT.A)?'
+    r'|MUTUAL(?: DE SEGURIDAD)?|ISL|IPS|INP)',
+    _re.I,
 )
+
+# Fila completa de la tabla "Motivo Institución Boletín Pág. Fecha Infracción
+# Cotizaciones Meses Monto $ Fiscalizador Resolución": captura el bloque
+# motivo+institución (sin separar todavía), salta Infracción/Cotizaciones/
+# Meses (no se necesitan) hasta el primer "$" de Monto, y captura el resto
+# de la línea (Fiscalizador + Resolución) para procesar aparte, porque esos
+# dos últimos campos a veces vienen pegados sin espacio en el texto extraído.
+_FILA_RE = _re.compile(
+    r'\s*(?P<motivo_inst>.+?)\s*\d{3}\s*-\s*\d{2}/\d{2}/\d{4}'
+    r'.*?\$(?P<monto>[\d.,]+)(?P<resto>[^\n]*)',
+    _re.S,
+)
+
+
+def _separar_motivo_institucion(texto):
+    """Separa el bloque 'motivo+institución' pegado en dos campos, usando
+    el nombre de la institución (AFP, CCAF, DIRECCION DEL TRABAJO, etc.)
+    como punto de corte. Si no se reconoce ninguna institución conocida,
+    todo el texto queda como institución con motivo vacío."""
+    texto = ' '.join(texto.split())
+    m = _MARCA_INSTITUCION_RE.search(texto)
+    if not m:
+        return '', (texto or 'Sin especificar')
+    motivo = texto[:m.start()].strip()
+    institucion = texto[m.start():].strip()
+    return motivo, institucion
+
+
+def _extraer_resolucion(resto):
+    """El texto extraído a veces pega Fiscalizador y Resolución sin espacio
+    cuando ambos tienen valor (ej. '85738573250041' = fiscalizador '8573' +
+    resolución '8573250041' — en Chile la resolución suele empezar
+    repitiendo el código del fiscalizador). Si vienen separados (caso '-  -'
+    cuando no hay fiscalizador/resolución), se usa directamente el último."""
+    tokens = resto.split()
+    if not tokens:
+        return '-'
+    if len(tokens) >= 2:
+        return tokens[-1]
+    token = tokens[0]
+    m = _re.match(r'^(\d{3,5})(\1\d+)$', token)
+    if m:
+        return m.group(2)
+    return token
 
 
 def _extraer_bloques_institucion(texto_pag1):
@@ -608,9 +657,13 @@ def _extraer_bloques_institucion(texto_pag1):
     por cada institución cuando hay más de una)."""
     bloques = []
     for chunk in _HEADER_TABLA_RE.split(texto_pag1)[1:]:
-        m = _re.match(r'\s*(.+?)\s*\d{3}\s*-\s*\d{2}/\d{2}/\d{4}', chunk, _re.S)
-        institucion = ' '.join(m.group(1).split()) if m else 'Sin especificar'
-        institucion = _SEPARAR_INSTITUCION_RE.sub(r' \1', institucion)
+        m = _FILA_RE.match(chunk)
+        if m:
+            motivo, institucion = _separar_motivo_institucion(m.group('motivo_inst'))
+            monto = int(_re.sub(r'[^\d]', '', m.group('monto').split(',')[0]))
+            resolucion = _extraer_resolucion(m.group('resto'))
+        else:
+            motivo, institucion, monto, resolucion = '', 'Sin especificar', 0, '-'
 
         trabajadores = []
         for tm in _TRABAJADOR_RE.finditer(chunk):
@@ -625,9 +678,10 @@ def _extraer_bloques_institucion(texto_pag1):
                 })
 
         tipo_correo = 'DT' if ('DIRECCION DEL TRABAJO' in institucion.upper()
-                                or 'MULTA' in institucion.upper()) else 'Previsional'
-        bloques.append({'institucion': institucion, 'tipo_correo': tipo_correo,
-                         'trabajadores': trabajadores})
+                                or 'MULTA' in motivo.upper()) else 'Previsional'
+        bloques.append({'institucion': institucion, 'motivo': motivo,
+                         'resolucion': resolucion, 'monto': monto,
+                         'tipo_correo': tipo_correo, 'trabajadores': trabajadores})
     return bloques
 
 
@@ -717,6 +771,7 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
         # si la empresa no tiene ninguna, una única fila "Sin Dicom".
         ws1 = wb.create_sheet('Resumen Analisis', 0)
         ws1.append(['RUT Empresa', 'GRUPO', 'Empresa', 'Tiene DICOM', 'Institucion',
+                    'MOTIVO', 'RESOLUCION', 'MONTO PREVISIONAL',
                     'Tipo Correo', 'Tipo de Correo (Grupo)'])
 
         # Sheet 2: Deuda Previsional — una fila por cada trabajador/periodo
@@ -751,13 +806,16 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
                                    datos.get('monto_utm', 0) > 0) else 'No'
 
             if tiene_dicom == 'No' or not instituciones:
-                filas_ws1.append((datos['rut'], grupo, empresa, 'No', 'Sin Dicom', 'Sin Dicom'))
+                filas_ws1.append((datos['rut'], grupo, empresa, 'No', 'Sin Dicom',
+                                   '', '', '', 'Sin Dicom'))
                 tipo_correo_grupo.setdefault(grupo, 'Sin Dicom')
                 continue
 
             for bloque in instituciones:
                 filas_ws1.append((datos['rut'], grupo, empresa, 'Si',
-                                   bloque['institucion'], bloque['tipo_correo']))
+                                   bloque['institucion'], bloque['motivo'],
+                                   bloque['resolucion'], bloque['monto'],
+                                   bloque['tipo_correo']))
                 actual = tipo_correo_grupo.get(grupo, 'Sin Dicom')
                 if _PRIORIDAD_TIPO_CORREO[bloque['tipo_correo']] > _PRIORIDAD_TIPO_CORREO[actual]:
                     tipo_correo_grupo[grupo] = bloque['tipo_correo']
@@ -770,8 +828,10 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
                         '', '', '', ''  # Analisis/Solicitud/Motivo/Gestion: consultor
                     ])
 
-        for rut, grupo, empresa, tiene_dicom, institucion, tipo_correo in filas_ws1:
-            ws1.append([rut, grupo, empresa, tiene_dicom, institucion, tipo_correo,
+        for (rut, grupo, empresa, tiene_dicom, institucion, motivo, resolucion,
+             monto, tipo_correo) in filas_ws1:
+            ws1.append([rut, grupo, empresa, tiene_dicom, institucion, motivo,
+                        resolucion, monto, tipo_correo,
                         tipo_correo_grupo.get(grupo, 'Sin Dicom')])
 
         # Auto-adjust column widths

@@ -1079,48 +1079,67 @@ def _generar_reporte(page, rut, log):
 def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
     """Click en '+' -> 'Generar PDF' y captura el archivo.
 
-    Confirmado con las DevTools reales (pestaña Network): el PDF NO llega
-    por una descarga nativa del navegador -- se pide con una petición
-    XHR (fetch) de 200 OK y ~19KB, y recién ahí el JS del portal arma el
-    archivo del lado del cliente (blob). Por eso el evento 'download' de
-    Playwright nunca disparaba: no hay ninguna navegación/descarga real
-    que capturar. En vez de depender de ese evento, se intercepta
-    DIRECTAMENTE la respuesta de red que trae los bytes del PDF (mismo
-    patrón ya usado con éxito en Previred y en Cartas Previsionales) --
-    se guarda el 'download' como respaldo adicional por si en algún caso
-    sí dispara uno.
+    Confirmado con las DevTools reales (Content-Type de la respuesta real,
+    visto incluso en un click manual exitoso): el endpoint
+    GET .../reports/{id}/pdf NUNCA responde con el PDF como archivo binario
+    -- responde SIEMPRE con JSON, con el PDF metido adentro codificado en
+    Base64 ({"data": {"reportBase64": "..."}}). El navegador recién ahí lo
+    decodifica y arma la descarga del lado del cliente (blob). Por eso ni
+    el content-type ("pdf" nunca aparece) ni el evento 'download' de
+    Playwright lo capturaban -- hay que leer el JSON de esa respuesta
+    directo e decodificar 'reportBase64'. Se mantienen el evento 'download'
+    y la vigilancia de la carpeta de descargas (forzada por CDP) como
+    respaldo adicional, por si en algún caso el navegador sí dispara una
+    descarga real.
     """
     capturado = []
 
     def _en_respuesta(response):
         try:
             ct = (response.headers or {}).get("content-type", "")
+            url = response.url
+
+            # Confirmado con DevTools reales (Content-Type real de esa
+            # respuesta): el PDF NO llega como archivo binario -- el
+            # endpoint GET .../reports/{id}/pdf devuelve SIEMPRE JSON
+            # (incluso cuando el click manual funciona perfecto), con el
+            # PDF metido adentro en Base64: {"data": {"reportBase64": "..."}}.
+            # El navegador recién ahí lo decodifica y arma la descarga del
+            # lado del cliente. Por eso ni el content-type ni el evento de
+            # descarga nativa lo iban a capturar nunca -- hay que leer el
+            # JSON directo y decodificar ese campo.
+            if "/pdf" in url and "json" in ct.lower():
+                try:
+                    import base64 as _b64
+                    datos = response.json()
+                    b64 = (datos.get("data") or {}).get("reportBase64", "")
+                    if b64:
+                        body = _b64.b64decode(b64)
+                        if body and len(body) > 500:
+                            capturado.append(body)
+                            log(f"PDF capturado (Base64 dentro del JSON, {len(body)} bytes)", "ok")
+                            return
+                    log(f"  [red] respuesta JSON de {url[:90]} sin 'reportBase64': "
+                        f"{str(datos)[:300]}", "warn")
+                except Exception as e:
+                    log(f"  [red] no se pudo leer/decodificar el JSON de {url[:90]}: "
+                        f"{type(e).__name__}: {e}", "warn")
+                return
+
             if "pdf" in ct.lower():
                 body = response.body()
                 if body and len(body) > 500:
                     capturado.append(body)
                     log(f"PDF capturado por red ({len(body)} bytes)", "ok")
                     return
+
             # Diagnóstico: mientras no aparece el PDF por ningún método, se
             # deja un rastro de las respuestas del propio portal (sin
             # archivos estáticos) para saber qué pasa de verdad por la red
             # sin depender de abrir DevTools a mano en cada prueba.
-            url = response.url
             if ("equifax" in url) and not url.endswith(
                     (".js", ".css", ".woff", ".woff2", ".svg", ".png", ".ico", ".jpg")):
                 log(f"  [red] {response.status} {ct or '(sin content-type)'} {url[:110]}", "info")
-                # Confirmado con DevTools reales: el endpoint del PDF es
-                # GET .../reports/{id}/pdf. Si ESTA MISMA URL responde con
-                # JSON en vez del PDF (como pasó una vez, con content-type
-                # application/json), es casi seguro un error del servidor
-                # (no listo aún, no autorizado, etc.) -- se imprime el
-                # cuerpo para saber la razón exacta en vez de adivinar.
-                if "/pdf" in url and "json" in ct.lower():
-                    try:
-                        texto = response.text()
-                        log(f"  [red] cuerpo de esa respuesta JSON: {texto[:500]}", "warn")
-                    except Exception:
-                        pass
         except Exception:
             pass
 
@@ -1216,11 +1235,11 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
         ruta_archivo_nuevo = None
         inicio = time.time()
         ultimo_aviso = inicio
-        # Confirmado con una respuesta real de red (JSON de
-        # .../reports/{id}) que llegó recién a los ~90s: el backend de
-        # Equifax tarda bastante en preparar el reporte antes del PDF, así
-        # que 90s se quedaba corto justo cuando recién empezaba a responder.
-        fin = inicio + 150
+        # Confirmado con respuestas reales de red: el backend de Equifax
+        # puede tardar hasta ~150s en preparar el reporte antes de devolver
+        # el JSON con el PDF en Base64 (visto llegar a los 90s una vez y
+        # justo al filo de los 150s otra vez) -- se deja margen de sobra.
+        fin = inicio + 200
         while time.time() < fin:
             if capturado:
                 break
@@ -1258,7 +1277,7 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
         if not capturado:
             _dump_reportes_ui(page, log, ruta_captura)
             raise TimeoutError(
-                "No se detectó ningún PDF (ni por red, ni por descarga, ni en el disco) en 150s")
+                "No se detectó ningún PDF (ni por red, ni por descarga, ni en el disco) en 200s")
 
         with open(ruta_dest, "wb") as f:
             f.write(capturado[0])

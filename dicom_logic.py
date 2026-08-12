@@ -963,14 +963,19 @@ def _dump_reportes_ui(page, log, ruta_captura=None):
 
 def _click_fab(page, log, ruta_captura=None):
     """Click en el botón flotante rojo '+' que despliega Generar PDF /
-    Nuevo Reporte / Agregar seguimiento."""
-    fab = page.locator(
-        "button.fab-main-btn, app-fab-options button, "
-        "button:has(mat-icon:text('add')), "
-        "button:has(mat-icon:text('note_add')), "
-        "button:has(mat-icon:text('picture_as_pdf'))").first
+    Nuevo Reporte / Agregar seguimiento.
+
+    Confirmado con un dump real de botones: el "+" principal es el ÚNICO
+    con la clase 'fab-main-btn' (ícono 'add'); los otros 3 mini-botones
+    del menú (Agregar seguimiento/contact_page, Nuevo Reporte/note_add,
+    Generar PDF/picture_as_pdf) YA están en el DOM y visibles ANTES de
+    abrir el menú, así que un selector combinado con ':has(mat-icon:...)'
+    puede matchear cualquiera de ellos primero -- hay que apuntar
+    exclusivamente a 'fab-main-btn' para no clickear el mini-botón
+    equivocado por error."""
+    fab = page.locator("button.fab-main-btn").first
     try:
-        fab.wait_for(state="visible", timeout=20000)
+        fab.wait_for(state="visible", timeout=45000)
     except Exception:
         _dump_reportes_ui(page, log, ruta_captura)
         raise

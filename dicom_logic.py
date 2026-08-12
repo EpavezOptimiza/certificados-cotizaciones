@@ -134,7 +134,8 @@ VERSION = "v6 (corrige el falso error por la palabra 'credenciales')"
 
 
 def _pide_verificacion(page):
-    """True si el portal muestra la pantalla 'Verify your Account'."""
+    """True si el portal muestra la pantalla de verificación en dos pasos,
+    ya sea "elige un método" (paso 2/3) o "ingresa el código" (paso 3/3)."""
     try:
         return bool(page.evaluate("""() => {
             const t = (document.body ? document.body.innerText : '').toLowerCase();
@@ -143,7 +144,25 @@ def _pide_verificacion(page):
                    t.includes('codigo de verificacion') ||
                    t.includes('código de verificación') ||
                    t.includes('verifique su cuenta') || t.includes('enviarme el codigo') ||
-                   t.includes('enviarme el código');
+                   t.includes('enviarme el código') ||
+                   t.includes('metodo de verificacion') ||
+                   t.includes('método de verificación') ||
+                   t.includes('codigo de seguridad') ||
+                   t.includes('código de seguridad');
+        }"""))
+    except Exception:
+        return False
+
+
+def _pide_elegir_metodo(page):
+    """True si el portal está en el paso "Selecciona un método de
+    verificación" (aún no se pidió el envío del código)."""
+    try:
+        return bool(page.evaluate("""() => {
+            const t = (document.body ? document.body.innerText : '').toLowerCase();
+            return t.includes('metodo de verificacion') || t.includes('método de verificación') ||
+                   t.includes('select a verification method') ||
+                   t.includes('choose a verification method');
         }"""))
     except Exception:
         return False
@@ -151,15 +170,41 @@ def _pide_verificacion(page):
 
 def _resolver_verificacion(page, log, obtener_codigo):
     """Pide el envío del código, espera a que la persona lo escriba en la
-    plataforma y lo ingresa en el portal (flujo semiautomático)."""
+    plataforma y lo ingresa en el portal (flujo semiautomático).
+
+    El asistente nuevo de Equifax (3 pasos) agrega un paso intermedio que
+    el flujo viejo no tenía: "Selecciona un método de verificación", con
+    un radio button por método (acá solo aparece correo) y un botón
+    "Enviar" separado. Hay que marcar el método ANTES de apretar Enviar,
+    si no, el click no hace nada.
+    """
     log("El portal pide un código de verificación", "warn")
 
-    # 1. Botón "SEND ME THE CODE" (si aún no se ha enviado)
+    # 0. Paso "Selecciona un método de verificación": marcar el radio del
+    # método (normalmente el único disponible, correo) antes de enviar.
+    if _pide_elegir_metodo(page):
+        log("Seleccionando método de verificación (correo)...", "info")
+        try:
+            radio = page.locator("input[type='radio']").first
+            if radio.count() > 0 and not radio.is_checked():
+                radio.click(timeout=4000)
+        except Exception:
+            # Algunos diseños hacen clickeable toda la fila, no solo el radio
+            try:
+                page.evaluate("""() => {
+                    const fila = document.querySelector('[class*="method"], [class*="option"], label');
+                    if (fila) fila.click();
+                }""")
+            except Exception:
+                pass
+        time.sleep(0.5)
+
+    # 1. Botón "Enviar" / "SEND ME THE CODE" (si aún no se ha enviado)
     try:
         enviado = page.evaluate("""() => {
             for (const b of document.querySelectorAll('button, input[type=submit], a')) {
                 const t = ((b.innerText || b.value || '')).trim().toLowerCase();
-                if (t.includes('send me the code') || t.includes('enviarme el') ||
+                if (t === 'enviar' || t.includes('send me the code') || t.includes('enviarme el') ||
                     t.includes('send code') || t.includes('enviar código') ||
                     t.includes('enviar codigo')) { b.click(); return true; }
             }

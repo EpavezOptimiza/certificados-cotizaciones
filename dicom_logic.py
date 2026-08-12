@@ -1109,6 +1109,18 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
             if ("equifax" in url) and not url.endswith(
                     (".js", ".css", ".woff", ".woff2", ".svg", ".png", ".ico", ".jpg")):
                 log(f"  [red] {response.status} {ct or '(sin content-type)'} {url[:110]}", "info")
+                # Confirmado con DevTools reales: el endpoint del PDF es
+                # GET .../reports/{id}/pdf. Si ESTA MISMA URL responde con
+                # JSON en vez del PDF (como pasó una vez, con content-type
+                # application/json), es casi seguro un error del servidor
+                # (no listo aún, no autorizado, etc.) -- se imprime el
+                # cuerpo para saber la razón exacta en vez de adivinar.
+                if "/pdf" in url and "json" in ct.lower():
+                    try:
+                        texto = response.text()
+                        log(f"  [red] cuerpo de esa respuesta JSON: {texto[:500]}", "warn")
+                    except Exception:
+                        pass
         except Exception:
             pass
 

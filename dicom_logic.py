@@ -1276,8 +1276,17 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
 
         if not capturado:
             _dump_reportes_ui(page, log, ruta_captura)
-            raise TimeoutError(
-                "No se detectó ningún PDF (ni por red, ni por descarga, ni en el disco) en 200s")
+            # _dump_reportes_ui toma varios segundos (captura de pantalla +
+            # evaluate de JS); la respuesta de red puede llegar justo
+            # DURANTE ese lapso (visto pasar de verdad: "PDF capturado"
+            # apareció en el log seguido inmediatamente del TimeoutError) --
+            # por eso se vuelve a revisar 'capturado' recién ahora, no se
+            # asume que seguía vacío solo porque lo estaba antes del dump.
+            if capturado:
+                log("El PDF llegó justo mientras se armaba el diagnóstico — se recupera igual", "ok")
+            else:
+                raise TimeoutError(
+                    "No se detectó ningún PDF (ni por red, ni por descarga, ni en el disco) en 200s")
 
         with open(ruta_dest, "wb") as f:
             f.write(capturado[0])

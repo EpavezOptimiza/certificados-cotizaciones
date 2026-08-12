@@ -1150,9 +1150,27 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
             # puede "clickear" con éxito algo que no hace nada (ej. un
             # tooltip fantasma), sin avisar del error.
             page.locator("button:has(mat-icon:text-is('picture_as_pdf'))").first.click(timeout=8000)
+            log("  click en 'Generar PDF' (ícono picture_as_pdf) confirmado por Playwright", "info")
         except Exception:
             _dump_reportes_ui(page, log, ruta_captura)
             raise
+
+        # Captura INMEDIATA (sin esperar nada) justo después del click, para
+        # ver en el momento si pasó algo visible (loader, cambio de estado)
+        # o si la pantalla queda exactamente igual que antes -- evidencia
+        # directa sin tener que esperar los 150s completos.
+        if ruta_captura:
+            try:
+                base, ext = os.path.splitext(ruta_captura)
+                ruta_post_click = f"{base}_post_click{ext}"
+                os.makedirs(os.path.dirname(ruta_post_click), exist_ok=True)
+                page.screenshot(path=ruta_post_click)
+                nombre_cap = os.path.basename(ruta_post_click)
+                log(f"Captura justo después del click en 'Generar PDF': "
+                    f"<a href='/api/dicom/captura/{nombre_cap}' target='_blank'>ver imagen</a>",
+                    "info")
+            except Exception:
+                pass
 
         ruta_archivo_nuevo = None
         inicio = time.time()

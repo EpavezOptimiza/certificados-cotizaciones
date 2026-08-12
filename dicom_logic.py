@@ -444,25 +444,27 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
             break
         time.sleep(0.5)
 
-    # ── Verificación en dos pasos ───────────────────────────────────────────
+    # ── Verificación en dos/tres pasos ──────────────────────────────────────
+    # El asistente nuevo de Equifax (3 pasos) muestra un spinner de carga
+    # justo después de "Continuar" mientras pasa al siguiente paso -- ese
+    # siguiente paso puede ser la pantalla de código de verificación, pero
+    # tarda un momento en aparecer. Revisar "_pide_verificacion" una sola
+    # vez justo después del submit puede pillar el spinner de transición y
+    # no ver el pedido de código todavía (se seguiría de largo sin pedirlo).
+    # Por eso se reintenta ambos chequeos (código / seguir en login) varias
+    # veces con margen, en vez de una sola foto instantánea.
+    if not _pide_verificacion(page):
+        for _ in range(6):
+            time.sleep(1)
+            if _pide_verificacion(page) or not _sigue_en_login(page):
+                break
+
     if _pide_verificacion(page):
         if obtener_codigo is None:
             raise LoginFallido(
                 "El portal pide un CÓDIGO DE VERIFICACIÓN y esta prueba no está "
                 "preparada para pedírtelo.")
         _resolver_verificacion(page, log, obtener_codigo)
-
-    # El asistente nuevo de Equifax (3 pasos) muestra un spinner de carga
-    # justo después de "Continuar", mientras pasa al siguiente paso. Si se
-    # revisa "_sigue_en_login" en ese instante exacto, a veces todavía hay
-    # un input type=password en el DOM (del spinner/transición) y da un
-    # falso "no se pudo entrar" cuando en realidad solo faltaba esperar un
-    # par de segundos más a que cargara el siguiente paso.
-    if _sigue_en_login(page):
-        for _ in range(6):
-            time.sleep(1)
-            if not _sigue_en_login(page):
-                break
 
     if _sigue_en_login(page):
         # Diagnóstico completo para saber por qué rebotó

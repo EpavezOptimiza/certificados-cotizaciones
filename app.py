@@ -3418,7 +3418,8 @@ def dicom_descargar_zip(tid):
 @app.route("/api/dicom/captura/<nombre>")
 @api_login_required
 def dicom_captura(nombre):
-    if not (nombre.startswith("dicom_login_") and nombre.endswith(".png")):
+    if not ((nombre.startswith("dicom_login_") or nombre.startswith("dicom_boletin_"))
+            and nombre.endswith(".png")):
         return jsonify({"error": "Nombre inválido"}), 400
     ruta = os.path.join(_EXCELS_DIR, os.path.basename(nombre))
     if not os.path.exists(ruta):

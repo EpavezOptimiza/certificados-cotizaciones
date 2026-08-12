@@ -386,7 +386,7 @@ async function consultar(){
       const color = l.tipo === 'ok' ? '#047857' : l.tipo === 'err' ? '#b91c1c'
                   : l.tipo === 'warn' ? '#b45309' : '#334155';
       cont.insertAdjacentHTML('beforeend',
-        `<div style="color:${color}"><span class="log-t">${l.t}</span>${esc(l.msg)}</div>`);
+        `<div style="color:${color}"><span class="log-t">${l.t}</span>${l.msg}</div>`);
     });
     _since += (d.logs || []).length;
     cont.scrollTop = cont.scrollHeight;

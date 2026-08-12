@@ -926,13 +926,54 @@ def _abrir_reportes_interactivos(page, log):
             f"No se pudo abrir 'Reportes Interactivos': {type(e).__name__}: {e}")
 
 
-def _click_fab(page, log):
+def _dump_reportes_ui(page, log, ruta_captura=None):
+    """Diagnóstico cuando algo del portal 'Interactive Reports' no aparece
+    donde se esperaba: vuelca los botones visibles + guarda una captura,
+    en vez de seguir adivinando el selector a ciegas."""
+    try:
+        info = page.evaluate("""() => {
+            const out = [];
+            for (const e of document.querySelectorAll('button, a[role="button"]')) {
+                if (e.offsetParent === null) continue;
+                const icon = e.querySelector('mat-icon');
+                out.push({
+                    clase: (e.className || '').toString().slice(0, 80),
+                    texto: (e.innerText || '').trim().slice(0, 30),
+                    icono: icon ? (icon.innerText || icon.textContent || '').trim() : ''
+                });
+            }
+            return out.slice(0, 20);
+        }""")
+        log(f"  [debug] url = {page.url}", "warn")
+        log(f"  [debug] botones visibles ({len(info)}):", "warn")
+        for b in info:
+            log(f"    clase={b['clase']!r} texto={b['texto']!r} icono={b['icono']!r}", "warn")
+    except Exception as e:
+        log(f"  [debug] no se pudo volcar la UI: {type(e).__name__}", "warn")
+    if ruta_captura:
+        try:
+            page.screenshot(path=ruta_captura)
+            nombre_cap = os.path.basename(ruta_captura)
+            log(f"Captura de pantalla: "
+                f"<a href='/api/dicom/captura/{nombre_cap}' target='_blank'>ver imagen</a>",
+                "warn")
+        except Exception:
+            pass
+
+
+def _click_fab(page, log, ruta_captura=None):
     """Click en el botón flotante rojo '+' que despliega Generar PDF /
     Nuevo Reporte / Agregar seguimiento."""
     fab = page.locator(
         "button.fab-main-btn, app-fab-options button, "
-        "button:has(mat-icon:text('add'))").first
-    fab.wait_for(state="visible", timeout=20000)
+        "button:has(mat-icon:text('add')), "
+        "button:has(mat-icon:text('note_add')), "
+        "button:has(mat-icon:text('picture_as_pdf'))").first
+    try:
+        fab.wait_for(state="visible", timeout=20000)
+    except Exception:
+        _dump_reportes_ui(page, log, ruta_captura)
+        raise
     fab.click(timeout=8000)
     page.wait_for_timeout(400)
 
@@ -962,22 +1003,30 @@ def _generar_reporte(page, rut, log):
     page.get_by_text("Cargando", exact=False).wait_for(state="hidden", timeout=60000)
 
 
-def _descargar_pdf_reporte(page, ruta_dest, log):
+def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
     """Click en '+' -> 'Generar PDF' y captura la descarga directa del
     navegador (confirmado real: el click dispara un download normal,
     con el botón mostrando 'Descargando PDF' mientras se genera)."""
-    _click_fab(page, log)
-    with page.expect_download(timeout=90000) as dl_info:
-        page.get_by_text("Generar PDF", exact=False).click(timeout=8000)
+    _click_fab(page, log, ruta_captura)
+    try:
+        with page.expect_download(timeout=90000) as dl_info:
+            page.get_by_text("Generar PDF", exact=False).click(timeout=8000)
+    except Exception:
+        _dump_reportes_ui(page, log, ruta_captura)
+        raise
     dl = dl_info.value
     dl.save_as(ruta_dest)
 
 
-def _nuevo_reporte(page, log):
+def _nuevo_reporte(page, log, ruta_captura=None):
     """Click en '+' -> 'Nuevo Reporte' para volver al formulario de
     búsqueda y pedir el siguiente RUT."""
-    _click_fab(page, log)
-    page.get_by_text("Nuevo Reporte", exact=False).click(timeout=8000)
+    _click_fab(page, log, ruta_captura)
+    try:
+        page.get_by_text("Nuevo Reporte", exact=False).click(timeout=8000)
+    except Exception:
+        _dump_reportes_ui(page, log, ruta_captura)
+        raise
     page.wait_for_timeout(500)
 
 
@@ -1059,7 +1108,7 @@ def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
                 rut_limpio = rut.replace(".", "").replace(" ", "")
                 try:
                     if not primero:
-                        _nuevo_reporte(reportes, log)
+                        _nuevo_reporte(reportes, log, ruta_captura)
                     primero = False
 
                     _seleccionar_boletin_laboral(reportes, log)
@@ -1067,7 +1116,7 @@ def descargar_boletines(correo, clave, ruts, carpeta_dest, log,
 
                     nombre = f"Boletin_Laboral_{rut_limpio}.pdf"
                     ruta = os.path.join(carpeta_dest, nombre)
-                    _descargar_pdf_reporte(reportes, ruta, log)
+                    _descargar_pdf_reporte(reportes, ruta, log, ruta_captura)
 
                     log(f"Guardado: {nombre}", "ok")
                     log(f"__ARCHIVO_OK__:{rut}:{nombre}", "ok")

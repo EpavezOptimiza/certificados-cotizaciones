@@ -1149,8 +1149,37 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
             # por get_by_text("Generar PDF") no encuentra el botón real y
             # puede "clickear" con éxito algo que no hace nada (ej. un
             # tooltip fantasma), sin avisar del error.
+
+            # "Sensor" puesto en el botón exacto ANTES del click: un
+            # screenshot puede no mostrar ningún cambio visible aunque el
+            # click sí haya llegado (si la reacción es solo una petición de
+            # red). Esto en cambio confirma, sin depender de lo visual, si
+            # el evento click llegó de verdad al botón correcto.
+            try:
+                page.evaluate("""() => {
+                    const btns = Array.from(document.querySelectorAll('button'));
+                    const btn = btns.find(b => {
+                        const icon = b.querySelector('mat-icon');
+                        const t = icon ? (icon.innerText || icon.textContent || '').trim() : '';
+                        return t === 'picture_as_pdf';
+                    });
+                    window.__dicomClickDetectado = false;
+                    if (btn) {
+                        btn.addEventListener('click', () => { window.__dicomClickDetectado = true; },
+                                              {once: true});
+                    }
+                }""")
+            except Exception:
+                pass
+
             page.locator("button:has(mat-icon:text-is('picture_as_pdf'))").first.click(timeout=8000)
-            log("  click en 'Generar PDF' (ícono picture_as_pdf) confirmado por Playwright", "info")
+
+            try:
+                detectado = page.evaluate("() => window.__dicomClickDetectado === true")
+            except Exception:
+                detectado = None
+            log(f"  click en 'Generar PDF': Playwright OK, ¿el botón recibió el evento? {detectado}",
+                "info")
         except Exception:
             _dump_reportes_ui(page, log, ruta_captura)
             raise

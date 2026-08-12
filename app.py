@@ -10,6 +10,12 @@ from flask import (Flask, render_template, request, jsonify,
                    send_file)
 from database import get_conn, init_db, hash_password
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "adjuntos"))

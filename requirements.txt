@@ -9,3 +9,4 @@ reportlab==4.2.5
 playwright==1.44.0
 selenium>=4.0.0
 pyvirtualdisplay==3.0
+python-dotenv==1.0.1

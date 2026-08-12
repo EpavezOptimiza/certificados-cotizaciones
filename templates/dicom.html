@@ -73,7 +73,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-      <button class="btn" id="btn-probar" onclick="probar()">▶ Probar acceso</button>
       <button class="btn btn-sec" onclick="guardar()">💾 Guardar credenciales</button>
     </div>
     <div id="msg-cfg" style="font-size:12px;margin-top:10px;display:none"></div>
@@ -169,38 +168,8 @@ async function guardar(){
   }
 }
 
-let _botonActivoId = 'btn-probar';
-let _botonActivoTexto = '▶ Probar acceso';
-
-async function probar(){
-  const btn = document.getElementById('btn-probar');
-  _botonActivoId = 'btn-probar'; _botonActivoTexto = '▶ Probar acceso';
-  btn.disabled = true; btn.textContent = '⏳ Entrando…';
-  document.getElementById('log-card').style.display = '';
-  document.getElementById('log').innerHTML = '';
-  document.getElementById('captura-box').style.display = 'none';
-  document.getElementById('btn-zip-dicom').style.display = 'none';
-  document.getElementById('btn-detener-dicom').style.display = 'none';
-  try{
-    const r = await fetch('/api/dicom/probar_login', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({correo: document.getElementById('correo').value.trim(),
-                            clave:  document.getElementById('clave').value.trim(),
-                            ruts: Array.isArray(_rutSeleccionado) ? _rutSeleccionado : (_rutSeleccionado ? [_rutSeleccionado] : [])})});
-    const d = await r.json();
-    if (d.error){
-      alert(d.error);
-      btn.disabled = false; btn.textContent = _botonActivoTexto;
-      return;
-    }
-    _tid = d.task_id; _since = 0;
-    clearInterval(_poll);
-    _poll = setInterval(consultar, 1500);
-  }catch(e){
-    alert('Error: ' + e);
-    btn.disabled = false; btn.textContent = _botonActivoTexto;
-  }
-}
+let _botonActivoId = 'btn-descargar-dicom';
+let _botonActivoTexto = '📥 Descargar DICOM';
 
 async function descargarDicom(){
   const ruts = Array.isArray(_rutSeleccionado) ? _rutSeleccionado : (_rutSeleccionado ? [_rutSeleccionado] : []);

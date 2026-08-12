@@ -1,0 +1,45 @@
+CERTIFICADOS Y COTIZACIONES — Instalación en otro PC
+======================================================
+
+PASO 0 - Copiar la carpeta
+---------------------------
+Copia TODA esta carpeta "certificados-cotizaciones" al otro PC
+(USB, OneDrive, etc.). No la clones con git: la base de datos
+(certificados.db) y los adjuntos no viven en git y se perderían.
+
+PASO 1 - Instalar (una sola vez)
+---------------------------------
+Doble clic en:  Instalar.bat
+
+Esto instala automáticamente:
+ - Un entorno Python aislado (venv)
+ - Todas las librerías necesarias (Flask, Playwright, etc.)
+ - El navegador Chromium que usan los bots de PreviRed y DICOM
+
+Requisito: el PC debe tener Python 3.11+ instalado.
+Si no lo tiene, el instalador te avisa y te da el link de descarga
+(https://www.python.org/downloads/ — marcar "Add python.exe to PATH").
+
+PASO 2 - Usar la aplicación
+-----------------------------
+Doble clic en:  Iniciar.bat
+
+Se abre solo en el navegador en http://localhost:5000
+No cierres la ventana negra (consola) mientras trabajas: si se cierra,
+la aplicación se detiene.
+
+Datos y credenciales
+----------------------
+- La base de datos (certificados.db) y los archivos (adjuntos/) ya
+  vienen incluidos en esta carpeta con toda la info actual.
+- Los usuarios/contraseñas de PreviRed y DICOM se guardan DENTRO de
+  certificados.db (se configuran desde la app), así que viajan solos.
+- El archivo .env contiene las claves de correo (SMTP) y del asistente
+  de IA (OpenAI). Si no funcionan el envío de correos o el asistente
+  "Opti", revisa/completa ese archivo.
+
+Problemas comunes
+--------------------
+- "python no se reconoce como comando": instala Python marcando
+  "Add to PATH" y reinicia el PC.
+- El primer arranque puede tardar unos segundos más de lo normal.

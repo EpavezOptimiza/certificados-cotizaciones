@@ -1009,26 +1009,69 @@ def _generar_reporte(page, rut, log):
 
 
 def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
-    """Click en '+' -> 'Generar PDF' y captura la descarga directa del
-    navegador (confirmado real: el click dispara un download normal,
-    con el botón mostrando 'Descargando PDF' mientras se genera)."""
-    _click_fab(page, log, ruta_captura)
+    """Click en '+' -> 'Generar PDF' y captura la descarga.
+
+    Confirmado real: el archivo SÍ se descarga (el usuario lo vio llegar),
+    pero page.expect_download() nunca detectó el evento -- probablemente
+    porque la descarga ocurre en una pestaña/página distinta a `page`
+    (mismo patrón ya visto en Previred: un click puede disparar la
+    descarga en otro contexto). Por eso ahora se escucha 'download' a
+    nivel del BROWSER CONTEXT completo (page.context.on), que capta el
+    evento sin importar en qué página/pestaña ocurra, en vez de esperar
+    solo en la página actual.
+    """
+    capturado = []
+
+    def _en_descarga(dl):
+        try:
+            dl.save_as(ruta_dest)
+            capturado.append(True)
+        except Exception:
+            pass
+
+    page.context.on("download", _en_descarga)
     try:
-        with page.expect_download(timeout=90000) as dl_info:
-            page.get_by_text("Generar PDF", exact=False).click(timeout=8000)
+        _click_fab(page, log, ruta_captura)
+        try:
+            page.get_by_text("Generar PDF", exact=False).first.click(timeout=8000)
+        except Exception:
+            _dump_reportes_ui(page, log, ruta_captura)
+            raise
+
+        for i_espera in range(90):
+            if capturado:
+                break
+            if i_espera > 0 and i_espera % 15 == 0:
+                log(f"  esperando descarga del PDF... ({i_espera}s)", "info")
+            time.sleep(1)
+        if not capturado:
+            _dump_reportes_ui(page, log, ruta_captura)
+            raise TimeoutError("No se detectó ninguna descarga en 90s")
+    finally:
+        try:
+            page.context.remove_listener("download", _en_descarga)
+        except Exception:
+            pass
+
+
+def _cerrar_fab_si_abierto(page):
+    """Si el menú del '+' quedó abierto (ej. por un intento anterior que
+    falló), lo cierra con Escape para no dejar botones duplicados en
+    pantalla (causa de 'resolved to 2 elements' en el siguiente intento)."""
+    try:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
     except Exception:
-        _dump_reportes_ui(page, log, ruta_captura)
-        raise
-    dl = dl_info.value
-    dl.save_as(ruta_dest)
+        pass
 
 
 def _nuevo_reporte(page, log, ruta_captura=None):
     """Click en '+' -> 'Nuevo Reporte' para volver al formulario de
     búsqueda y pedir el siguiente RUT."""
+    _cerrar_fab_si_abierto(page)
     _click_fab(page, log, ruta_captura)
     try:
-        page.get_by_text("Nuevo Reporte", exact=False).click(timeout=8000)
+        page.get_by_text("Nuevo Reporte", exact=False).first.click(timeout=8000)
     except Exception:
         _dump_reportes_ui(page, log, ruta_captura)
         raise

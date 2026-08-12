@@ -961,6 +961,40 @@ def _dump_reportes_ui(page, log, ruta_captura=None):
             pass
 
 
+def _menu_fab_abierto(page):
+    """True solo si el menú del '+' está REALMENTE desplegado en pantalla.
+
+    Confirmado con un dump real (12/08 15:41): los mini-botones NO tienen
+    ningún texto legible "Generar PDF" / "Nuevo Reporte" -- su único
+    contenido de texto es el nombre técnico del ícono Material
+    ('picture_as_pdf', 'note_add', 'contact_page'), igual estén el menú
+    abierto o cerrado (existen en el DOM todo el tiempo). Por eso se
+    identifican por ícono, y se confirma que están REALMENTE desplegados
+    mirando su tamaño/opacidad/pointer-events en pantalla (con el menú
+    cerrado suelen quedar con transform:scale(0), que sí reduce su
+    getBoundingClientRect a (casi) cero, aunque sigan en el DOM)."""
+    try:
+        return bool(page.evaluate("""() => {
+            for (const b of document.querySelectorAll('button')) {
+                const icon = b.querySelector('mat-icon');
+                const t = icon ? (icon.innerText || icon.textContent || '').trim() : '';
+                if (t === 'picture_as_pdf' || t === 'note_add' || t === 'contact_page') {
+                    const r = b.getBoundingClientRect();
+                    const cs = getComputedStyle(b);
+                    if (r.width > 5 && r.height > 5 &&
+                        parseFloat(cs.opacity) > 0.5 &&
+                        cs.visibility !== 'hidden' &&
+                        cs.pointerEvents !== 'none') {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }"""))
+    except Exception:
+        return False
+
+
 def _click_fab(page, log, ruta_captura=None):
     """Click en el botón flotante rojo '+' que despliega Generar PDF /
     Nuevo Reporte / Agregar seguimiento.
@@ -972,15 +1006,30 @@ def _click_fab(page, log, ruta_captura=None):
     abrir el menú, así que un selector combinado con ':has(mat-icon:...)'
     puede matchear cualquiera de ellos primero -- hay que apuntar
     exclusivamente a 'fab-main-btn' para no clickear el mini-botón
-    equivocado por error."""
+    equivocado por error.
+
+    Además, un click() de Playwright que NO tira error no garantiza que el
+    menú se haya abierto de verdad (confirmado con captura real: el menú
+    seguía cerrado tras el click). Por eso se verifica el estado real en
+    pantalla después de cada click y se reintenta hasta 3 veces."""
     fab = page.locator("button.fab-main-btn").first
     try:
         fab.wait_for(state="visible", timeout=45000)
     except Exception:
         _dump_reportes_ui(page, log, ruta_captura)
         raise
-    fab.click(timeout=8000)
-    page.wait_for_timeout(400)
+
+    for intento in range(1, 4):
+        fab.click(timeout=8000)
+        page.wait_for_timeout(500)
+        if _menu_fab_abierto(page):
+            if intento > 1:
+                log(f"  menú del '+' abierto (intento {intento})", "info")
+            return
+        log(f"  intento {intento}/3: el menú del '+' no se desplegó, reintentando...", "warn")
+
+    log("  el menú del '+' no se desplegó tras 3 intentos", "warn")
+    _dump_reportes_ui(page, log, ruta_captura)
 
 
 def _seleccionar_boletin_laboral(page, log):
@@ -1055,7 +1104,12 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
     try:
         _click_fab(page, log, ruta_captura)
         try:
-            page.get_by_text("Generar PDF", exact=False).first.click(timeout=8000)
+            # El botón "Generar PDF" NO tiene texto legible propio (confirmado
+            # con dump real): solo el ícono Material 'picture_as_pdf'. Buscar
+            # por get_by_text("Generar PDF") no encuentra el botón real y
+            # puede "clickear" con éxito algo que no hace nada (ej. un
+            # tooltip fantasma), sin avisar del error.
+            page.locator("button:has(mat-icon:text-is('picture_as_pdf'))").first.click(timeout=8000)
         except Exception:
             _dump_reportes_ui(page, log, ruta_captura)
             raise
@@ -1100,7 +1154,9 @@ def _nuevo_reporte(page, log, ruta_captura=None):
     _cerrar_fab_si_abierto(page)
     _click_fab(page, log, ruta_captura)
     try:
-        page.get_by_text("Nuevo Reporte", exact=False).first.click(timeout=8000)
+        # Mismo caso que "Generar PDF": el botón solo tiene el ícono
+        # Material 'note_add', sin texto "Nuevo Reporte" legible.
+        page.locator("button:has(mat-icon:text-is('note_add'))").first.click(timeout=8000)
     except Exception:
         _dump_reportes_ui(page, log, ruta_captura)
         raise

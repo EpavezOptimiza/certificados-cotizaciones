@@ -452,6 +452,18 @@ def hacer_login(page, correo, clave, log, obtener_codigo=None):
                 "preparada para pedírtelo.")
         _resolver_verificacion(page, log, obtener_codigo)
 
+    # El asistente nuevo de Equifax (3 pasos) muestra un spinner de carga
+    # justo después de "Continuar", mientras pasa al siguiente paso. Si se
+    # revisa "_sigue_en_login" en ese instante exacto, a veces todavía hay
+    # un input type=password en el DOM (del spinner/transición) y da un
+    # falso "no se pudo entrar" cuando en realidad solo faltaba esperar un
+    # par de segundos más a que cargara el siguiente paso.
+    if _sigue_en_login(page):
+        for _ in range(6):
+            time.sleep(1)
+            if not _sigue_en_login(page):
+                break
+
     if _sigue_en_login(page):
         # Diagnóstico completo para saber por qué rebotó
         estado_campos, alertas = "", ""

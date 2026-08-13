@@ -3586,6 +3586,14 @@ def dicom_analizar():
                     # el bucle principal.
                     threading.Thread(target=_borrar_silencioso, args=(ruta_temp,), daemon=True).start()
 
+                # Cede CPU a proposito entre archivo y archivo: confirmado
+                # con las metricas de Railway que este plan tiene ~1 vCPU, y
+                # sin este respiro el procesamiento satura ese unico nucleo
+                # por tramos largos, dejando sin CPU ni a una consulta
+                # trivial de progreso (se vieron tiempos de respuesta de
+                # hasta 18s y 55-65% de error en esas ventanas).
+                _time.sleep(0.1)
+
             _dicom_tareas[tid]["organizados"] = organizados
 
             excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)

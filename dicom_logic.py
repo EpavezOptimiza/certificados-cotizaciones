@@ -1301,7 +1301,7 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
         # se había visto una vez al backend de Equifax tardar hasta ~150s en
         # devolver el reporte -- un RUT así de lento ahora fallaría en vez
         # de esperar, y quedaría para reintentar a mano.
-        fin = inicio + 15
+        fin = inicio + 3
         while time.time() < fin:
             if capturado:
                 break

@@ -3458,7 +3458,7 @@ def dicom_analizar():
     """
     from dicom_logic import extraer_datos_pdf, generar_excel_analisis
     from base_madre_logic import obtener_datos_dicom
-    from dicom_empresas_logic import obtener_encargados_dicom
+    from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
 
     archivos = request.files.getlist("archivos")
     numero_dicom = request.form.get("numero_dicom", "").strip()
@@ -3469,15 +3469,17 @@ def dicom_analizar():
         return jsonify({"error": "Falta número de DICOM"}), 400
 
     # Obtener grupos y consultor de deuda de BASE MADRE, y el encargado
-    # DICOM (Excel aparte, hoja Empresas)
+    # DICOM (Excel aparte, hoja Empresas) — el cruce del encargado es por
+    # GRUPO, no por RUT (dentro de ese Excel el Responsable DICOM es el
+    # mismo para todas las empresas de un mismo grupo).
     datos_base = obtener_datos_dicom()
     consultores_deuda = datos_base.get("consultores_deuda", {})
-    encargados_dicom, _err_encargados = obtener_encargados_dicom()
+    encargados_por_grupo, _err_encargados = obtener_encargados_dicom()
 
     def _info_rut(rut_norm, grupo):
         return {"grupo": grupo,
                 "consultor_deuda": consultores_deuda.get(rut_norm, ""),
-                "encargado_dicom": encargados_dicom.get(rut_norm, "")}
+                "encargado_dicom": encargados_por_grupo.get(_norm_grupo(grupo), "")}
 
     grupos_dict = {}
     for grupo, info in datos_base.get("grupos", {}).items():
@@ -3485,8 +3487,6 @@ def dicom_analizar():
             rut_norm = rut.replace(".", "").replace(" ", "")
             grupos_dict[rut_norm] = _info_rut(rut_norm, grupo)
     for rut_norm in consultores_deuda:
-        grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
-    for rut_norm in encargados_dicom:
         grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
 
     # Procesar cada PDF: extraer datos y guardar bytes para el ZIP

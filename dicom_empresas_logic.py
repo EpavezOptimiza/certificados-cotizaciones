@@ -76,15 +76,21 @@ def _descargar():
     return data
 
 
-def _norm_rut(rut):
-    return (rut or "").strip().replace(".", "").replace(" ", "")
+def _norm_grupo(grupo):
+    """Normaliza el nombre de GRUPO para cruzarlo entre BASE MADRE y este
+    Excel (pueden venir con distinta may/min o espacios de mas)."""
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(grupo or "")).encode("ascii", "ignore").decode()
+    return " ".join(s.strip().lower().split())
 
 
 def obtener_encargados_dicom(forzar=False):
-    """Devuelve ({rut_normalizado: 'Responsable DICOM'}, error) leyendo la
-    hoja "Empresas" del Excel. Sirve desde cache si la última lectura
-    tiene menos de REFRESCO_SEG. Si falla pero hay cache previo, sigue
-    sirviendo los datos antiguos y reporta el error."""
+    """Devuelve ({grupo_normalizado: 'Responsable DICOM'}, error) leyendo la
+    hoja "Empresas" del Excel. El cruce es por GRUPO (no por RUT): dentro de
+    ese Excel el Responsable DICOM es el mismo para todas las empresas de un
+    mismo grupo. Sirve desde cache si la última lectura tiene menos de
+    REFRESCO_SEG. Si falla pero hay cache previo, sigue sirviendo los datos
+    antiguos y reporta el error."""
     with _LOCK:
         fresco = _CACHE["encargados"] is not None and (time.time() - _CACHE["ts"]) < REFRESCO_SEG
         if fresco and not forzar:
@@ -112,19 +118,20 @@ def obtener_encargados_dicom(forzar=False):
                         return i
                 return None
 
-            i_rut = encontrar_col(["rut"])
+            i_grupo = encontrar_col(["grupo"])
             i_resp = encontrar_col(["responsable", "dicom"])
 
             encargados = {}
-            if i_rut is not None and i_resp is not None:
+            if i_grupo is not None and i_resp is not None:
                 for row in gen:
-                    if row is None or i_rut >= len(row):
+                    if row is None or i_grupo >= len(row):
                         continue
-                    rut = _norm_rut(row[i_rut])
-                    if not rut:
+                    grupo = _norm_grupo(row[i_grupo])
+                    if not grupo:
                         continue
                     resp = str(row[i_resp]).strip() if i_resp < len(row) and row[i_resp] else ""
-                    encargados[rut] = resp
+                    if resp:
+                        encargados[grupo] = resp
         finally:
             wb.close()
 

@@ -1296,11 +1296,12 @@ def _descargar_pdf_reporte(page, ruta_dest, log, ruta_captura=None):
         ruta_archivo_nuevo = None
         inicio = time.time()
         ultimo_aviso = inicio
-        # Confirmado con respuestas reales de red: el backend de Equifax
-        # puede tardar hasta ~150s en preparar el reporte antes de devolver
-        # el JSON con el PDF en Base64 (visto llegar a los 90s una vez y
-        # justo al filo de los 150s otra vez) -- se deja margen de sobra.
-        fin = inicio + 200
+        # Techo reducido a pedido: en uso normal el PDF llega mucho antes de
+        # esto (el bucle corta apenas se detecta, no espera el techo). Ojo:
+        # se había visto una vez al backend de Equifax tardar hasta ~150s en
+        # devolver el reporte -- un RUT así de lento ahora fallaría en vez
+        # de esperar, y quedaría para reintentar a mano.
+        fin = inicio + 15
         while time.time() < fin:
             if capturado:
                 break

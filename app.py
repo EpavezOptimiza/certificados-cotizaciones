@@ -3510,10 +3510,18 @@ def dicom_analizar():
     # hacer fork() de un proceso con hilos activos puede dejar locks/estado
     # interno en mal estado dentro del hijo -- spawn arranca un interprete
     # nuevo y limpio, evitando ese riesgo.
+    #
+    # daemon=False (NO True): procesar_lote_dicom crea a su vez un proceso
+    # hijo por cada PDF (limite de 30s que se puede matar de verdad). Un
+    # proceso "daemon" tiene PROHIBIDO tener hijos propios -- Python lo
+    # rechaza con "AssertionError: daemonic processes are not allowed to
+    # have children" (confirmado: causaba que TODOS los archivos fallaran,
+    # 0 organizados, Excel vacio). Al no ser daemon no se auto-mata si
+    # este proceso web se cae, pero como corre en su propio proceso del
+    # SO, muere solo junto con el contenedor si eso llega a pasar.
     ctx = multiprocessing.get_context("spawn")
     proceso = ctx.Process(target=procesar_lote_dicom,
-                          args=(guardados, ruta_progreso, ruta_zip_final, numero_dicom),
-                          daemon=True)
+                          args=(guardados, ruta_progreso, ruta_zip_final, numero_dicom))
     proceso.start()
 
     return jsonify({"ok": True, "task_id": tid})

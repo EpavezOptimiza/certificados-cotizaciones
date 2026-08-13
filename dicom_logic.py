@@ -869,6 +869,24 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
         return None
 
 
+def _extraer_pdf_en_proceso(ruta_temp, nombre_seguro, cola):
+    """Corre en su PROPIO proceso hijo (llamada via multiprocessing desde
+    _procesar_con_timeout). Confirmado con un caso real: algunos PDF
+    cuelgan de una forma que ni un limite de tiempo por HILO puede
+    interrumpir (probablemente alguna libreria entra en un bucle nativo
+    que retiene el GIL sin soltarlo, lo que tambien bloquea el propio
+    Thread.join(timeout=...) del hilo principal). Un PROCESO, en cambio,
+    siempre se puede matar de verdad desde afuera sin importar que este
+    haciendo por dentro."""
+    try:
+        datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+        with open(ruta_temp, "rb") as f:
+            contenido = f.read()
+        cola.put(("ok", datos, contenido))
+    except Exception as e:
+        cola.put(("error", str(e), None))
+
+
 def procesar_lote_dicom(guardados, ruta_progreso, ruta_zip_final, numero_dicom):
     """Analiza un lote de PDF Boletin Laboral y arma el ZIP final.
 
@@ -886,6 +904,8 @@ def procesar_lote_dicom(guardados, ruta_progreso, ruta_zip_final, numero_dicom):
     ruta_zip_final: donde queda el ZIP con los PDF + Excel al terminar
     """
     import json
+    import threading as _threading
+    import multiprocessing as _mp
     import zipfile as _zipfile
     from base_madre_logic import obtener_datos_dicom
     from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
@@ -923,6 +943,44 @@ def procesar_lote_dicom(guardados, ruta_progreso, ruta_zip_final, numero_dicom):
         for rut_norm in consultores_deuda:
             grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
 
+        def _procesar_con_timeout(nombre_seguro, ruta_temp, timeout_seg=30):
+            """Corre la extraccion de UN PDF en su PROPIO proceso hijo con
+            limite de tiempo. Confirmado con un caso real reproducible
+            (Boletin_Laboral_76303470-4.pdf, se colgo en produccion dos
+            veces en lotes distintos y de forma aislada aqui) que un limite
+            por HILO no basta: algo en ese archivo bloquea hasta el propio
+            Thread.join(timeout=...), probablemente una libreria reteniendo
+            el GIL en un bucle nativo. Un proceso siempre se puede matar de
+            verdad (terminate/kill) sin importar que este haciendo por
+            dentro."""
+            ctx = _mp.get_context("spawn")
+            cola = ctx.Queue()
+            p = ctx.Process(target=_extraer_pdf_en_proceso,
+                            args=(ruta_temp, nombre_seguro, cola), daemon=True)
+            p.start()
+            p.join(timeout=timeout_seg)
+            if p.is_alive():
+                p.terminate()
+                p.join(timeout=5)
+                if p.is_alive():
+                    p.kill()
+                    p.join()
+                raise TimeoutError(f"tardó más de {timeout_seg}s (se descarta y se sigue)")
+
+            if p.exitcode != 0 or cola.empty():
+                raise RuntimeError(f"el proceso terminó sin resultado (exitcode={p.exitcode})")
+
+            tipo, a, contenido = cola.get()
+            if tipo == "error":
+                raise RuntimeError(a)
+            datos = a
+            grupo = "SIN GRUPO"
+            if datos.get("rut"):
+                rut_norm = datos["rut"].replace(".", "").replace(" ", "")
+                grupo_info = grupos_dict.get(rut_norm, {})
+                grupo = grupo_info.get("grupo", "SIN GRUPO")
+            return {"ok": True, "datos": datos, "grupo": grupo, "contenido": contenido}
+
         datos_pdfs = []
         errores = []
         pdfs_para_zip = []
@@ -931,27 +989,25 @@ def procesar_lote_dicom(guardados, ruta_progreso, ruta_zip_final, numero_dicom):
             _log(f"Procesando ({i}/{total}): {nombre_seguro}",
                  organizados=organizados, procesados=total)
             try:
-                datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
-                datos_pdfs.append(datos)
-
-                grupo = "SIN GRUPO"
-                if datos.get("rut"):
-                    rut_norm = datos["rut"].replace(".", "").replace(" ", "")
-                    grupo_info = grupos_dict.get(rut_norm, {})
-                    grupo = grupo_info.get("grupo", "SIN GRUPO")
-
-                with open(ruta_temp, "rb") as f:
-                    pdfs_para_zip.append((f"{grupo}/{nombre_seguro}", f.read()))
+                r = _procesar_con_timeout(nombre_seguro, ruta_temp)
+                datos_pdfs.append(r['datos'])
+                pdfs_para_zip.append((f"{r['grupo']}/{nombre_seguro}", r['contenido']))
                 organizados += 1
             except Exception as e:
                 errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
                 _log(f"⚠ {nombre_seguro}: {type(e).__name__}: {str(e)[:80]}", "warn",
                      organizados=organizados, procesados=total)
             finally:
-                try:
-                    os.remove(ruta_temp)
-                except Exception:
-                    pass
+                # Borrado en un hilo aparte (fire-and-forget): si el
+                # volumen esta con problemas, tampoco debe trabar el bucle.
+                def _borrar(p=ruta_temp):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+                _threading.Thread(target=_borrar, daemon=True).start()
+
+            time.sleep(0.05)
 
         excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
         if not excel_bytes:

@@ -749,6 +749,7 @@ async function analizarPdfs() {
     // igual que ya hace consultar() para el bot de descarga.
     await new Promise((resolve, reject) => {
       let fallosSeguidos = 0;
+      let ultimoMensaje = 'Procesando en el servidor...';
       // Confirmado en producción: un corte de "upstream error" entre
       // Railway y el navegador puede durar más de 60s aunque el servidor
       // siga trabajando bien (sin reinicios, sin errores propios) -- como
@@ -762,7 +763,8 @@ async function analizarPdfs() {
           fallosSeguidos = 0;
 
           const ultimoLog = (s.logs || []).slice(-1)[0];
-          if (ultimoLog) resultado.innerHTML = esc(ultimoLog.msg);
+          if (ultimoLog) ultimoMensaje = ultimoLog.msg;
+          resultado.innerHTML = esc(ultimoMensaje);
 
           if (s.done) {
             clearInterval(poll);
@@ -786,8 +788,14 @@ async function analizarPdfs() {
           if (fallosSeguidos >= MAX_FALLOS_SEGUIDOS) {
             clearInterval(poll);
             reject(new Error('No se pudo consultar el progreso (' + e.message + ')'));
+            return;
           }
-          // si no, se reintenta en el proximo tick sin cortar el proceso
+          // No se corta el proceso por un fallo puntual (el servidor sigue
+          // trabajando igual) -- pero se avisa que la conexión está fallando,
+          // para no verse idéntico a un cuelgue real.
+          resultado.innerHTML = esc(ultimoMensaje) +
+            '<br><span style="color:#b45309">⏳ Reintentando conexión con el servidor... (' +
+            fallosSeguidos + ')</span>';
         }
       }, 2000);
     });

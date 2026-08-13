@@ -3310,7 +3310,10 @@ def dicom_tarea(tid):
     return jsonify({"logs": t["logs"][since:], "done": t["done"],
                     "error": t["error"], "captura": t["captura"],
                     "esperando_codigo": t.get("esperando_codigo", False),
-                    "zip": t.get("zip")})
+                    "zip": t.get("zip"),
+                    "procesados": t.get("procesados"),
+                    "organizados": t.get("organizados"),
+                    "errores_detalle": t.get("errores_detalle")})
 
 
 @app.route("/api/dicom/codigo", methods=["POST"])
@@ -3449,16 +3452,18 @@ def dicom_captura(nombre):
 @app.route("/api/dicom/analizar", methods=["POST"])
 @api_login_required
 def dicom_analizar():
-    """Procesa PDFs y devuelve un ZIP: carpetas por grupo + Excel único.
+    """Guarda los PDF subidos y lanza el análisis en un hilo de fondo,
+    devolviendo un task_id de inmediato.
 
-    Un servidor remoto (Railway) no puede escribir en el disco del navegador
-    del usuario, así que en vez de pedir una "carpeta destino" se arma un
-    ZIP en memoria (grupo/archivo.pdf + Dicom_<numero>.xlsx) y se entrega
-    como descarga; el usuario lo extrae donde quiera en su propio equipo.
+    Con lotes grandes (cientos de PDF) el análisis completo puede tardar
+    varios minutos; devolver la respuesta HTTP recién al terminar hacía que
+    el proxy de Railway cortara la conexión antes de tiempo (confirmado:
+    colgó un worker de gunicorn 10+ min con 260 PDF reales, terminó en
+    SIGKILL). El progreso se consulta con /api/dicom/tarea/<tid> (mismo
+    mecanismo que ya usa el bot de descarga) y el ZIP final con
+    /api/dicom/descargar_zip/<tid>.
     """
-    from dicom_logic import extraer_datos_pdf, generar_excel_analisis
-    from base_madre_logic import obtener_datos_dicom
-    from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
+    import threading, uuid
 
     archivos = request.files.getlist("archivos")
     numero_dicom = request.form.get("numero_dicom", "").strip()
@@ -3468,99 +3473,121 @@ def dicom_analizar():
     if not numero_dicom:
         return jsonify({"error": "Falta número de DICOM"}), 400
 
-    # Obtener grupos y consultor de deuda de BASE MADRE, y el encargado
-    # DICOM (Excel aparte, hoja Empresas) — el cruce del encargado es por
-    # GRUPO, no por RUT (dentro de ese Excel el Responsable DICOM es el
-    # mismo para todas las empresas de un mismo grupo).
-    datos_base = obtener_datos_dicom()
-    consultores_deuda = datos_base.get("consultores_deuda", {})
-    encargados_por_grupo, _err_encargados = obtener_encargados_dicom()
-
-    def _info_rut(rut_norm, grupo):
-        return {"grupo": grupo,
-                "consultor_deuda": consultores_deuda.get(rut_norm, ""),
-                "encargado_dicom": encargados_por_grupo.get(_norm_grupo(grupo), "")}
-
-    grupos_dict = {}
-    for grupo, info in datos_base.get("grupos", {}).items():
-        for rut in info.get("ruts", []):
-            rut_norm = rut.replace(".", "").replace(" ", "")
-            grupos_dict[rut_norm] = _info_rut(rut_norm, grupo)
-    for rut_norm in consultores_deuda:
-        grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
-
-    # Procesar cada PDF: extraer datos y guardar bytes para el ZIP
-    datos_pdfs = []
-    errores = []
-    organizados = 0
-    pdfs_para_zip = []  # (ruta_en_zip, bytes)
-    carpeta_temp = os.path.join(ADJUNTOS, "dicom_proc")
+    tid = uuid.uuid4().hex[:12]
+    carpeta_temp = os.path.join(ADJUNTOS, "dicom_proc", tid)
     os.makedirs(carpeta_temp, exist_ok=True)
 
-    try:
-        for archivo in archivos:
-            nombre_original = archivo.filename or ""
-            # basename(): un nombre con "/" (p.ej. tomado de una ruta relativa)
-            # haría que os.path.join lo tratara como subcarpeta y fallara al
-            # guardar si esa subcarpeta no existe.
-            nombre_seguro = os.path.basename(nombre_original.replace("\\", "/"))
+    # Guardar los archivos ANTES de responder: el objeto request (y los
+    # FileStorage de Flask) no se puede seguir usando una vez que termina
+    # este request handler, así que no puede leerse desde el hilo de fondo.
+    guardados = []
+    for archivo in archivos:
+        nombre_original = archivo.filename or ""
+        nombre_seguro = os.path.basename(nombre_original.replace("\\", "/"))
+        if not nombre_seguro.lower().endswith(".pdf"):
+            continue
+        ruta_temp = os.path.join(carpeta_temp, nombre_seguro)
+        archivo.save(ruta_temp)
+        guardados.append((nombre_original, nombre_seguro, ruta_temp))
 
-            if not nombre_seguro.lower().endswith(".pdf"):
-                errores.append(f"{nombre_original}: no es PDF")
-                continue
+    _dicom_tareas[tid] = {"logs": [], "done": False, "error": False, "captura": None,
+                          "esperando_codigo": False, "zip": None,
+                          "procesados": len(archivos), "organizados": 0,
+                          "errores_detalle": []}
 
-            try:
-                ruta_temp = os.path.join(carpeta_temp, nombre_seguro)
-                archivo.save(ruta_temp)
+    def run_task():
+        try:
+            from dicom_logic import extraer_datos_pdf, generar_excel_analisis
+            from base_madre_logic import obtener_datos_dicom
+            from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
 
-                datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
-                datos_pdfs.append(datos)
+            # Grupos y consultor de deuda de BASE MADRE, y encargado DICOM
+            # (Excel aparte, hoja Empresas) -- el cruce del encargado es por
+            # GRUPO, no por RUT (dentro de ese Excel el Responsable DICOM es
+            # el mismo para todas las empresas de un mismo grupo).
+            datos_base = obtener_datos_dicom()
+            consultores_deuda = datos_base.get("consultores_deuda", {})
+            encargados_por_grupo, _err_encargados = obtener_encargados_dicom()
 
-                grupo = "SIN GRUPO"
-                if datos.get("rut"):
-                    rut_norm = datos["rut"].replace(".", "").replace(" ", "")
-                    grupo_info = grupos_dict.get(rut_norm, {})
-                    grupo = grupo_info.get("grupo", "SIN GRUPO")
+            def _info_rut(rut_norm, grupo):
+                return {"grupo": grupo,
+                        "consultor_deuda": consultores_deuda.get(rut_norm, ""),
+                        "encargado_dicom": encargados_por_grupo.get(_norm_grupo(grupo), "")}
 
-                with open(ruta_temp, "rb") as f:
-                    pdfs_para_zip.append((f"{grupo}/{nombre_seguro}", f.read()))
-                organizados += 1
+            grupos_dict = {}
+            for grupo, info in datos_base.get("grupos", {}).items():
+                for rut in info.get("ruts", []):
+                    rut_norm = rut.replace(".", "").replace(" ", "")
+                    grupos_dict[rut_norm] = _info_rut(rut_norm, grupo)
+            for rut_norm in consultores_deuda:
+                grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
 
+            datos_pdfs = []
+            errores = []
+            organizados = 0
+            pdfs_para_zip = []  # (ruta_en_zip, bytes)
+            total = len(guardados)
+
+            for i, (nombre_original, nombre_seguro, ruta_temp) in enumerate(guardados, 1):
                 try:
-                    os.remove(ruta_temp)
-                except Exception:
-                    pass
-            except Exception as e:
-                errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
+                    datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+                    datos_pdfs.append(datos)
 
-        # Generar UN SOLO Excel con todos los datos
-        excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
-        if not excel_bytes:
-            return jsonify({"error": "Error generando Excel"}), 500
+                    grupo = "SIN GRUPO"
+                    if datos.get("rut"):
+                        rut_norm = datos["rut"].replace(".", "").replace(" ", "")
+                        grupo_info = grupos_dict.get(rut_norm, {})
+                        grupo = grupo_info.get("grupo", "SIN GRUPO")
 
-        nombre_excel = f"Dicom_{numero_dicom}.xlsx"
-        nombre_zip = f"Dicom_{numero_dicom}.zip"
+                    with open(ruta_temp, "rb") as f:
+                        pdfs_para_zip.append((f"{grupo}/{nombre_seguro}", f.read()))
+                    organizados += 1
+                except Exception as e:
+                    errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
+                finally:
+                    try:
+                        os.remove(ruta_temp)
+                    except Exception:
+                        pass
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(nombre_excel, excel_bytes)
-            for ruta_en_zip, contenido in pdfs_para_zip:
-                zf.writestr(ruta_en_zip, contenido)
-        buf.seek(0)
+                if i % 10 == 0 or i == total:
+                    _dicom_tareas[tid]["organizados"] = organizados
+                    _dicom_log(tid, f"Procesando... {i}/{total}", "info")
 
-        resp = make_response(buf.read())
-        resp.headers["Content-Type"] = "application/zip"
-        resp.headers["Content-Disposition"] = f"attachment; filename={nombre_zip}"
-        resp.headers["X-Procesados"] = str(len(archivos))
-        resp.headers["X-Organizados"] = str(organizados)
-        resp.headers["X-Errores"] = str(len(errores))
-        if errores:
-            import urllib.parse
-            detalle = " | ".join(errores[:5])
-            resp.headers["X-Error-Detalle"] = urllib.parse.quote(detalle[:400])
-        return resp
-    except Exception as e:
-        return jsonify({"error": str(e)[:200]}), 500
+            excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
+            if not excel_bytes:
+                _dicom_log(tid, "Error generando Excel", "err")
+                _dicom_tareas[tid]["error"] = True
+                return
+
+            nombre_excel = f"Dicom_{numero_dicom}.xlsx"
+            nombre_zip = f"Dicom_{numero_dicom}_{tid}.zip"
+            ruta_zip = os.path.join(_EXCELS_DIR, nombre_zip)
+            with zipfile.ZipFile(ruta_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(nombre_excel, excel_bytes)
+                for ruta_en_zip, contenido in pdfs_para_zip:
+                    zf.writestr(ruta_en_zip, contenido)
+
+            _dicom_tareas[tid]["zip"] = nombre_zip
+            _dicom_tareas[tid]["organizados"] = organizados
+            _dicom_tareas[tid]["errores_detalle"] = errores[:5]
+            if errores:
+                _dicom_log(tid, f"⚠ {len(errores)} archivo(s) con error", "warn")
+            _dicom_log(tid, f"✓ Listo: {organizados}/{total} organizados", "ok")
+        except Exception as e:
+            import traceback
+            _dicom_log(tid, f"Error: {e}", "err")
+            _dicom_log(tid, traceback.format_exc()[:300], "err")
+            _dicom_tareas[tid]["error"] = True
+        finally:
+            _dicom_tareas[tid]["done"] = True
+            try:
+                os.rmdir(carpeta_temp)
+            except Exception:
+                pass
+
+    threading.Thread(target=run_task, daemon=True).start()
+    return jsonify({"ok": True, "task_id": tid})
 
 
 @app.route("/api/dicom/analisis", methods=["POST"])

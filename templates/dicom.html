@@ -749,7 +749,11 @@ async function analizarPdfs() {
     // igual que ya hace consultar() para el bot de descarga.
     await new Promise((resolve, reject) => {
       let fallosSeguidos = 0;
-      const MAX_FALLOS_SEGUIDOS = 30; // ~60s de fallos continuos antes de rendirse
+      // Confirmado en producción: un corte de "upstream error" entre
+      // Railway y el navegador puede durar más de 60s aunque el servidor
+      // siga trabajando bien (sin reinicios, sin errores propios) -- como
+      // esperar no tiene costo real, se tolera bastante antes de rendirse.
+      const MAX_FALLOS_SEGUIDOS = 150; // ~5 min de fallos continuos antes de rendirse
       const poll = setInterval(async () => {
         try {
           const resp = await fetch(`/api/dicom/tarea/${tid}`);

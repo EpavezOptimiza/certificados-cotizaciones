@@ -3522,6 +3522,23 @@ def dicom_analizar():
             for rut_norm in consultores_deuda:
                 grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
 
+            def _extraer_con_timeout(ruta_temp, nombre_seguro, timeout_seg=30):
+                """Corre extraer_datos_pdf() en un hilo aparte con limite de
+                tiempo: si un PDF puntual queda pegado (visto en produccion
+                con un lote de 260 -- un archivo trabo el analisis entero
+                sin que el servidor se cayera), se descarta ese archivo en
+                vez de bloquear el resto del lote para siempre. El hilo
+                colgado se abandona (daemon), no bloquea el proceso."""
+                resultado = {}
+                def _trabajo():
+                    resultado['datos'] = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+                hilo = threading.Thread(target=_trabajo, daemon=True)
+                hilo.start()
+                hilo.join(timeout=timeout_seg)
+                if hilo.is_alive():
+                    raise TimeoutError(f"tardó más de {timeout_seg}s (se descarta y se sigue)")
+                return resultado.get('datos')
+
             datos_pdfs = []
             errores = []
             organizados = 0
@@ -3529,8 +3546,14 @@ def dicom_analizar():
             total = len(guardados)
 
             for i, (nombre_original, nombre_seguro, ruta_temp) in enumerate(guardados, 1):
+                # Se loguea el nombre ANTES de procesar (no despues): si este
+                # archivo puntual se cuelga, el ultimo mensaje visible queda
+                # apuntando exactamente a cual es, en vez de solo un numero.
+                _dicom_tareas[tid]["organizados"] = organizados
+                _dicom_log(tid, f"Procesando ({i}/{total}): {nombre_seguro}", "info")
+
                 try:
-                    datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+                    datos = _extraer_con_timeout(ruta_temp, nombre_seguro)
                     datos_pdfs.append(datos)
 
                     grupo = "SIN GRUPO"
@@ -3544,15 +3567,14 @@ def dicom_analizar():
                     organizados += 1
                 except Exception as e:
                     errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
+                    _dicom_log(tid, f"⚠ {nombre_seguro}: {type(e).__name__}: {str(e)[:80]}", "warn")
                 finally:
                     try:
                         os.remove(ruta_temp)
                     except Exception:
                         pass
 
-                if i % 10 == 0 or i == total:
-                    _dicom_tareas[tid]["organizados"] = organizados
-                    _dicom_log(tid, f"Procesando... {i}/{total}", "info")
+            _dicom_tareas[tid]["organizados"] = organizados
 
             excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
             if not excel_bytes:

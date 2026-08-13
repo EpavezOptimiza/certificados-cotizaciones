@@ -742,11 +742,21 @@ async function analizarPdfs() {
     // El análisis corre en un hilo de fondo (puede tardar varios minutos
     // con lotes grandes) -- se consulta el progreso en vez de mantener la
     // conexión abierta, para que un proxy intermedio no la corte antes de
-    // tiempo.
+    // tiempo. Un fallo puntual de UNA consulta (hipo de red, "upstream
+    // error" del proxy, etc.) no debe abortar todo el proceso -- el
+    // servidor sigue trabajando igual aunque el navegador no haya podido
+    // preguntar en ese momento -- así que se reintenta en vez de cortar,
+    // igual que ya hace consultar() para el bot de descarga.
     await new Promise((resolve, reject) => {
+      let fallosSeguidos = 0;
+      const MAX_FALLOS_SEGUIDOS = 30; // ~60s de fallos continuos antes de rendirse
       const poll = setInterval(async () => {
         try {
-          const s = await (await fetch(`/api/dicom/tarea/${tid}`)).json();
+          const resp = await fetch(`/api/dicom/tarea/${tid}`);
+          const s = await resp.json();
+          if (!resp.ok) throw new Error(s.error || `HTTP ${resp.status}`);
+          fallosSeguidos = 0;
+
           const ultimoLog = (s.logs || []).slice(-1)[0];
           if (ultimoLog) resultado.innerHTML = esc(ultimoLog.msg);
 
@@ -768,8 +778,12 @@ async function analizarPdfs() {
             resolve();
           }
         } catch (e) {
-          clearInterval(poll);
-          reject(e);
+          fallosSeguidos++;
+          if (fallosSeguidos >= MAX_FALLOS_SEGUIDOS) {
+            clearInterval(poll);
+            reject(new Error('No se pudo consultar el progreso (' + e.message + ')'));
+          }
+          // si no, se reintenta en el proximo tick sin cortar el proceso
         }
       }, 2000);
     });

@@ -3452,18 +3452,26 @@ def dicom_captura(nombre):
 @app.route("/api/dicom/analizar", methods=["POST"])
 @api_login_required
 def dicom_analizar():
-    """Guarda los PDF subidos y lanza el análisis en un hilo de fondo,
-    devolviendo un task_id de inmediato.
+    """Guarda los PDF subidos y lanza el análisis en un PROCESO aparte
+    (multiprocessing), devolviendo un task_id de inmediato.
 
     Con lotes grandes (cientos de PDF) el análisis completo puede tardar
-    varios minutos; devolver la respuesta HTTP recién al terminar hacía que
-    el proxy de Railway cortara la conexión antes de tiempo (confirmado:
-    colgó un worker de gunicorn 10+ min con 260 PDF reales, terminó en
-    SIGKILL). El progreso se consulta con /api/dicom/tarea/<tid> (mismo
-    mecanismo que ya usa el bot de descarga) y el ZIP final con
-    /api/dicom/descargar_zip/<tid>.
+    varios minutos. Primero se corrió en un hilo de fondo, pero un hilo
+    comparte el mismo proceso -- y el mismo GIL -- que atiende las
+    peticiones HTTP: confirmado con métricas reales de Railway que esto
+    saturaba el único núcleo que Python puede usar dentro de un proceso,
+    causando hasta 18s de latencia y 55-65% de error en el propio polling
+    de progreso (con CPU/memoria del servidor lejos de sus límites reales).
+    Un proceso aparte no compite por ese recurso, así que el servidor
+    queda siempre libre para responder sin importar cuánta CPU use el
+    análisis. El progreso se consulta vía archivo en disco (no memoria
+    compartida, para que no dependa de qué proceso lo escribió) con
+    /api/dicom/analisis_estado/<tid>, y el ZIP final con
+    /api/dicom/analisis_zip/<tid>.
     """
-    import threading, uuid
+    import uuid
+    import multiprocessing
+    from dicom_logic import procesar_lote_dicom
 
     archivos = request.files.getlist("archivos")
     numero_dicom = request.form.get("numero_dicom", "").strip()
@@ -3479,7 +3487,7 @@ def dicom_analizar():
 
     # Guardar los archivos ANTES de responder: el objeto request (y los
     # FileStorage de Flask) no se puede seguir usando una vez que termina
-    # este request handler, así que no puede leerse desde el hilo de fondo.
+    # este request handler, así que no puede leerse desde el proceso hijo.
     guardados = []
     for archivo in archivos:
         nombre_original = archivo.filename or ""
@@ -3490,146 +3498,60 @@ def dicom_analizar():
         archivo.save(ruta_temp)
         guardados.append((nombre_original, nombre_seguro, ruta_temp))
 
-    _dicom_tareas[tid] = {"logs": [], "done": False, "error": False, "captura": None,
-                          "esperando_codigo": False, "zip": None,
-                          "procesados": len(archivos), "organizados": 0,
-                          "errores_detalle": []}
+    ruta_progreso = os.path.join(_EXCELS_DIR, f"dicom_progreso_{tid}.json")
+    ruta_zip_final = os.path.join(_EXCELS_DIR, f"Dicom_{numero_dicom}_{tid}.zip")
 
-    def _borrar_silencioso(ruta):
-        try:
-            os.remove(ruta)
-        except Exception:
-            pass
+    # Estado inicial en disco para que el primer poll no de "no encontrada"
+    with open(ruta_progreso, "w", encoding="utf-8") as f:
+        json.dump({"logs": [], "done": False, "error": False,
+                   "organizados": 0, "procesados": len(guardados)}, f)
 
-    def run_task():
-        try:
-            from dicom_logic import extraer_datos_pdf, generar_excel_analisis
-            from base_madre_logic import obtener_datos_dicom
-            from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
+    # "spawn" (no "fork"): gunicorn corre con varios hilos (--threads 4) y
+    # hacer fork() de un proceso con hilos activos puede dejar locks/estado
+    # interno en mal estado dentro del hijo -- spawn arranca un interprete
+    # nuevo y limpio, evitando ese riesgo.
+    ctx = multiprocessing.get_context("spawn")
+    proceso = ctx.Process(target=procesar_lote_dicom,
+                          args=(guardados, ruta_progreso, ruta_zip_final, numero_dicom),
+                          daemon=True)
+    proceso.start()
 
-            # Grupos y consultor de deuda de BASE MADRE, y encargado DICOM
-            # (Excel aparte, hoja Empresas) -- el cruce del encargado es por
-            # GRUPO, no por RUT (dentro de ese Excel el Responsable DICOM es
-            # el mismo para todas las empresas de un mismo grupo).
-            datos_base = obtener_datos_dicom()
-            consultores_deuda = datos_base.get("consultores_deuda", {})
-            encargados_por_grupo, _err_encargados = obtener_encargados_dicom()
-
-            def _info_rut(rut_norm, grupo):
-                return {"grupo": grupo,
-                        "consultor_deuda": consultores_deuda.get(rut_norm, ""),
-                        "encargado_dicom": encargados_por_grupo.get(_norm_grupo(grupo), "")}
-
-            grupos_dict = {}
-            for grupo, info in datos_base.get("grupos", {}).items():
-                for rut in info.get("ruts", []):
-                    rut_norm = rut.replace(".", "").replace(" ", "")
-                    grupos_dict[rut_norm] = _info_rut(rut_norm, grupo)
-            for rut_norm in consultores_deuda:
-                grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
-
-            def _procesar_con_timeout(nombre_seguro, ruta_temp, timeout_seg=30):
-                """Corre TODO el procesamiento de un PDF (extraer datos +
-                releer el archivo para el ZIP) en un hilo aparte con limite
-                de tiempo. Un solo PDF puede colgarse por mas de una razon
-                -- no solo al parsearlo, tambien la relectura de disco para
-                el ZIP puede quedar pegada si el volumen de Railway tiene
-                algun problema -- asi que se cubre el bloque completo, no
-                solo la extraccion. Si se pasa del limite, se descarta ese
-                archivo y se sigue con el resto en vez de bloquear el lote
-                entero para siempre. El hilo colgado se abandona (daemon),
-                no bloquea el proceso."""
-                resultado = {'ok': False}
-                def _trabajo():
-                    datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
-                    grupo = "SIN GRUPO"
-                    if datos.get("rut"):
-                        rut_norm = datos["rut"].replace(".", "").replace(" ", "")
-                        grupo_info = grupos_dict.get(rut_norm, {})
-                        grupo = grupo_info.get("grupo", "SIN GRUPO")
-                    with open(ruta_temp, "rb") as f:
-                        contenido = f.read()
-                    resultado.update(ok=True, datos=datos, grupo=grupo, contenido=contenido)
-                hilo = threading.Thread(target=_trabajo, daemon=True)
-                hilo.start()
-                hilo.join(timeout=timeout_seg)
-                if hilo.is_alive():
-                    raise TimeoutError(f"tardó más de {timeout_seg}s (se descarta y se sigue)")
-                if not resultado['ok']:
-                    raise RuntimeError("no se pudo procesar")
-                return resultado
-
-            datos_pdfs = []
-            errores = []
-            organizados = 0
-            pdfs_para_zip = []  # (ruta_en_zip, bytes)
-            total = len(guardados)
-
-            for i, (nombre_original, nombre_seguro, ruta_temp) in enumerate(guardados, 1):
-                # Se loguea el nombre ANTES de procesar (no despues): si este
-                # archivo puntual se cuelga, el ultimo mensaje visible queda
-                # apuntando exactamente a cual es, en vez de solo un numero.
-                _dicom_tareas[tid]["organizados"] = organizados
-                _dicom_log(tid, f"Procesando ({i}/{total}): {nombre_seguro}", "info")
-
-                try:
-                    r = _procesar_con_timeout(nombre_seguro, ruta_temp)
-                    datos_pdfs.append(r['datos'])
-                    pdfs_para_zip.append((f"{r['grupo']}/{nombre_seguro}", r['contenido']))
-                    organizados += 1
-                except Exception as e:
-                    errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
-                    _dicom_log(tid, f"⚠ {nombre_seguro}: {type(e).__name__}: {str(e)[:80]}", "warn")
-                finally:
-                    # Borrado en un hilo aparte (fire-and-forget): si el
-                    # volumen esta con problemas, esto tampoco debe trabar
-                    # el bucle principal.
-                    threading.Thread(target=_borrar_silencioso, args=(ruta_temp,), daemon=True).start()
-
-                # Cede CPU a proposito entre archivo y archivo: confirmado
-                # con las metricas de Railway que este plan tiene ~1 vCPU, y
-                # sin este respiro el procesamiento satura ese unico nucleo
-                # por tramos largos, dejando sin CPU ni a una consulta
-                # trivial de progreso (se vieron tiempos de respuesta de
-                # hasta 18s y 55-65% de error en esas ventanas).
-                _time.sleep(0.1)
-
-            _dicom_tareas[tid]["organizados"] = organizados
-
-            excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
-            if not excel_bytes:
-                _dicom_log(tid, "Error generando Excel", "err")
-                _dicom_tareas[tid]["error"] = True
-                return
-
-            nombre_excel = f"Dicom_{numero_dicom}.xlsx"
-            nombre_zip = f"Dicom_{numero_dicom}_{tid}.zip"
-            ruta_zip = os.path.join(_EXCELS_DIR, nombre_zip)
-            with zipfile.ZipFile(ruta_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr(nombre_excel, excel_bytes)
-                for ruta_en_zip, contenido in pdfs_para_zip:
-                    zf.writestr(ruta_en_zip, contenido)
-
-            _dicom_tareas[tid]["zip"] = nombre_zip
-            _dicom_tareas[tid]["organizados"] = organizados
-            _dicom_tareas[tid]["errores_detalle"] = errores[:5]
-            if errores:
-                _dicom_log(tid, f"⚠ {len(errores)} archivo(s) con error", "warn")
-            _dicom_log(tid, f"✓ Listo: {organizados}/{total} organizados", "ok")
-        except Exception as e:
-            import traceback
-            _dicom_log(tid, f"Error: {e}", "err")
-            _dicom_log(tid, traceback.format_exc()[:300], "err")
-            _dicom_tareas[tid]["error"] = True
-        finally:
-            _dicom_tareas[tid]["done"] = True
-            try:
-                os.rmdir(carpeta_temp)
-            except Exception:
-                pass
-
-    threading.Thread(target=run_task, daemon=True).start()
     return jsonify({"ok": True, "task_id": tid})
+
+
+@app.route("/api/dicom/analisis_estado/<tid>")
+@api_login_required
+def dicom_analisis_estado(tid):
+    """Progreso del analisis en curso -- se lee de un archivo en disco
+    (no de memoria) porque lo escribe un PROCESO aparte, no este mismo."""
+    tid_seguro = os.path.basename(tid)
+    ruta_progreso = os.path.join(_EXCELS_DIR, f"dicom_progreso_{tid_seguro}.json")
+    if not os.path.exists(ruta_progreso):
+        return jsonify({"error": "Tarea no encontrada", "logs": [], "done": True}), 404
+    try:
+        with open(ruta_progreso, "r", encoding="utf-8") as f:
+            estado = json.load(f)
+    except Exception:
+        # el proceso hijo puede estar escribiendo justo en este instante
+        # (reemplazo atomico via os.replace lo hace muy improbable, pero
+        # por si acaso no se corta el polling por esto)
+        return jsonify({"logs": [], "done": False, "error": False})
+    return jsonify(estado)
+
+
+@app.route("/api/dicom/analisis_zip/<tid>")
+@api_login_required
+def dicom_analisis_zip(tid):
+    tid_seguro = os.path.basename(tid)
+    ruta_progreso = os.path.join(_EXCELS_DIR, f"dicom_progreso_{tid_seguro}.json")
+    if not os.path.exists(ruta_progreso):
+        return jsonify({"error": "Tarea no encontrada"}), 404
+    with open(ruta_progreso, "r", encoding="utf-8") as f:
+        estado = json.load(f)
+    nombre_zip = estado.get("zip")
+    if not nombre_zip:
+        return jsonify({"error": "ZIP no disponible"}), 404
+    return send_from_directory(_EXCELS_DIR, nombre_zip, as_attachment=True)
 
 
 @app.route("/api/dicom/analisis", methods=["POST"])

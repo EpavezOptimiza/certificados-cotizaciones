@@ -757,7 +757,7 @@ async function analizarPdfs() {
       const MAX_FALLOS_SEGUIDOS = 150; // ~5 min de fallos continuos antes de rendirse
       const poll = setInterval(async () => {
         try {
-          const resp = await fetch(`/api/dicom/tarea/${tid}`);
+          const resp = await fetch(`/api/dicom/analisis_estado/${tid}`);
           const s = await resp.json();
           if (!resp.ok) throw new Error(s.error || `HTTP ${resp.status}`);
           fallosSeguidos = 0;
@@ -773,7 +773,7 @@ async function analizarPdfs() {
               return;
             }
             const nombreZip = 'Dicom_' + numeroDicom + '.zip';
-            window.open(`/api/dicom/descargar_zip/${tid}`);
+            window.open(`/api/dicom/analisis_zip/${tid}`);
             resultado.innerHTML = '✓ Procesados: ' + (s.procesados ?? '?') + ' archivos<br>' +
               '✓ Organizados: ' + (s.organizados ?? '?') + ' archivos<br>' +
               ((s.errores_detalle || []).length

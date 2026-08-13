@@ -869,6 +869,113 @@ def generar_excel_analisis(datos_por_pdf, grupos_base_madre):
         return None
 
 
+def procesar_lote_dicom(guardados, ruta_progreso, ruta_zip_final, numero_dicom):
+    """Analiza un lote de PDF Boletin Laboral y arma el ZIP final.
+
+    Pensada para correr en un PROCESO aparte (multiprocessing), no solo un
+    hilo: con lotes grandes (~260 PDF reales en producción) el trabajo
+    satura el único núcleo que Python puede usar dentro de un mismo
+    proceso, dejando sin CPU al proceso que atiende las peticiones HTTP
+    (confirmado con métricas de Railway: hasta 18s de latencia y 55-65%
+    de error en el polling durante esos tramos). En un proceso separado
+    este trabajo nunca puede competir por ese recurso con el servidor web.
+
+    guardados: lista de (nombre_original, nombre_seguro, ruta_temp)
+    ruta_progreso: archivo JSON donde se escribe el avance (se sobreescribe
+        en cada paso con reemplazo atómico -- lo consulta el proceso web)
+    ruta_zip_final: donde queda el ZIP con los PDF + Excel al terminar
+    """
+    import json
+    import zipfile as _zipfile
+    from base_madre_logic import obtener_datos_dicom
+    from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
+
+    logs = []
+
+    def _escribir(**kw):
+        estado = {"logs": logs, **kw}
+        tmp = ruta_progreso + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(estado, f)
+        os.replace(tmp, ruta_progreso)
+
+    def _log(msg, tipo="info", **kw):
+        logs.append({"msg": msg, "tipo": tipo, "t": time.strftime("%H:%M:%S")})
+        _escribir(done=False, error=False, **kw)
+
+    organizados = 0
+    total = len(guardados)
+    try:
+        datos_base = obtener_datos_dicom()
+        consultores_deuda = datos_base.get("consultores_deuda", {})
+        encargados_por_grupo, _err = obtener_encargados_dicom()
+
+        def _info_rut(rut_norm, grupo):
+            return {"grupo": grupo,
+                    "consultor_deuda": consultores_deuda.get(rut_norm, ""),
+                    "encargado_dicom": encargados_por_grupo.get(_norm_grupo(grupo), "")}
+
+        grupos_dict = {}
+        for grupo, info in datos_base.get("grupos", {}).items():
+            for rut in info.get("ruts", []):
+                rut_norm = rut.replace(".", "").replace(" ", "")
+                grupos_dict[rut_norm] = _info_rut(rut_norm, grupo)
+        for rut_norm in consultores_deuda:
+            grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
+
+        datos_pdfs = []
+        errores = []
+        pdfs_para_zip = []
+
+        for i, (nombre_original, nombre_seguro, ruta_temp) in enumerate(guardados, 1):
+            _log(f"Procesando ({i}/{total}): {nombre_seguro}",
+                 organizados=organizados, procesados=total)
+            try:
+                datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+                datos_pdfs.append(datos)
+
+                grupo = "SIN GRUPO"
+                if datos.get("rut"):
+                    rut_norm = datos["rut"].replace(".", "").replace(" ", "")
+                    grupo_info = grupos_dict.get(rut_norm, {})
+                    grupo = grupo_info.get("grupo", "SIN GRUPO")
+
+                with open(ruta_temp, "rb") as f:
+                    pdfs_para_zip.append((f"{grupo}/{nombre_seguro}", f.read()))
+                organizados += 1
+            except Exception as e:
+                errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
+                _log(f"⚠ {nombre_seguro}: {type(e).__name__}: {str(e)[:80]}", "warn",
+                     organizados=organizados, procesados=total)
+            finally:
+                try:
+                    os.remove(ruta_temp)
+                except Exception:
+                    pass
+
+        excel_bytes = generar_excel_analisis(datos_pdfs, grupos_dict)
+        if not excel_bytes:
+            _log("Error generando Excel", "err", organizados=organizados, procesados=total)
+            _escribir(done=True, error=True, organizados=organizados, procesados=total, zip=None)
+            return
+
+        nombre_excel = f"Dicom_{numero_dicom}.xlsx"
+        with _zipfile.ZipFile(ruta_zip_final, "w", _zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(nombre_excel, excel_bytes)
+            for ruta_en_zip, contenido in pdfs_para_zip:
+                zf.writestr(ruta_en_zip, contenido)
+
+        _log(f"✓ Listo: {organizados}/{total} organizados", "ok",
+             organizados=organizados, procesados=total)
+        _escribir(done=True, error=False, organizados=organizados, procesados=total,
+                  errores_detalle=errores[:5], zip=os.path.basename(ruta_zip_final))
+    except Exception as e:
+        import traceback
+        _log(f"Error: {e}", "err", organizados=organizados, procesados=total)
+        _log(traceback.format_exc()[:300], "err", organizados=organizados, procesados=total)
+        _escribir(done=True, error=True, organizados=organizados, procesados=total, zip=None)
+
+
 def probar_login(correo, clave, log, ruta_captura=None, obtener_codigo=None, ruts=None):
     """Entra al portal, confirma el acceso y guarda una captura de pantalla.
 

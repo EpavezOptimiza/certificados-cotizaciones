@@ -121,6 +121,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card">
       <div class="card-title">📊 Análisis de DICOM — Generar Excel</div>
       <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Número de DICOM</label><input type="text" id="numero-dicom" placeholder="Ej: 12345" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;margin-bottom:8px"></div>
+      <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Enlace Excel "Encargados DICOM" (SharePoint, hoja Empresas)</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="text" id="dicom-empresas-url" placeholder="https://…sharepoint.com/:x:/g/personal/…" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;font-family:inherit"><button class="btn btn-sec" onclick="guardarEmpresasUrl()">💾 Guardar</button></div><div id="dicom-empresas-msg" style="font-size:11px;margin-top:6px;display:none"></div></div>
       <div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;display:block">Carpeta ORIGEN (PDFs descargados)</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="document.getElementById('dicom-origen-picker').click()">📁 Seleccionar carpeta origen</button><input type="file" id="dicom-origen-picker" webkitdirectory mozdirectory style="display:none" multiple onchange="procesarCaretaOrigen()"><span id="origen-count" style="font-size:11px;color:#64748b">Sin carpeta seleccionada</span></div></div>
       <div class="aviso" style="margin-bottom:16px">El resultado se descarga como un ZIP (carpetas por grupo + Excel). Tú decides dónde guardarlo y extraerlo en tu equipo.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="btn-analizar" onclick="analizarPdfs()" disabled>▶ Procesar y descargar ZIP</button></div>
@@ -203,6 +204,26 @@ async function guardar(){
   }catch(e){
     msg.style.display = 'block'; msg.style.color = '#b91c1c';
     msg.textContent = '✗ No se pudieron guardar';
+  }
+}
+
+async function guardarEmpresasUrl(){
+  const url = document.getElementById('dicom-empresas-url').value.trim();
+  const msg = document.getElementById('dicom-empresas-msg');
+  if (!url) return;
+  msg.style.display = 'block'; msg.style.color = '#64748b'; msg.textContent = 'Guardando...';
+  try{
+    const res = await fetch('/api/dicom/empresas_config', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
+    const data = await res.json();
+    if (!res.ok) {
+      msg.style.color = '#b91c1c'; msg.textContent = '✗ ' + (data.error || 'Error al guardar');
+      return;
+    }
+    msg.style.color = '#047857';
+    msg.textContent = `✓ Guardado (${data.total} empresas leídas)`;
+  }catch(e){
+    msg.style.color = '#b91c1c'; msg.textContent = '✗ No se pudo guardar';
   }
 }
 

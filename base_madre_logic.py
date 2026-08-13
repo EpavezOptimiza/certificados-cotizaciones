@@ -188,10 +188,12 @@ def obtener_clientes(forzar=False):
 
 
 def obtener_datos_dicom():
-    """Obtiene datos para DICOM: RUT vigentes agrupados por GRUPO."""
+    """Obtiene datos para DICOM: RUT vigentes o en estudio inicial,
+    agrupados por GRUPO, con su consultor de deuda asignado."""
     columnas, filas, _, error = obtener_clientes()
     if error or not filas:
-        return {"error": error or "No hay datos", "grupos": {}, "todos_ruts": [], "razones_sociales": []}
+        return {"error": error or "No hay datos", "grupos": {}, "todos_ruts": [],
+                "razones_sociales": [], "consultores_deuda": {}}
 
     def encontrar_col(terms):
         for col in columnas:
@@ -204,15 +206,17 @@ def obtener_datos_dicom():
     col_grupo = encontrar_col(["grupo"])
     col_razon = encontrar_col(["razon", "social"])
     col_estatus = encontrar_col(["estatus", "cliente"])
+    col_consultor_deuda = encontrar_col(["consultor", "deuda"])
 
     grupos = {}
     todos_ruts = set()
     todas_razones = set()
+    consultores_deuda = {}
 
     for fila in filas:
         if col_estatus:
             estatus = _norm_estatus(fila.get(col_estatus, ""))
-            if not (estatus == "vigente" or estatus.startswith("vigente")):
+            if not any(estatus == p or estatus.startswith(p) for p in _ESTATUS_PERMITIDOS):
                 continue
 
         rut = (fila.get(col_rut) or "").strip()
@@ -225,6 +229,9 @@ def obtener_datos_dicom():
         todos_ruts.add(rut)
         if razon:
             todas_razones.add(razon)
+
+        rut_norm = rut.replace(".", "").replace(" ", "")
+        consultores_deuda[rut_norm] = (fila.get(col_consultor_deuda) or "").strip() if col_consultor_deuda else ""
 
         if grupo:
             if grupo not in grupos:
@@ -240,7 +247,8 @@ def obtener_datos_dicom():
             for g, d in grupos.items()
         },
         "todos_ruts": sorted(list(todos_ruts)),
-        "razones_sociales": sorted(list(todas_razones))
+        "razones_sociales": sorted(list(todas_razones)),
+        "consultores_deuda": consultores_deuda,
     }
 
     return resultado

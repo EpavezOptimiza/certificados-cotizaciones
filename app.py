@@ -3210,6 +3210,25 @@ def dicom_config():
                     "tiene_clave": bool(_dicom_cfg("clave"))})
 
 
+@app.route("/api/dicom/empresas_config", methods=["GET", "POST"])
+@api_login_required
+def dicom_empresas_config():
+    """Enlace SharePoint del Excel de Encargados DICOM (hoja Empresas)."""
+    from dicom_empresas_logic import url_guardada, guardar_url, obtener_encargados_dicom
+    if request.method == "POST":
+        d = request.json or {}
+        url = (d.get("url") or "").strip()
+        if not url.lower().startswith("https://") or "sharepoint.com" not in url.lower():
+            return jsonify({"error": "El enlace debe ser el vínculo compartido de SharePoint "
+                                     "(empieza con https:// y contiene sharepoint.com)"}), 400
+        guardar_url(url)
+        encargados, error = obtener_encargados_dicom(forzar=True)
+        if error and not encargados:
+            return jsonify({"error": f"El enlace se guardó pero la lectura falló: {error}"}), 400
+        return jsonify({"ok": True, "total": len(encargados)})
+    return jsonify({"configurado": bool(url_guardada())})
+
+
 @app.route("/api/dicom/datos", methods=["GET"])
 @api_login_required
 def dicom_datos():
@@ -3439,6 +3458,7 @@ def dicom_analizar():
     """
     from dicom_logic import extraer_datos_pdf, generar_excel_analisis
     from base_madre_logic import obtener_datos_dicom
+    from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
 
     archivos = request.files.getlist("archivos")
     numero_dicom = request.form.get("numero_dicom", "").strip()
@@ -3448,13 +3468,26 @@ def dicom_analizar():
     if not numero_dicom:
         return jsonify({"error": "Falta número de DICOM"}), 400
 
-    # Obtener grupos de BASE MADRE
+    # Obtener grupos y consultor de deuda de BASE MADRE, y el encargado
+    # DICOM (Excel aparte, hoja Empresas) — el cruce del encargado es por
+    # GRUPO, no por RUT (dentro de ese Excel el Responsable DICOM es el
+    # mismo para todas las empresas de un mismo grupo).
     datos_base = obtener_datos_dicom()
+    consultores_deuda = datos_base.get("consultores_deuda", {})
+    encargados_por_grupo, _err_encargados = obtener_encargados_dicom()
+
+    def _info_rut(rut_norm, grupo):
+        return {"grupo": grupo,
+                "consultor_deuda": consultores_deuda.get(rut_norm, ""),
+                "encargado_dicom": encargados_por_grupo.get(_norm_grupo(grupo), "")}
+
     grupos_dict = {}
     for grupo, info in datos_base.get("grupos", {}).items():
         for rut in info.get("ruts", []):
             rut_norm = rut.replace(".", "").replace(" ", "")
-            grupos_dict[rut_norm] = {"grupo": grupo}
+            grupos_dict[rut_norm] = _info_rut(rut_norm, grupo)
+    for rut_norm in consultores_deuda:
+        grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
 
     # Procesar cada PDF: extraer datos y guardar bytes para el ZIP
     datos_pdfs = []

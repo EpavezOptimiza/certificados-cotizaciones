@@ -3495,6 +3495,12 @@ def dicom_analizar():
                           "procesados": len(archivos), "organizados": 0,
                           "errores_detalle": []}
 
+    def _borrar_silencioso(ruta):
+        try:
+            os.remove(ruta)
+        except Exception:
+            pass
+
     def run_task():
         try:
             from dicom_logic import extraer_datos_pdf, generar_excel_analisis
@@ -3522,22 +3528,36 @@ def dicom_analizar():
             for rut_norm in consultores_deuda:
                 grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
 
-            def _extraer_con_timeout(ruta_temp, nombre_seguro, timeout_seg=30):
-                """Corre extraer_datos_pdf() en un hilo aparte con limite de
-                tiempo: si un PDF puntual queda pegado (visto en produccion
-                con un lote de 260 -- un archivo trabo el analisis entero
-                sin que el servidor se cayera), se descarta ese archivo en
-                vez de bloquear el resto del lote para siempre. El hilo
-                colgado se abandona (daemon), no bloquea el proceso."""
-                resultado = {}
+            def _procesar_con_timeout(nombre_seguro, ruta_temp, timeout_seg=30):
+                """Corre TODO el procesamiento de un PDF (extraer datos +
+                releer el archivo para el ZIP) en un hilo aparte con limite
+                de tiempo. Un solo PDF puede colgarse por mas de una razon
+                -- no solo al parsearlo, tambien la relectura de disco para
+                el ZIP puede quedar pegada si el volumen de Railway tiene
+                algun problema -- asi que se cubre el bloque completo, no
+                solo la extraccion. Si se pasa del limite, se descarta ese
+                archivo y se sigue con el resto en vez de bloquear el lote
+                entero para siempre. El hilo colgado se abandona (daemon),
+                no bloquea el proceso."""
+                resultado = {'ok': False}
                 def _trabajo():
-                    resultado['datos'] = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+                    datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+                    grupo = "SIN GRUPO"
+                    if datos.get("rut"):
+                        rut_norm = datos["rut"].replace(".", "").replace(" ", "")
+                        grupo_info = grupos_dict.get(rut_norm, {})
+                        grupo = grupo_info.get("grupo", "SIN GRUPO")
+                    with open(ruta_temp, "rb") as f:
+                        contenido = f.read()
+                    resultado.update(ok=True, datos=datos, grupo=grupo, contenido=contenido)
                 hilo = threading.Thread(target=_trabajo, daemon=True)
                 hilo.start()
                 hilo.join(timeout=timeout_seg)
                 if hilo.is_alive():
                     raise TimeoutError(f"tardó más de {timeout_seg}s (se descarta y se sigue)")
-                return resultado.get('datos')
+                if not resultado['ok']:
+                    raise RuntimeError("no se pudo procesar")
+                return resultado
 
             datos_pdfs = []
             errores = []
@@ -3553,26 +3573,18 @@ def dicom_analizar():
                 _dicom_log(tid, f"Procesando ({i}/{total}): {nombre_seguro}", "info")
 
                 try:
-                    datos = _extraer_con_timeout(ruta_temp, nombre_seguro)
-                    datos_pdfs.append(datos)
-
-                    grupo = "SIN GRUPO"
-                    if datos.get("rut"):
-                        rut_norm = datos["rut"].replace(".", "").replace(" ", "")
-                        grupo_info = grupos_dict.get(rut_norm, {})
-                        grupo = grupo_info.get("grupo", "SIN GRUPO")
-
-                    with open(ruta_temp, "rb") as f:
-                        pdfs_para_zip.append((f"{grupo}/{nombre_seguro}", f.read()))
+                    r = _procesar_con_timeout(nombre_seguro, ruta_temp)
+                    datos_pdfs.append(r['datos'])
+                    pdfs_para_zip.append((f"{r['grupo']}/{nombre_seguro}", r['contenido']))
                     organizados += 1
                 except Exception as e:
                     errores.append(f"{nombre_original}: {type(e).__name__}: {str(e)[:80]}")
                     _dicom_log(tid, f"⚠ {nombre_seguro}: {type(e).__name__}: {str(e)[:80]}", "warn")
                 finally:
-                    try:
-                        os.remove(ruta_temp)
-                    except Exception:
-                        pass
+                    # Borrado en un hilo aparte (fire-and-forget): si el
+                    # volumen esta con problemas, esto tampoco debe trabar
+                    # el bucle principal.
+                    threading.Thread(target=_borrar_silencioso, args=(ruta_temp,), daemon=True).start()
 
             _dicom_tareas[tid]["organizados"] = organizados
 

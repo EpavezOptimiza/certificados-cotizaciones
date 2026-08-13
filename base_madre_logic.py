@@ -91,11 +91,24 @@ def _parsear(data):
     """Lee la hoja CLIENTES (o la primera) → (columnas, filas como dicts)."""
     wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     try:
+        # Preferir un nombre EXACTO ("Clientes") antes que una coincidencia
+        # parcial: el Excel real agrego una hoja "RESUMEN DE CLIENTES" (una
+        # tabla dinamica, no el listado de empresas) que tambien contiene
+        # la palabra "cliente" y aparece ANTES que "CLIENTES" en el libro,
+        # asi que una busqueda de solo substring la agarraba por error
+        # (confirmado: hacia que devolviera 36 filas basura en vez de las
+        # filas reales, y que TODAS las empresas del analisis DICOM
+        # cayeran en "SIN GRUPO").
         ws = None
         for nombre in wb.sheetnames:
-            if "cliente" in nombre.lower():
+            if nombre.strip().lower() == "clientes":
                 ws = wb[nombre]
                 break
+        if ws is None:
+            for nombre in wb.sheetnames:
+                if "cliente" in nombre.lower():
+                    ws = wb[nombre]
+                    break
         if ws is None:
             ws = wb.active
         try:

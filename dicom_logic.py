@@ -905,7 +905,6 @@ def procesar_lote_dicom(guardados, ruta_progreso, ruta_zip_final, numero_dicom):
     """
     import json
     import threading as _threading
-    import multiprocessing as _mp
     import zipfile as _zipfile
     from base_madre_logic import obtener_datos_dicom
     from dicom_empresas_logic import obtener_encargados_dicom, _norm_grupo
@@ -943,43 +942,39 @@ def procesar_lote_dicom(guardados, ruta_progreso, ruta_zip_final, numero_dicom):
         for rut_norm in consultores_deuda:
             grupos_dict.setdefault(rut_norm, _info_rut(rut_norm, "SIN GRUPO"))
 
-        def _procesar_con_timeout(nombre_seguro, ruta_temp, timeout_seg=30):
-            """Corre la extraccion de UN PDF en su PROPIO proceso hijo con
-            limite de tiempo. Confirmado con un caso real reproducible
-            (Boletin_Laboral_76303470-4.pdf, se colgo en produccion dos
-            veces en lotes distintos y de forma aislada aqui) que un limite
-            por HILO no basta: algo en ese archivo bloquea hasta el propio
-            Thread.join(timeout=...), probablemente una libreria reteniendo
-            el GIL en un bucle nativo. Un proceso siempre se puede matar de
-            verdad (terminate/kill) sin importar que este haciendo por
-            dentro."""
-            ctx = _mp.get_context("spawn")
-            cola = ctx.Queue()
-            p = ctx.Process(target=_extraer_pdf_en_proceso,
-                            args=(ruta_temp, nombre_seguro, cola), daemon=True)
-            p.start()
-            p.join(timeout=timeout_seg)
-            if p.is_alive():
-                p.terminate()
-                p.join(timeout=5)
-                if p.is_alive():
-                    p.kill()
-                    p.join()
+        def _procesar_con_timeout(nombre_seguro, ruta_temp, timeout_seg=15):
+            """Corre TODO el procesamiento de un PDF (extraer datos +
+            releer el archivo para el ZIP) en un hilo aparte con limite de
+            tiempo, DENTRO de este proceso hijo del lote.
+
+            Se probo con un proceso del SO por archivo (mata cuelgues de
+            verdad, ni con el GIL retenido) pero resulto DEMASIADO lento a
+            escala real (~30s por archivo solo por el overhead de arrancar
+            un interprete nuevo 259 veces). Se vuelve al limite por hilo,
+            que es rapido para el caso normal; el unico caso conocido que
+            un hilo no logra interrumpir (Boletin_Laboral_76303470-4.pdf)
+            queda pendiente de investigar aparte -- ese archivo puntual
+            puede seguir colgando el hilo (abandonado, no bloquea el
+            proceso web), pero ya no penaliza a los otros 258."""
+            resultado = {'ok': False}
+            def _trabajo():
+                datos = extraer_datos_pdf(ruta_temp, nombre_archivo=nombre_seguro)
+                grupo = "SIN GRUPO"
+                if datos.get("rut"):
+                    rut_norm = datos["rut"].replace(".", "").replace(" ", "")
+                    grupo_info = grupos_dict.get(rut_norm, {})
+                    grupo = grupo_info.get("grupo", "SIN GRUPO")
+                with open(ruta_temp, "rb") as f:
+                    contenido = f.read()
+                resultado.update(ok=True, datos=datos, grupo=grupo, contenido=contenido)
+            hilo = _threading.Thread(target=_trabajo, daemon=True)
+            hilo.start()
+            hilo.join(timeout=timeout_seg)
+            if hilo.is_alive():
                 raise TimeoutError(f"tardó más de {timeout_seg}s (se descarta y se sigue)")
-
-            if p.exitcode != 0 or cola.empty():
-                raise RuntimeError(f"el proceso terminó sin resultado (exitcode={p.exitcode})")
-
-            tipo, a, contenido = cola.get()
-            if tipo == "error":
-                raise RuntimeError(a)
-            datos = a
-            grupo = "SIN GRUPO"
-            if datos.get("rut"):
-                rut_norm = datos["rut"].replace(".", "").replace(" ", "")
-                grupo_info = grupos_dict.get(rut_norm, {})
-                grupo = grupo_info.get("grupo", "SIN GRUPO")
-            return {"ok": True, "datos": datos, "grupo": grupo, "contenido": contenido}
+            if not resultado['ok']:
+                raise RuntimeError("no se pudo procesar")
+            return resultado
 
         datos_pdfs = []
         errores = []

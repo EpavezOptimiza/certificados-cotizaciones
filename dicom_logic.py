@@ -748,10 +748,14 @@ def extraer_datos_pdf(ruta_pdf, nombre_archivo=None):
         # Las entradas de institucion/motivo pueden seguir mas alla de la
         # pagina 1 cuando hay varias (se confirmo con un PDF real de 5
         # paginas donde solo 1 de 4 entradas cabia en la pagina 1). Se usa
-        # texto_completo -- el header de esta tabla no coincide con el de
-        # la seccion "Boletin Laboral Previsional" (paginas siguientes, que
-        # repite lo mismo en otro formato de columnas), asi que no duplica.
-        detalles['instituciones'] = _extraer_bloques_institucion(texto_completo)
+        # texto_completo, pero cortado ANTES de la seccion "Boletin Laboral
+        # Previsional" (que repite las mismas entradas en otro formato de
+        # columnas): sin este corte, ese texto sobrante queda sin acotar y
+        # en empresas con mucha deuda/muchos trabajadores puede ser enorme,
+        # causando que el regex se cuelgue (confirmado: causo un worker
+        # timeout de 10 min procesando 260 PDF reales en produccion).
+        texto_relevante = texto_completo.split('Boletin Laboral Previsional', 1)[0]
+        detalles['instituciones'] = _extraer_bloques_institucion(texto_relevante)
 
         return detalles
     except Exception:

@@ -726,48 +726,53 @@ async function analizarPdfs() {
 
   const resultado = document.getElementById('dicom-resultado');
   resultado.style.display = '';
-  resultado.innerHTML = 'Procesando...';
+  resultado.style.background = '#f0fdf4';
+  resultado.style.borderColor = '#86efac';
+  resultado.style.color = '#166534';
+  resultado.innerHTML = 'Subiendo ' + _pdfsDicomOrigen.length + ' archivo(s)...';
 
   try {
-    const r = await fetch('/api/dicom/analizar', {
-      method: 'POST',
-      body: formData
+    const r = await fetch('/api/dicom/analizar', { method: 'POST', body: formData });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || ('Error del servidor (' + r.status + ')'));
+
+    const tid = d.task_id;
+    resultado.innerHTML = 'Procesando en el servidor...';
+
+    // El análisis corre en un hilo de fondo (puede tardar varios minutos
+    // con lotes grandes) -- se consulta el progreso en vez de mantener la
+    // conexión abierta, para que un proxy intermedio no la corte antes de
+    // tiempo.
+    await new Promise((resolve, reject) => {
+      const poll = setInterval(async () => {
+        try {
+          const s = await (await fetch(`/api/dicom/tarea/${tid}`)).json();
+          const ultimoLog = (s.logs || []).slice(-1)[0];
+          if (ultimoLog) resultado.innerHTML = esc(ultimoLog.msg);
+
+          if (s.done) {
+            clearInterval(poll);
+            if (s.error || !s.zip) {
+              reject(new Error(ultimoLog ? ultimoLog.msg : 'El análisis terminó con error'));
+              return;
+            }
+            const nombreZip = 'Dicom_' + numeroDicom + '.zip';
+            window.open(`/api/dicom/descargar_zip/${tid}`);
+            resultado.innerHTML = '✓ Procesados: ' + (s.procesados ?? '?') + ' archivos<br>' +
+              '✓ Organizados: ' + (s.organizados ?? '?') + ' archivos<br>' +
+              ((s.errores_detalle || []).length
+                ? '⚠ Con errores: ' + s.errores_detalle.length + ' archivo(s)<br>' +
+                  '<span style="font-size:11px">' + esc(s.errores_detalle.join(' | ')) + '</span><br>'
+                : '') +
+              '📥 Descargando: ' + nombreZip;
+            resolve();
+          }
+        } catch (e) {
+          clearInterval(poll);
+          reject(e);
+        }
+      }, 2000);
     });
-
-    if (!r.ok) {
-      let msg = 'Error del servidor (' + r.status + ')';
-      try {
-        const d = await r.json();
-        if (d.error) msg = d.error;
-      } catch (e) {}
-      throw new Error(msg);
-    }
-
-    const procesados = r.headers.get('X-Procesados') || _pdfsDicomOrigen.length;
-    const organizados = r.headers.get('X-Organizados') || '0';
-    const conErrores = r.headers.get('X-Errores') || '0';
-    const detalleErrorRaw = r.headers.get('X-Error-Detalle') || '';
-    const detalleError = detalleErrorRaw ? decodeURIComponent(detalleErrorRaw) : '';
-
-    const blob = await r.blob();
-    const nombreZip = 'Dicom_' + numeroDicom + '.zip';
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = nombreZip;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-
-    resultado.innerHTML = '✓ Procesados: ' + procesados + ' archivos<br>' +
-      '✓ Organizados: ' + organizados + ' archivos<br>' +
-      (conErrores !== '0' ? '⚠ Con errores: ' + conErrores + ' archivo(s)<br>' +
-        (detalleError ? '<span style="font-size:11px">' + esc(detalleError) + '</span><br>' : '') : '') +
-      '📥 Descargando: ' + nombreZip;
-    resultado.style.background = '#f0fdf4';
-    resultado.style.borderColor = '#86efac';
-    resultado.style.color = '#166534';
   } catch (e) {
     resultado.innerHTML = '❌ Error: ' + e.message;
     resultado.style.background = '#fee2e2';

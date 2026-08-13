@@ -745,7 +745,13 @@ def extraer_datos_pdf(ruta_pdf, nombre_archivo=None):
         if m:
             detalles['multas'] = int(m.group(1))
 
-        detalles['instituciones'] = _extraer_bloques_institucion(texto_pag1)
+        # Las entradas de institucion/motivo pueden seguir mas alla de la
+        # pagina 1 cuando hay varias (se confirmo con un PDF real de 5
+        # paginas donde solo 1 de 4 entradas cabia en la pagina 1). Se usa
+        # texto_completo -- el header de esta tabla no coincide con el de
+        # la seccion "Boletin Laboral Previsional" (paginas siguientes, que
+        # repite lo mismo en otro formato de columnas), asi que no duplica.
+        detalles['instituciones'] = _extraer_bloques_institucion(texto_completo)
 
         return detalles
     except Exception:

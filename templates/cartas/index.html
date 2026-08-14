@@ -1400,7 +1400,9 @@ function verPreview() {
 
   const extras = (sel.periodos_extra||'').split(',').map(p=>p.trim()).filter(Boolean);
   const todos = [...new Set([...sel.periodos_sel, ...extras])].sort((a,b)=>perKey(a)-perKey(b));
-  const periodoTxt = todos.length === 0 ? '[PERIODO]' : todos.join(', ');
+  const periodoTxt = todos.length === 0 ? '[PERIODO]'
+    : todos.length === 1 ? todos[0]
+    : `Desde ${todos[0]} Hasta ${todos[todos.length-1]}`;
 
   const mes = document.getElementById('f-mes').value || '';
   const [anio, mesN] = mes.split('-');

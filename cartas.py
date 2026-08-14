@@ -1543,7 +1543,13 @@ def descargar(filename):
     ext = filename.rsplit('.', 1)[-1].lower()
     mime = {'png': 'image/png', 'webm': 'video/webm', 'pdf': 'application/pdf'}.get(ext, 'application/octet-stream')
     as_attach = ext not in ('png', 'webm')
-    return send_file(filepath, mimetype=mime, as_attachment=as_attach, download_name=filename)
+    # Cartas y comprobantes se regeneran con el mismo nombre de archivo
+    # (Carta_Explicativa_<rut>.pdf); sin esto el navegador puede quedarse
+    # con una version cacheada vieja de esa misma URL.
+    resp = send_file(filepath, mimetype=mime, as_attachment=as_attach, download_name=filename)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @cartas_bp.route("/api/iniciar_bot", methods=["POST"])
 @cartas_login_required

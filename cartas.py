@@ -348,8 +348,10 @@ def generar_carta_pdf(carta_data, firma_data):
         except: return (0, 0)
 
     todos_ord = sorted(todos, key=per_key)
-    if todos_ord:
-        periodo_txt = ", ".join(todos_ord)
+    if len(todos_ord) > 1:
+        periodo_txt = f"Desde {todos_ord[0]} Hasta {todos_ord[-1]}"
+    elif todos_ord:
+        periodo_txt = todos_ord[0]
     else:
         periodo_txt = '[PERIODO]'
 

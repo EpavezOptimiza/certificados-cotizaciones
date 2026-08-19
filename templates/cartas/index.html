@@ -380,6 +380,13 @@ textarea{resize:vertical;min-height:70px}
           </div>
           <div class="form-grid">
             <div class="form-group">
+              <label>Tipo de Carta</label>
+              <select id="f-tipo-carta" onchange="onTipoCartaChange()">
+                <option value="regularizacion">Regularización de Deuda</option>
+                <option value="declaracion_producto_voluntario">Declaración Producto Voluntario</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label>Institución</label>
               <select id="f-inst"></select>
             </div>
@@ -409,6 +416,23 @@ textarea{resize:vertical;min-height:70px}
               <label>Fecha de cese</label>
               <input type="text" id="f-fecha-cese" placeholder="DD/MM/AAAA">
             </div>
+          </div>
+        </div>
+
+        <div class="card" id="card-declaracion" style="display:none">
+          <div class="card-title"><span class="card-title-icon">📝</span> Declaración Producto Voluntario</div>
+          <div class="form-group">
+            <label>Dirección empresa</label>
+            <input type="text" id="f-direccion" placeholder="Ej: Camino Nos a los Morros 590, San Bernardo, RM"
+                   oninput="guardarForm()">
+          </div>
+          <div class="form-group">
+            <label>Concepto (indicar una X en el que corresponda)</label>
+            <div id="concepto-btns" class="btn-group"></div>
+          </div>
+          <div class="form-group">
+            <label>Motivo (solo seleccionar una)</label>
+            <div id="motivo-declaracion-btns" class="btn-group" style="flex-direction:column;align-items:flex-start"></div>
           </div>
         </div>
 
@@ -885,6 +909,20 @@ const MOTIVOS_ISAPRE = [
   { full: 'Finiquito con pago posterior al finiquito.', short: 'Pago posterior finiquito' },
 ];
 
+const CONCEPTOS_DECLARACION = [
+  { clave: 'apv', texto: 'Cotización Voluntario (APV)' },
+  { clave: 'deposito_convenido', texto: 'Depósito Convenido' },
+  { clave: 'ahorro_voluntario', texto: 'Ahorro Voluntario (Cuenta 2)' },
+];
+const MOTIVOS_DECLARACION = [
+  { clave: 'error_administrativo', texto: 'No se realizó descuento de producto voluntario según mandato por error administrativo.' },
+  { clave: 'sin_notificacion', texto: 'No llego notificación para realizar pago a esa AFP/ o ese Producto.' },
+  { clave: 'trabajador_solicito', texto: 'Trabajador solicito que no se realizara descuento.' },
+  { clave: 'afiliacion_distinta', texto: 'Trabajador tiene afiliación de cotización obligatoria en AFP distinta a la de cobro (SOLO PARA CUENTA 2)' },
+  { clave: 'pago_erroneo_otra_institucion', texto: 'Pago erróneo en otra institución.' },
+  { clave: 'pago_producto_diferente', texto: 'Por error administrativo se pagó en producto voluntario diferente al del trabajador (CTA2/APV)' },
+];
+
 const MESES_MAP = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
 
 function perKey(p) {
@@ -1197,6 +1235,10 @@ function initSel(w) {
     fecha_termino: w.fecha_cese || '',
     motivo: w.motivo || '',
     status: null,
+    tipo_carta: 'regularizacion',
+    direccion: w.direccion || '',
+    concepto: '',
+    motivo_declaracion: '',
   };
 }
 
@@ -1293,8 +1335,59 @@ function renderCartaForm() {
   document.getElementById('f-motivo').value = sel.motivo;
   document.getElementById('f-periodos-extra').value = sel.periodos_extra || '';
 
+  document.getElementById('f-tipo-carta').value = sel.tipo_carta || 'regularizacion';
+  document.getElementById('f-direccion').value = sel.direccion || '';
+  document.getElementById('card-declaracion').style.display =
+    sel.tipo_carta === 'declaracion_producto_voluntario' ? '' : 'none';
+  renderConceptoBtns();
+  renderMotivoDeclaracionBtns();
+
   renderPeriodos(w.periodos || [], sel.periodos_sel);
   renderMotivos();
+}
+
+function onTipoCartaChange() {
+  if (!currentRut) return;
+  const sel = seleccionados[currentRut];
+  sel.tipo_carta = document.getElementById('f-tipo-carta').value;
+  document.getElementById('card-declaracion').style.display =
+    sel.tipo_carta === 'declaracion_producto_voluntario' ? '' : 'none';
+  guardarForm();
+}
+
+function renderConceptoBtns() {
+  const sel = currentRut ? seleccionados[currentRut] : null;
+  const cont = document.getElementById('concepto-btns');
+  if (!cont) return;
+  cont.innerHTML = CONCEPTOS_DECLARACION.map(({clave, texto}) =>
+    `<button type="button" class="btn ${sel && sel.concepto===clave ? 'btn-primary' : 'btn-outline'} btn-sm"
+       onclick="setConcepto('${clave}')">${texto}</button>`
+  ).join('');
+}
+
+function setConcepto(clave) {
+  if (!currentRut) return;
+  seleccionados[currentRut].concepto = clave;
+  renderConceptoBtns();
+  guardarForm();
+}
+
+function renderMotivoDeclaracionBtns() {
+  const sel = currentRut ? seleccionados[currentRut] : null;
+  const cont = document.getElementById('motivo-declaracion-btns');
+  if (!cont) return;
+  cont.innerHTML = MOTIVOS_DECLARACION.map(({clave, texto}) =>
+    `<button type="button" class="btn ${sel && sel.motivo_declaracion===clave ? 'btn-primary' : 'btn-outline'} btn-sm"
+       style="text-align:left;white-space:normal;margin-bottom:4px"
+       onclick="setMotivoDeclaracion('${clave}')">${texto}</button>`
+  ).join('');
+}
+
+function setMotivoDeclaracion(clave) {
+  if (!currentRut) return;
+  seleccionados[currentRut].motivo_declaracion = clave;
+  renderMotivoDeclaracionBtns();
+  guardarForm();
 }
 
 function renderPeriodos(todos, seleccionadosList) {
@@ -1389,6 +1482,8 @@ function guardarForm() {
   sel.fecha_cese = document.getElementById('f-fecha-cese').value;
   sel.motivo = document.getElementById('f-motivo').value;
   sel.periodos_extra = document.getElementById('f-periodos-extra').value;
+  sel.tipo_carta = document.getElementById('f-tipo-carta').value;
+  sel.direccion = document.getElementById('f-direccion').value;
 }
 
 // ── Vista previa ──────────────────────────────────────────────────────────────
@@ -1397,6 +1492,68 @@ function verPreview() {
   const w = trabajadores.find(t=>t.rut_trabajador===currentRut);
   const sel = seleccionados[currentRut];
   if (!w || !sel) return;
+
+  const esc = s => (s||'').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const nombreFirma = document.getElementById('firma-nombre').value;
+  const firmaHtml = (nombreFirma ? `<div class="firma-cursiva">${esc(nombreFirma)}</div>` : '<br><br>') +
+`_______________________________
+Nombre: ${esc(nombreFirma)}
+Rut: ${esc(document.getElementById('firma-rut').value)}
+Cargo: ${esc(document.getElementById('firma-cargo').value)}
+Correo: ${esc(document.getElementById('firma-correo').value)}
+Tel: ${esc(document.getElementById('firma-tel').value)}`;
+
+  if (sel.tipo_carta === 'declaracion_producto_voluntario') {
+    const mes = document.getElementById('f-mes').value || '';
+    const [anio, mesN] = mes.split('-');
+    const MESES_ES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+      'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const fechaTxt = `Santiago ${MESES_ES[parseInt(mesN)]||''} ${anio||''}`;
+    const inst = document.getElementById('f-inst').value;
+    const extras = (sel.periodos_extra||'').split(',').map(p=>p.trim()).filter(Boolean);
+    const todos = [...new Set([...sel.periodos_sel, ...extras])].sort((a,b)=>perKey(a)-perKey(b));
+    const periodosTxt = todos.length ? todos.join(', ') : '[PERIODOS]';
+    const direccion = document.getElementById('f-direccion').value;
+
+    const conceptosTxt = CONCEPTOS_DECLARACION.map(({clave, texto}) =>
+      `${clave===sel.concepto ? '___X___' : '______'} ${texto}`).join('\n');
+    const motivosTxt = MOTIVOS_DECLARACION.map(({clave, texto}) =>
+      `${clave===sel.motivo_declaracion ? '__X__' : '_____'} ${texto}`).join('\n');
+
+    const firmaNombre = document.getElementById('firma-nombre').value;
+    const firmaCargo = document.getElementById('firma-cargo').value;
+    const firmaRut = document.getElementById('firma-rut').value;
+
+    const preview = `${esc(fechaTxt)}
+
+DECLARACIÓN EMPLEADOR ELIMINACIÓN MOROSIDAD /DEUDA
+
+Yo, ${esc(firmaNombre)}, Cargo: ${esc(firmaCargo)}, RUT: ${esc(firmaRut)} de ${esc(w.razon_social)} Rut: ${esc(w.rut_empresa)}${direccion ? ` con domicilio en ${esc(direccion)}` : ''}, declaro que no se realizó el descuento de la remuneración del trabajador indicado más adelante, de acuerdo a lo requerido en la suscripción y/o mandato que registra con ${esc(inst)}:
+
+(Indicar una X en el concepto que corresponda)
+${esc(conceptosTxt)}
+
+Lo anterior debido a (SOLO SELECCIONAR UNA)
+${esc(motivosTxt)}
+
+PERIODOS NO DESCONTADOS: ${esc(periodosTxt)}.
+
+Trabajador (es) involucrado (s)
+NOMBRE COMPLETO TRABAJADOR: ${esc(w.nombre.toUpperCase())}
+RUT: ${esc(w.rut_trabajador)}
+
+Firmo esta Declaración, asumiendo que lo indicado en ella es fidedigno, para solicitar a ustedes eliminen la morosidad presunta y/o deuda que registra nuestra empresa, de acuerdo con el detalle indicado.
+
+
+Les saluda atentamente,
+`;
+    document.getElementById('carta-preview-content').innerHTML =
+      preview.replace(/\n/g,'<br>') + firmaHtml.replace(/\n/g,'<br>');
+    document.getElementById('card-preview').style.display = '';
+    document.getElementById('card-preview').scrollIntoView({behavior:'smooth'});
+    return;
+  }
 
   const extras = (sel.periodos_extra||'').split(',').map(p=>p.trim()).filter(Boolean);
   const todos = [...new Set([...sel.periodos_sel, ...extras])].sort((a,b)=>perKey(a)-perKey(b));
@@ -1412,11 +1569,6 @@ function verPreview() {
   const inst = document.getElementById('f-inst').value;
   const motivo = sel.motivo || '[MOTIVO]';
   const fechaCese = (sel.fecha_cese && !motivo.includes(sel.fecha_cese)) ? ' ' + sel.fecha_cese : '';
-
-  const esc = s => (s||'').toString()
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  const nombreFirma = document.getElementById('firma-nombre').value;
 
   const preview = `${esc(fechaTxt)}
 
@@ -1435,14 +1587,6 @@ MOTIVO DE NO PAGO: ${esc(motivo)}${esc(fechaCese)}
 Les saluda atentamente,
 `;
 
-  const firmaHtml = (nombreFirma ? `<div class="firma-cursiva">${esc(nombreFirma)}</div>` : '<br><br>') +
-`_______________________________
-Nombre: ${esc(nombreFirma)}
-Rut: ${esc(document.getElementById('firma-rut').value)}
-Cargo: ${esc(document.getElementById('firma-cargo').value)}
-Correo: ${esc(document.getElementById('firma-correo').value)}
-Tel: ${esc(document.getElementById('firma-tel').value)}`;
-
   document.getElementById('carta-preview-content').innerHTML =
     preview.replace(/\n/g,'<br>') + firmaHtml.replace(/\n/g,'<br>');
   document.getElementById('card-preview').style.display = '';
@@ -1458,6 +1602,10 @@ async function generarPDF() {
 
   const carta = {
     ...w,
+    tipo_carta: sel.tipo_carta,
+    direccion: sel.direccion,
+    concepto: sel.concepto,
+    motivo_declaracion: sel.motivo_declaracion,
     periodos_sel: sel.periodos_sel,
     periodos_extra: sel.periodos_extra,
     motivo: sel.motivo,
@@ -1526,6 +1674,10 @@ async function generarPDFLote() {
         fecha_cese: sel.fecha_cese,
         mes: document.getElementById('f-mes').value,
         institucion: document.getElementById('f-inst').value,
+        tipo_carta: sel.tipo_carta,
+        direccion: sel.direccion,
+        concepto: sel.concepto,
+        motivo_declaracion: sel.motivo_declaracion,
       };
     });
 

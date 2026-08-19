@@ -404,6 +404,123 @@ def generar_carta_pdf(carta_data, firma_data):
     buf.seek(0)
     return buf.read()
 
+# ── Declaración de eliminación de morosidad / deuda (producto voluntario) ─────
+CONCEPTOS_DECLARACION = [
+    ("apv", "Cotización Voluntario (APV)"),
+    ("deposito_convenido", "Depósito Convenido"),
+    ("ahorro_voluntario", "Ahorro Voluntario (Cuenta 2)"),
+]
+
+MOTIVOS_DECLARACION = [
+    ("error_administrativo", "No se realizó descuento de producto voluntario según mandato por error administrativo."),
+    ("sin_notificacion", "No llego notificación para realizar pago a esa AFP/ o ese Producto."),
+    ("trabajador_solicito", "Trabajador solicito que no se realizara descuento."),
+    ("afiliacion_distinta", "Trabajador tiene afiliación de cotización obligatoria en AFP distinta a la de cobro (SOLO PARA CUENTA 2)"),
+    ("pago_erroneo_otra_institucion", "Pago erróneo en otra institución."),
+    ("pago_producto_diferente", "Por error administrativo se pagó en producto voluntario diferente al del trabajador (CTA2/APV)"),
+]
+
+
+def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
+    """Genera PDF de 'Declaración Empleador Eliminación Morosidad/Deuda' para
+    producto voluntario (APV / Depósito Convenido / Ahorro Voluntario) no
+    descontado. Formato replicado de un modelo Word entregado por el cliente."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.enums import TA_RIGHT
+    import io
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+        leftMargin=3*cm, rightMargin=3*cm,
+        topMargin=2.5*cm, bottomMargin=2.5*cm)
+
+    normal = ParagraphStyle('Normal', fontName='Helvetica', fontSize=11,
+        leading=16, spaceAfter=6)
+    title_s = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=11,
+        leading=16, alignment=TA_RIGHT)
+    bold_s = ParagraphStyle('Bold', fontName='Helvetica-Bold', fontSize=11, leading=16)
+
+    MESES_ES = {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril',
+                '05':'Mayo','06':'Junio','07':'Julio','08':'Agosto',
+                '09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}
+    mes_num = (carta_data.get('mes') or datetime.now().strftime('%Y-%m')).split('-')
+    mes_txt = MESES_ES.get(mes_num[1] if len(mes_num) > 1 else '', '') if len(mes_num) > 1 else ''
+    anio_txt = mes_num[0] if mes_num else str(datetime.now().year)
+    fecha_txt = f"Santiago {mes_txt} {anio_txt}"
+
+    razon = carta_data.get('razon_social', '')
+    rut_emp = carta_data.get('rut_empresa', '')
+    direccion = carta_data.get('direccion', '')
+    institucion = carta_data.get('institucion', '')
+    concepto_sel = carta_data.get('concepto', '')
+    motivo_sel = carta_data.get('motivo_declaracion', '')
+
+    periodos_sel = carta_data.get('periodos_sel', carta_data.get('periodos', []))
+    extra = [p.strip() for p in carta_data.get('periodos_extra', '').split(',') if p.strip()]
+    todos = list(dict.fromkeys(periodos_sel + extra))
+    # Aqui SI se listan todos los periodos (no Desde/Hasta): esta declaracion
+    # es justamente para detallar cuales meses puntuales no se descontaron,
+    # que suelen no ser consecutivos.
+    periodos_txt = ", ".join(todos) if todos else '[PERIODOS]'
+
+    story = []
+    story.append(Paragraph(fecha_txt, title_s))
+    story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph("<b>DECLARACIÓN EMPLEADOR ELIMINACIÓN MOROSIDAD /DEUDA</b>", bold_s))
+    story.append(Spacer(1, 0.4*cm))
+
+    firma_nombre = firma_data.get('nombre', '')
+    firma_cargo = firma_data.get('cargo', '')
+    firma_rut = firma_data.get('rut', '')
+    story.append(Paragraph(
+        f"Yo, {firma_nombre}, Cargo: {firma_cargo}, RUT: {firma_rut} de {razon} "
+        f"Rut: {rut_emp}"
+        + (f" con domicilio en {direccion}" if direccion else "")
+        + f", declaro que no se realizó el descuento de la remuneración del "
+        f"trabajador indicado más adelante, de acuerdo a lo requerido en la "
+        f"suscripción y/o mandato que registra con {institucion}:",
+        normal))
+    story.append(Spacer(1, 0.3*cm))
+
+    story.append(Paragraph("(Indicar una X en el concepto que corresponda)", normal))
+    for clave, texto in CONCEPTOS_DECLARACION:
+        marca = "___X___" if clave == concepto_sel else "______"
+        story.append(Paragraph(f"{marca} {texto}", normal))
+    story.append(Spacer(1, 0.2*cm))
+
+    story.append(Paragraph("Lo anterior debido a (SOLO SELECCIONAR UNA)", normal))
+    for clave, texto in MOTIVOS_DECLARACION:
+        marca = "__X__" if clave == motivo_sel else "_____"
+        story.append(Paragraph(f"{marca} {texto}", normal))
+    story.append(Spacer(1, 0.4*cm))
+
+    story.append(Paragraph(f"<b>Periodos no descontados: {periodos_txt}.</b>", normal))
+    story.append(Spacer(1, 0.3*cm))
+
+    story.append(Paragraph("<b>Trabajador (es) involucrado (s)</b>", normal))
+    story.append(Paragraph(f"<b>Nombre completo trabajador: {carta_data.get('nombre','').upper()}</b>", normal))
+    story.append(Paragraph(f"<b>RUT: {carta_data.get('rut_trabajador','')}</b>", normal))
+    story.append(Spacer(1, 0.4*cm))
+
+    story.append(Paragraph(
+        "Firmo esta Declaración, asumiendo que lo indicado en ella es "
+        "fidedigno, para solicitar a ustedes eliminen la morosidad presunta "
+        "y/o deuda que registra nuestra empresa, de acuerdo con el detalle "
+        "indicado.", normal))
+    story.append(Spacer(1, 1.2*cm))
+
+    story.append(Paragraph("Les saluda atentamente,", normal))
+    story.append(Spacer(1, 1*cm))
+
+    _agregar_bloque_firma(story, firma_data, normal)
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
+
 # ── Generación de carta masiva por período (tabla de trabajadores) ────────────
 def generar_carta_masiva_pdf(data, firma_data):
     """Genera PDF de carta masiva: un solo período, muchos trabajadores en tabla."""
@@ -1421,9 +1538,15 @@ def generar_carta():
     data = request.json
     carta = data.get('carta', {})
     firma = data.get('firma', {})
-    pdf_bytes = generar_carta_pdf(carta, firma)
+    tipo_carta = carta.get('tipo_carta', 'regularizacion')
+    if tipo_carta == 'declaracion_producto_voluntario':
+        pdf_bytes = generar_declaracion_producto_voluntario_pdf(carta, firma)
+        prefijo = "Declaracion_Producto_Voluntario"
+    else:
+        pdf_bytes = generar_carta_pdf(carta, firma)
+        prefijo = "Carta_Explicativa"
     rut = carta.get('rut_trabajador','').replace('.','').replace(' ','')
-    fname = f"Carta_Explicativa_{rut}.pdf"
+    fname = f"{prefijo}_{rut}.pdf"
     # Guardar en DATA_DIR
     data_dir = current_app.config.get('DATA_DIR', 'adjuntos')
     dest = os.path.join(data_dir, fname)
@@ -1475,9 +1598,13 @@ def generar_cartas_lote():
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         for carta in cartas_list:
-            pdf_bytes = generar_carta_pdf(carta, firma)
             rut_clean = (carta.get('rut_trabajador', '') or '').replace('.', '').replace(' ', '')
-            fname = f"Carta_Explicativa_{rut_clean}.pdf"
+            if carta.get('tipo_carta') == 'declaracion_producto_voluntario':
+                pdf_bytes = generar_declaracion_producto_voluntario_pdf(carta, firma)
+                fname = f"Declaracion_Producto_Voluntario_{rut_clean}.pdf"
+            else:
+                pdf_bytes = generar_carta_pdf(carta, firma)
+                fname = f"Carta_Explicativa_{rut_clean}.pdf"
             zf.writestr(fname, pdf_bytes)
 
     zip_buf.seek(0)

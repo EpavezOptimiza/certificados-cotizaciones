@@ -437,16 +437,20 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
         leftMargin=2.3*cm, rightMargin=2.3*cm,
         topMargin=1.8*cm, bottomMargin=1.8*cm)
 
-    normal = ParagraphStyle('Normal', fontName='Helvetica', fontSize=9.5,
-        leading=12.5, spaceAfter=5)
-    title_s = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=9.5,
-        leading=12.5, alignment=TA_RIGHT)
-    bold_s = ParagraphStyle('Bold', fontName='Helvetica-Bold', fontSize=9.5, leading=12.5)
-    # Estilo compacto para las lineas tipo checkbox (concepto/motivo): con
-    # 9 lineas en total, el espaciado normal hacia que la carta se pasara
-    # a una segunda hoja.
-    check_s = ParagraphStyle('Check', fontName='Helvetica', fontSize=9.5,
-        leading=12, spaceAfter=1)
+    normal = ParagraphStyle('Normal', fontName='Helvetica', fontSize=10,
+        leading=13, spaceAfter=3)
+    title_s = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=10,
+        leading=13, alignment=TA_RIGHT)
+    bold_s = ParagraphStyle('Bold', fontName='Helvetica-Bold', fontSize=10, leading=13)
+    # Estilo compacto SOLO para las lineas de opciones dentro de cada lista
+    # (concepto/motivo) -- en el Word original esas van pegadas entre si,
+    # pero cada seccion (titulo, parrafo, listas) se separa con su propio
+    # salto de linea; replicar eso, no aplanar todo el documento por igual.
+    check_s = ParagraphStyle('Check', fontName='Helvetica', fontSize=10,
+        leading=12.5, spaceAfter=0)
+    # Un "salto de linea en blanco" tal como se ve en el Word original,
+    # del mismo alto que una linea de texto normal.
+    salto = 0.45*cm
 
     MESES_ES = {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril',
                 '05':'Mayo','06':'Junio','07':'Julio','08':'Agosto',
@@ -473,9 +477,9 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
 
     story = []
     story.append(Paragraph(fecha_txt, title_s))
-    story.append(Spacer(1, 0.3*cm))
+    story.append(Spacer(1, salto))
     story.append(Paragraph("<b>DECLARACIÓN EMPLEADOR ELIMINACIÓN MOROSIDAD /DEUDA</b>", bold_s))
-    story.append(Spacer(1, 0.25*cm))
+    story.append(Spacer(1, salto))
 
     firma_nombre = firma_data.get('nombre', '')
     firma_cargo = firma_data.get('cargo', '')
@@ -488,37 +492,37 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
         f"trabajador indicado más adelante, de acuerdo a lo requerido en la "
         f"suscripción y/o mandato que registra con {institucion}:",
         normal))
-    story.append(Spacer(1, 0.15*cm))
+    story.append(Spacer(1, salto))
 
     story.append(Paragraph("(Indicar una X en el concepto que corresponda)", normal))
     for clave, texto in CONCEPTOS_DECLARACION:
         marca = "___X___" if clave == concepto_sel else "______"
         story.append(Paragraph(f"{marca} {texto}", check_s))
-    story.append(Spacer(1, 0.15*cm))
+    story.append(Spacer(1, salto))
 
     story.append(Paragraph("Lo anterior debido a (SOLO SELECCIONAR UNA)", normal))
     for clave, texto in MOTIVOS_DECLARACION:
         marca = "__X__" if clave == motivo_sel else "_____"
         story.append(Paragraph(f"{marca} {texto}", check_s))
-    story.append(Spacer(1, 0.25*cm))
+    story.append(Spacer(1, salto))
 
     story.append(Paragraph(f"<b>Periodos no descontados: {periodos_txt}.</b>", normal))
-    story.append(Spacer(1, 0.2*cm))
+    story.append(Spacer(1, salto))
 
-    story.append(Paragraph("<b>Trabajador (es) involucrado (s)</b>", normal))
-    story.append(Paragraph(f"<b>Nombre completo trabajador: {carta_data.get('nombre','').upper()}</b>", normal))
-    story.append(Paragraph(f"<b>RUT: {carta_data.get('rut_trabajador','')}</b>", normal))
-    story.append(Spacer(1, 0.25*cm))
+    story.append(Paragraph("<u>Trabajador (es) involucrado (s)</u>", normal))
+    story.append(Paragraph(f"Nombre completo trabajador: {carta_data.get('nombre','').upper()}", normal))
+    story.append(Paragraph(f"RUT: {carta_data.get('rut_trabajador','')}", normal))
+    story.append(Spacer(1, salto))
 
     story.append(Paragraph(
         "Firmo esta Declaración, asumiendo que lo indicado en ella es "
         "fidedigno, para solicitar a ustedes eliminen la morosidad presunta "
         "y/o deuda que registra nuestra empresa, de acuerdo con el detalle "
         "indicado.", normal))
-    story.append(Spacer(1, 0.6*cm))
+    story.append(Spacer(1, 1.2*cm))
 
     story.append(Paragraph("Les saluda atentamente,", normal))
-    story.append(Spacer(1, 0.6*cm))
+    story.append(Spacer(1, salto))
 
     _agregar_bloque_firma(story, firma_data, normal)
 

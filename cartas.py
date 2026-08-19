@@ -429,7 +429,7 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import cm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.lib.enums import TA_RIGHT, TA_CENTER
     import io
 
     buf = io.BytesIO()
@@ -442,6 +442,8 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
     title_s = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=10,
         leading=13, alignment=TA_RIGHT)
     bold_s = ParagraphStyle('Bold', fontName='Helvetica-Bold', fontSize=10, leading=13)
+    titulo_carta_s = ParagraphStyle('TituloCarta', fontName='Helvetica-Bold', fontSize=10,
+        leading=13, alignment=TA_CENTER)
     # Estilo compacto SOLO para las lineas de opciones dentro de cada lista
     # (concepto/motivo) -- en el Word original esas van pegadas entre si,
     # pero cada seccion (titulo, parrafo, listas) se separa con su propio
@@ -478,7 +480,7 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
     story = []
     story.append(Paragraph(fecha_txt, title_s))
     story.append(Spacer(1, salto))
-    story.append(Paragraph("<b>DECLARACIÓN EMPLEADOR ELIMINACIÓN MOROSIDAD /DEUDA</b>", bold_s))
+    story.append(Paragraph("<b>DECLARACIÓN EMPLEADOR ELIMINACIÓN MOROSIDAD /DEUDA</b>", titulo_carta_s))
     story.append(Spacer(1, salto))
 
     firma_nombre = firma_data.get('nombre', '')

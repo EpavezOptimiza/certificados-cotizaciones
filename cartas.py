@@ -434,14 +434,19 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter,
-        leftMargin=3*cm, rightMargin=3*cm,
-        topMargin=2.5*cm, bottomMargin=2.5*cm)
+        leftMargin=2.3*cm, rightMargin=2.3*cm,
+        topMargin=1.8*cm, bottomMargin=1.8*cm)
 
-    normal = ParagraphStyle('Normal', fontName='Helvetica', fontSize=11,
-        leading=16, spaceAfter=6)
-    title_s = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=11,
-        leading=16, alignment=TA_RIGHT)
-    bold_s = ParagraphStyle('Bold', fontName='Helvetica-Bold', fontSize=11, leading=16)
+    normal = ParagraphStyle('Normal', fontName='Helvetica', fontSize=9.5,
+        leading=12.5, spaceAfter=5)
+    title_s = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=9.5,
+        leading=12.5, alignment=TA_RIGHT)
+    bold_s = ParagraphStyle('Bold', fontName='Helvetica-Bold', fontSize=9.5, leading=12.5)
+    # Estilo compacto para las lineas tipo checkbox (concepto/motivo): con
+    # 9 lineas en total, el espaciado normal hacia que la carta se pasara
+    # a una segunda hoja.
+    check_s = ParagraphStyle('Check', fontName='Helvetica', fontSize=9.5,
+        leading=12, spaceAfter=1)
 
     MESES_ES = {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril',
                 '05':'Mayo','06':'Junio','07':'Julio','08':'Agosto',
@@ -468,9 +473,9 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
 
     story = []
     story.append(Paragraph(fecha_txt, title_s))
-    story.append(Spacer(1, 0.5*cm))
+    story.append(Spacer(1, 0.3*cm))
     story.append(Paragraph("<b>DECLARACIÓN EMPLEADOR ELIMINACIÓN MOROSIDAD /DEUDA</b>", bold_s))
-    story.append(Spacer(1, 0.4*cm))
+    story.append(Spacer(1, 0.25*cm))
 
     firma_nombre = firma_data.get('nombre', '')
     firma_cargo = firma_data.get('cargo', '')
@@ -483,37 +488,37 @@ def generar_declaracion_producto_voluntario_pdf(carta_data, firma_data):
         f"trabajador indicado más adelante, de acuerdo a lo requerido en la "
         f"suscripción y/o mandato que registra con {institucion}:",
         normal))
-    story.append(Spacer(1, 0.3*cm))
+    story.append(Spacer(1, 0.15*cm))
 
     story.append(Paragraph("(Indicar una X en el concepto que corresponda)", normal))
     for clave, texto in CONCEPTOS_DECLARACION:
         marca = "___X___" if clave == concepto_sel else "______"
-        story.append(Paragraph(f"{marca} {texto}", normal))
-    story.append(Spacer(1, 0.2*cm))
+        story.append(Paragraph(f"{marca} {texto}", check_s))
+    story.append(Spacer(1, 0.15*cm))
 
     story.append(Paragraph("Lo anterior debido a (SOLO SELECCIONAR UNA)", normal))
     for clave, texto in MOTIVOS_DECLARACION:
         marca = "__X__" if clave == motivo_sel else "_____"
-        story.append(Paragraph(f"{marca} {texto}", normal))
-    story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph(f"{marca} {texto}", check_s))
+    story.append(Spacer(1, 0.25*cm))
 
     story.append(Paragraph(f"<b>Periodos no descontados: {periodos_txt}.</b>", normal))
-    story.append(Spacer(1, 0.3*cm))
+    story.append(Spacer(1, 0.2*cm))
 
     story.append(Paragraph("<b>Trabajador (es) involucrado (s)</b>", normal))
     story.append(Paragraph(f"<b>Nombre completo trabajador: {carta_data.get('nombre','').upper()}</b>", normal))
     story.append(Paragraph(f"<b>RUT: {carta_data.get('rut_trabajador','')}</b>", normal))
-    story.append(Spacer(1, 0.4*cm))
+    story.append(Spacer(1, 0.25*cm))
 
     story.append(Paragraph(
         "Firmo esta Declaración, asumiendo que lo indicado en ella es "
         "fidedigno, para solicitar a ustedes eliminen la morosidad presunta "
         "y/o deuda que registra nuestra empresa, de acuerdo con el detalle "
         "indicado.", normal))
-    story.append(Spacer(1, 1.2*cm))
+    story.append(Spacer(1, 0.6*cm))
 
     story.append(Paragraph("Les saluda atentamente,", normal))
-    story.append(Spacer(1, 1*cm))
+    story.append(Spacer(1, 0.6*cm))
 
     _agregar_bloque_firma(story, firma_data, normal)
 
